@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest package="com.example.safitness"
+    xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application
+        android:name=".WorkoutApp"
+        android:allowBackup="true"
+        android:label="SA Fitness"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.SAFitness">
+
+        <activity android:name=".ui.ExerciseDetailActivity" android:exported="false"/>
+        <activity android:name=".ui.WorkoutActivity" android:exported="false"/>
+        <activity android:name=".ui.SettingsActivity" android:exported="false"/>
+        <activity android:name=".ui.PersonalRecordsActivity" android:exported="false"/>
+        <activity android:name=".ui.ExerciseLibraryActivity" android:exported="false"/>
+
+        <activity
+            android:name=".ui.MainActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

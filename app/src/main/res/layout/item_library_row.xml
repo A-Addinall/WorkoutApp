@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:padding="12dp"
+    android:orientation="horizontal"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content">
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/tvTitle"
+            android:textStyle="bold"
+            android:textSize="16sp"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"/>
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="4dp">
+
+            <TextView
+                android:id="@+id/tvMeta"
+                android:textSize="12sp"
+                android:textColor="#666666"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"/>
+
+            <TextView
+                android:id="@+id/tvEquip"
+                android:textSize="12sp"
+                android:textColor="#666666"
+                android:layout_marginStart="8dp"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"/>
+        </LinearLayout>
+
+        <Spinner
+            android:id="@+id/spinnerReps"
+            android:layout_width="120dp"
+            android:layout_height="36dp"
+            android:layout_marginTop="6dp"/>
+    </LinearLayout>
+
+    <!-- Required toggle (star) – only meaningful when in program -->
+    <ImageButton
+        android:id="@+id/btnRequired"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:contentDescription="Toggle required"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:src="@android:drawable/btn_star_big_off"
+        android:layout_marginEnd="8dp"/>
+
+    <!-- Equipment picker -->
+    <ImageButton
+        android:id="@+id/btnEquip"
+        android:contentDescription="Pick equipment"
+        android:src="@android:drawable/ic_menu_manage"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:layout_marginEnd="8dp"
+        android:layout_width="40dp"
+        android:layout_height="40dp"/>
+
+    <!-- Primary button toggles add/remove ONLY -->
+    <Button
+        android:id="@+id/btnPrimary"
+        android:text="Add"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"/>
+</LinearLayout>
