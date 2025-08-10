@@ -55,6 +55,13 @@ class WorkoutRepository(
     suspend fun removeFromDay(day: Int, exerciseId: Long) =
         programDao.remove(day, exerciseId)
 
+    /* helpers for Exercise Library row state */
+    suspend fun isInProgram(day: Int, exerciseId: Long): Boolean =
+        programDao.exists(day, exerciseId) > 0
+
+    suspend fun selectedTargetReps(day: Int, exerciseId: Long): Int? =
+        programDao.getTargetReps(day, exerciseId)
+
     /* ---------- Sessions & Sets ---------- */
     suspend fun startSession(day: Int): Long =
         sessionDao.insertSession(WorkoutSession(dayIndex = day))

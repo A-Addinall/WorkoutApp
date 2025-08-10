@@ -46,4 +46,11 @@ interface ProgramDao {
 
     @Query("UPDATE ProgramSelection SET targetReps = :reps WHERE dayIndex = :day AND exerciseId = :exerciseId")
     suspend fun setTargetReps(day: Int, exerciseId: Long, reps: Int?)
+
+    /* --- helpers for library row state --- */
+    @Query("SELECT COUNT(*) FROM ProgramSelection WHERE dayIndex = :day AND exerciseId = :exerciseId")
+    suspend fun exists(day: Int, exerciseId: Long): Int
+
+    @Query("SELECT targetReps FROM ProgramSelection WHERE dayIndex = :day AND exerciseId = :exerciseId LIMIT 1")
+    suspend fun getTargetReps(day: Int, exerciseId: Long): Int?
 }

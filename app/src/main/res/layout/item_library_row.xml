@@ -40,6 +40,7 @@
                 android:layout_height="wrap_content"/>
         </LinearLayout>
 
+        <!-- Rep “roller” -->
         <Spinner
             android:id="@+id/spinnerReps"
             android:layout_width="120dp"
@@ -47,7 +48,7 @@
             android:layout_marginTop="6dp"/>
     </LinearLayout>
 
-    <!-- Required toggle (star) – only meaningful when in program -->
+    <!-- You can leave this star if you want later; it’s inert right now -->
     <ImageButton
         android:id="@+id/btnRequired"
         android:layout_width="40dp"
@@ -56,16 +57,6 @@
         android:background="?attr/selectableItemBackgroundBorderless"
         android:src="@android:drawable/btn_star_big_off"
         android:layout_marginEnd="8dp"/>
-
-    <!-- Equipment picker -->
-    <ImageButton
-        android:id="@+id/btnEquip"
-        android:contentDescription="Pick equipment"
-        android:src="@android:drawable/ic_menu_manage"
-        android:background="?attr/selectableItemBackgroundBorderless"
-        android:layout_marginEnd="8dp"
-        android:layout_width="40dp"
-        android:layout_height="40dp"/>
 
     <!-- Primary button toggles add/remove ONLY -->
     <Button

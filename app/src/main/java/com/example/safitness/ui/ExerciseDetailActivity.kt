@@ -54,7 +54,10 @@ class ExerciseDetailActivity : AppCompatActivity() {
         bindViews()
         initHeader()
         loadHeaderData()
-        addNewSet()
+
+        addNewSet() // show one row immediately
+        btnAddSet.setOnClickListener { addNewSet() }
+        btnCompleteExercise.setOnClickListener { onCompleteExercise() }
     }
 
     private fun bindViews() {
@@ -65,9 +68,6 @@ class ExerciseDetailActivity : AppCompatActivity() {
         btnAddSet = findViewById(R.id.btnAddSet)
         btnCompleteExercise = findViewById(R.id.btnCompleteExercise)
         etNotes = findViewById(R.id.etNotes)
-
-        btnAddSet.setOnClickListener { addNewSet() }
-        btnCompleteExercise.setOnClickListener { onCompleteExercise() }
     }
 
     private fun initHeader() {
@@ -79,15 +79,16 @@ class ExerciseDetailActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val last = vm.getLastSuccessfulWeight(exerciseId)
             tvLastWeight.text = if (last != null) "Last successful lift: ${last}kg" else "No successful lifts yet"
-            val suggested = vm.getSuggestedWeight(exerciseId)
-            tvSuggestedWeight.text = "Suggested: ${suggested ?: "—"}kg"
+
+            val suggested = vm.getSuggestedWeight(exerciseId) ?: 20.0
+            tvSuggestedWeight.text = "Suggested: ${suggested}kg"
         }
     }
 
     private fun addNewSet() {
         val setNumber = setRows.size + 1
-        val v = layoutInflater.inflate(R.layout.item_set_entry, layoutSets, false)
 
+        val v = layoutInflater.inflate(R.layout.item_set_entry, layoutSets, false)
         val tvSetNumber = v.findViewById<TextView>(R.id.tvSetNumber)
         val etWeight = v.findViewById<EditText>(R.id.etWeight)
         val etReps = v.findViewById<EditText>(R.id.etReps)
@@ -95,7 +96,15 @@ class ExerciseDetailActivity : AppCompatActivity() {
         val btnFail = v.findViewById<Button>(R.id.btnFail)
 
         tvSetNumber.text = "Set $setNumber:"
+        // Pre-populate and lock reps
         etReps.setText(targetReps.toString())
+        etReps.isEnabled = false
+        etReps.isFocusable = false
+
+        // Hint suggested weight
+        lifecycleScope.launch {
+            vm.getSuggestedWeight(exerciseId)?.let { etWeight.hint = it.toString() }
+        }
 
         val row = SetRow(v, etWeight, etReps, null)
         setRows += row
@@ -104,9 +113,9 @@ class ExerciseDetailActivity : AppCompatActivity() {
 
         btnSuccess.setOnClickListener {
             val weightVal = etWeight.text.toString().toDoubleOrNull()
-            val repsVal = etReps.text.toString().toIntOrNull() ?: 1
+            val repsVal = targetReps // locked
             if (weightVal == null || repsVal <= 0) {
-                Toast.makeText(this, "Enter valid weight & reps", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Enter a valid weight", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
             lifecycleScope.launch {
@@ -131,9 +140,9 @@ class ExerciseDetailActivity : AppCompatActivity() {
 
         btnFail.setOnClickListener {
             val weightVal = etWeight.text.toString().toDoubleOrNull()
-            val repsVal = etReps.text.toString().toIntOrNull() ?: 1
+            val repsVal = targetReps
             if (weightVal == null || repsVal <= 0) {
-                Toast.makeText(this, "Enter valid weight & reps", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Enter a valid weight", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
             lifecycleScope.launch {
@@ -156,6 +165,7 @@ class ExerciseDetailActivity : AppCompatActivity() {
             }
         }
 
+        // <- This was missing earlier, so the row never appeared!
         layoutSets.addView(v)
     }
 
