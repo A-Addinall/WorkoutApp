@@ -1,4 +1,3 @@
-// app/src/main/java/com/example/safitness/data/repo/WorkoutRepository.kt
 package com.example.safitness.data.repo
 
 import com.example.safitness.core.Equipment
@@ -16,7 +15,6 @@ class WorkoutRepository(
     private val sessionDao: SessionDao,
     private val prDao: PersonalRecordDao
 ) {
-
     /* ---------- Library ---------- */
     fun getExercises(type: WorkoutType?, eq: Equipment?) =
         libraryDao.getExercises(type, eq)
@@ -46,23 +44,30 @@ class WorkoutRepository(
     suspend fun setRequired(day: Int, exerciseId: Long, required: Boolean) =
         programDao.setRequired(day, exerciseId, required)
 
-    suspend fun setPreferredEquipment(day: Int, exerciseId: Long, preferred: Equipment?) =
-        programDao.setPreferred(day, exerciseId, preferred)
-
     suspend fun setTargetReps(day: Int, exerciseId: Long, reps: Int?) =
         programDao.setTargetReps(day, exerciseId, reps)
 
     suspend fun removeFromDay(day: Int, exerciseId: Long) =
         programDao.remove(day, exerciseId)
 
-    /* helpers for Exercise Library row state */
-    suspend fun isInProgram(day: Int, exerciseId: Long): Boolean =
+    suspend fun isInProgram(day: Int, exerciseId: Long) =
         programDao.exists(day, exerciseId) > 0
 
-    suspend fun selectedTargetReps(day: Int, exerciseId: Long): Int? =
+    suspend fun selectedTargetReps(day: Int, exerciseId: Long) =
         programDao.getTargetReps(day, exerciseId)
 
-    /* ---------- Sessions & Sets ---------- */
+    suspend fun requiredFor(day: Int, exerciseId: Long) =
+        programDao.getRequired(day, exerciseId) ?: false
+
+    suspend fun daySummaryLabel(day: Int): String {
+        val types = programDao.distinctTypesForDay(day)
+        return when {
+            types.isEmpty() -> "Empty"
+            types.size > 1 -> "Mixed"
+            else -> types.first().name.lowercase().replaceFirstChar { it.uppercase() }
+        }
+    }
+
     suspend fun startSession(day: Int): Long =
         sessionDao.insertSession(WorkoutSession(dayIndex = day))
 
@@ -115,17 +120,46 @@ class WorkoutRepository(
         )
     )
 
-    suspend fun lastSets(exerciseId: Long, equipment: Equipment, limit: Int = 10) =
-        sessionDao.lastSets(exerciseId, equipment, limit)
+    suspend fun logMetcon(day: Int, seconds: Int) {
+        val sessionId = startSession(day)
+        // exerciseId isn't meaningful for metcon timing; store 0L and a neutral equipment.
+        val equip = Equipment.BARBELL // or BODYWEIGHT if you have it
+        logTimeOnlySet(
+            sessionId = sessionId,
+            exerciseId = 0L,
+            equipment = equip,
+            setNumber = 1,
+            timeSeconds = seconds,
+            rpe = null,
+            success = null,
+            notes = null
+        )
+    }
 
-    /* ---------- PR / Suggestions (basic) ---------- */
+    suspend fun lastMetconSecondsForDay(day: Int): Int =
+        sessionDao.lastMetconSecondsForDay(day) ?: 0
+
+    /* ---------- PR / suggestions ---------- */
     suspend fun bestPR(exerciseId: Long) = prDao.bestForExercise(exerciseId)
 
-    suspend fun getLastSuccessfulWeight(exerciseId: Long): Double? {
-        val recent = sessionDao.lastSets(exerciseId, Equipment.BARBELL, 20)
+
+    suspend fun getLastSuccessfulWeight(
+        exerciseId: Long,
+        equipment: Equipment,
+        reps: Int?
+    ): Double? {
+        val recent = sessionDao.lastSets(
+            exerciseId = exerciseId,
+            equipment = equipment,
+            limit = 20,
+            reps = reps
+        )
         return recent.firstOrNull { it.success == true && it.weight != null }?.weight
     }
 
-    suspend fun getSuggestedWeight(exerciseId: Long): Double? =
-        getLastSuccessfulWeight(exerciseId)?.let { it * 1.02 }
+    suspend fun getSuggestedWeight(
+        exerciseId: Long,
+        equipment: Equipment,
+        reps: Int?
+    ): Double? = getLastSuccessfulWeight(exerciseId, equipment, reps)?.let { it * 1.02 }
 }

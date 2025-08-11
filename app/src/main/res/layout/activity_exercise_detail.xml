@@ -51,19 +51,19 @@
 
             <!-- Last Weight & Suggested -->
             <TextView
-                android:id="@+id/tvLastWeight"
+                android:id="@+id/tvLastSuccessful"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="Last: No data"
                 android:textSize="16sp"
                 android:textColor="@color/black"
-                android:layout_marginBottom="8dp" />
+                android:layout_marginBottom="4dp" />
 
             <TextView
                 android:id="@+id/tvSuggestedWeight"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Suggested: 20kg"
+                android:text="Suggested: -- kg"
                 android:textSize="16sp"
                 android:textStyle="bold"
                 android:textColor="@color/purple_700"

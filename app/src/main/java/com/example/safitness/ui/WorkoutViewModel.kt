@@ -1,4 +1,3 @@
-// app/src/main/java/com/example/safitness/ui/WorkoutViewModel.kt
 package com.example.safitness.ui
 
 import androidx.lifecycle.*
@@ -13,7 +12,15 @@ class WorkoutViewModel(private val repo: WorkoutRepository) : ViewModel() {
     val programForDay: LiveData<List<ExerciseWithSelection>> =
         dayLive.switchMap { day -> repo.programForDay(day).asLiveData() }
 
-    fun setDay(day: Int) { dayLive.value = day }
+    private val _lastMetconSeconds = MutableLiveData<Int>(0)
+    val lastMetconSeconds: LiveData<Int> = _lastMetconSeconds
+
+    fun setDay(day: Int) {
+        dayLive.value = day
+        viewModelScope.launch {
+            _lastMetconSeconds.value = repo.lastMetconSecondsForDay(day) ?: 0
+        }
+    }
 
     fun logStrengthSet(
         sessionId: Long,
@@ -39,9 +46,17 @@ class WorkoutViewModel(private val repo: WorkoutRepository) : ViewModel() {
         )
     }
 
-    suspend fun getLastSuccessfulWeight(exerciseId: Long) =
-        repo.getLastSuccessfulWeight(exerciseId)
+    fun logMetcon(day: Int, seconds: Int) = viewModelScope.launch {
+        repo.logMetcon(day, seconds)
+        _lastMetconSeconds.value = repo.lastMetconSecondsForDay(day) ?: 0
+    }
 
-    suspend fun getSuggestedWeight(exerciseId: Long) =
-        repo.getSuggestedWeight(exerciseId)
+    suspend fun getLastSuccessfulWeight(exerciseId: Long, equipment: Equipment, reps: Int?) =
+        repo.getLastSuccessfulWeight(exerciseId, equipment, reps)
+
+    suspend fun getSuggestedWeight(
+            exerciseId: Long,
+            equipment: Equipment,
+            reps: Int?
+        ) = repo.getSuggestedWeight(exerciseId, equipment, reps)
 }

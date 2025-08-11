@@ -1,13 +1,9 @@
 // app/src/main/java/com/example/safitness/data/dao/ProgramDao.kt
 package com.example.safitness.data.dao
 
-import androidx.room.Dao
-import androidx.room.Embedded
-import androidx.room.Insert
-import androidx.room.OnConflictStrategy
-import androidx.room.Query
-import androidx.room.Transaction
+import androidx.room.*
 import com.example.safitness.core.Equipment
+import com.example.safitness.core.WorkoutType
 import com.example.safitness.data.entities.Exercise
 import com.example.safitness.data.entities.ProgramSelection
 import kotlinx.coroutines.flow.Flow
@@ -47,10 +43,22 @@ interface ProgramDao {
     @Query("UPDATE ProgramSelection SET targetReps = :reps WHERE dayIndex = :day AND exerciseId = :exerciseId")
     suspend fun setTargetReps(day: Int, exerciseId: Long, reps: Int?)
 
-    /* --- helpers for library row state --- */
+    /* --- used by Library row state --- */
     @Query("SELECT COUNT(*) FROM ProgramSelection WHERE dayIndex = :day AND exerciseId = :exerciseId")
     suspend fun exists(day: Int, exerciseId: Long): Int
 
     @Query("SELECT targetReps FROM ProgramSelection WHERE dayIndex = :day AND exerciseId = :exerciseId LIMIT 1")
     suspend fun getTargetReps(day: Int, exerciseId: Long): Int?
+
+    @Query("SELECT required FROM ProgramSelection WHERE dayIndex = :day AND exerciseId = :exerciseId LIMIT 1")
+    suspend fun getRequired(day: Int, exerciseId: Long): Boolean?
+
+    /* --- for main-day card label --- */
+    @Query("""
+        SELECT DISTINCT e.workoutType
+        FROM Exercise e
+        JOIN ProgramSelection ps ON ps.exerciseId = e.id
+        WHERE ps.dayIndex = :day
+    """)
+    suspend fun distinctTypesForDay(day: Int): List<WorkoutType>
 }

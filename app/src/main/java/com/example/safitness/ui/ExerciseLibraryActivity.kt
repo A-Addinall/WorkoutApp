@@ -2,9 +2,7 @@
 package com.example.safitness.ui
 
 import android.os.Bundle
-import android.view.LayoutInflater
-import android.view.View
-import android.view.ViewGroup
+import android.view.*
 import android.widget.*
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
@@ -21,7 +19,8 @@ class ExerciseLibraryActivity : AppCompatActivity() {
     private val vm: LibraryViewModel by viewModels {
         LibraryViewModelFactory(Repos.workoutRepository(this))
     }
-    private val day get() = intent.getIntExtra("DAY_INDEX", 1).coerceIn(1, 5)
+
+    private var currentDay = 1
 
     private lateinit var spinnerType: Spinner
     private lateinit var spinnerEq: Spinner
@@ -32,8 +31,9 @@ class ExerciseLibraryActivity : AppCompatActivity() {
 
     private val repChoices = listOf(3, 5, 8, 10, 12, 15)
     private val repLabels = repChoices.map { "$it reps" } + "—"
-    private val currentReps = mutableMapOf<Long, Int?>() // exerciseId -> reps or null
-    private val addedState = mutableMapOf<Long, Boolean>() // exerciseId -> is in program
+    private val currentReps = mutableMapOf<Long, Int?>()
+    private val addedState = mutableMapOf<Long, Boolean>()
+    private val requiredState = mutableMapOf<Long, Boolean>() // ⭐ required state
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -48,37 +48,24 @@ class ExerciseLibraryActivity : AppCompatActivity() {
 
         findViewById<ImageView>(R.id.ivBack).setOnClickListener { finish() }
 
-        // Spinners
-        spinnerType.adapter = ArrayAdapter(
-            this,
-            android.R.layout.simple_spinner_dropdown_item,
-            arrayOf("All") + WorkoutType.values().map { it.name }
-        )
-        spinnerEq.adapter = ArrayAdapter(
-            this,
-            android.R.layout.simple_spinner_dropdown_item,
-            arrayOf("All") + Equipment.values().map { it.name }
-        )
-        spinnerDay.adapter = ArrayAdapter(
-            this,
-            android.R.layout.simple_spinner_dropdown_item,
-            arrayOf("Day 1", "Day 2", "Day 3", "Day 4", "Day 5")
-        )
-        spinnerDay.setSelection(day - 1)
+        currentDay = intent.getIntExtra("DAY_INDEX", 1).coerceIn(1, 5)
 
-        spinnerType.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(p: AdapterView<*>?, v: View?, pos: Int, id: Long) {
-                val type = if (pos == 0) null else WorkoutType.valueOf(spinnerType.selectedItem as String)
-                vm.setTypeFilter(type)
-            }
-            override fun onNothingSelected(p: AdapterView<*>?) {}
+        spinnerType.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item,
+            arrayOf("All") + WorkoutType.values().map { it.name })
+        spinnerEq.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item,
+            arrayOf("All") + Equipment.values().map { it.name })
+        spinnerDay.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item,
+            arrayOf("Day 1","Day 2","Day 3","Day 4","Day 5"))
+        spinnerDay.setSelection(currentDay - 1)
+
+        spinnerType.onItemSelectedListener = objSel { pos ->
+            vm.setTypeFilter(if (pos == 0) null else WorkoutType.valueOf(spinnerType.selectedItem as String))
         }
-        spinnerEq.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(p: AdapterView<*>?, v: View?, pos: Int, id: Long) {
-                val eq = if (pos == 0) null else Equipment.valueOf(spinnerEq.selectedItem as String)
-                vm.setEqFilter(eq)
-            }
-            override fun onNothingSelected(p: AdapterView<*>?) {}
+        spinnerEq.onItemSelectedListener = objSel { pos ->
+            vm.setEqFilter(if (pos == 0) null else Equipment.valueOf(spinnerEq.selectedItem as String))
+        }
+        spinnerDay.onItemSelectedListener = objSel { pos ->
+            currentDay = (pos + 1).coerceIn(1, 5)
         }
 
         btnClearFilters.setOnClickListener {
@@ -94,22 +81,25 @@ class ExerciseLibraryActivity : AppCompatActivity() {
             }
             emptyText.visibility = View.GONE
 
-            // Preload per-row state from DB
             lifecycleScope.launch {
                 val repo = Repos.workoutRepository(this@ExerciseLibraryActivity)
                 list.forEach { ex ->
-                    addedState[ex.id] = repo.isInProgram(day, ex.id)
-                    currentReps[ex.id] = repo.selectedTargetReps(day, ex.id)
+                    addedState[ex.id] = repo.isInProgram(currentDay, ex.id)
+                    currentReps[ex.id] = repo.selectedTargetReps(currentDay, ex.id)
+                    requiredState[ex.id] = repo.requiredFor(currentDay, ex.id)
                 }
                 listLibrary.adapter = LibraryAdapter(list)
             }
         }
     }
 
-    private inner class LibraryAdapter(
-        private val items: List<Exercise>
-    ) : BaseAdapter() {
+    private fun objSel(block: (Int) -> Unit) =
+        object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(p: AdapterView<*>?, v: View?, pos: Int, id: Long) = block(pos)
+            override fun onNothingSelected(p: AdapterView<*>?) {}
+        }
 
+    private inner class LibraryAdapter(private val items: List<Exercise>) : BaseAdapter() {
         override fun getCount() = items.size
         override fun getItem(position: Int) = items[position]
         override fun getItemId(position: Int) = items[position].id
@@ -119,16 +109,11 @@ class ExerciseLibraryActivity : AppCompatActivity() {
             val row = if (convertView == null) {
                 val v = LayoutInflater.from(parent?.context)
                     .inflate(R.layout.item_library_row, parent, false)
-                holder = VH(v)
-                v.tag = holder
-                v
+                holder = VH(v); v.tag = holder; v
             } else {
-                (convertView.tag as VH).also { holder = it }
-                convertView
+                (convertView.tag as VH).also { holder = it }; convertView
             }
-
-            val ex = getItem(position)
-            holder.bind(ex)
+            holder.bind(getItem(position))
             return row
         }
 
@@ -138,69 +123,78 @@ class ExerciseLibraryActivity : AppCompatActivity() {
             private val tvEquip = v.findViewById<TextView>(R.id.tvEquip)
             private val spinnerReps = v.findViewById<Spinner>(R.id.spinnerReps)
             private val btnPrimary = v.findViewById<Button>(R.id.btnPrimary)
-            // star remains unused for now
-            // private val btnRequired = v.findViewById<ImageButton>(R.id.btnRequired)
+            private val btnRequired = v.findViewById<ImageButton>(R.id.btnRequired)
 
             fun bind(ex: Exercise) {
                 tvTitle.text = ex.name
                 tvMeta.text = ex.workoutType.name
                 tvEquip.text = ex.primaryEquipment.name
 
-                // Spinner setup (3/5/8/10/12/15/—)
+                // reps spinner
                 val repsAdapter = ArrayAdapter(
                     this@ExerciseLibraryActivity,
                     android.R.layout.simple_spinner_dropdown_item,
                     repLabels
                 )
                 spinnerReps.adapter = repsAdapter
-
-                val preSel = currentReps[ex.id]
-                val selIndex = preSel?.let { repChoices.indexOf(it) } ?: repLabels.lastIndex
-                spinnerReps.setSelection(selIndex)
-
-                spinnerReps.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-                    override fun onItemSelected(
-                        parent: AdapterView<*>?, view: View?, pos: Int, id: Long
-                    ) {
-                        val chosen = if (pos == repLabels.lastIndex) null else repChoices[pos]
-                        currentReps[ex.id] = chosen
-                        // Persist if already added
-                        if (addedState[ex.id] == true) {
-                            lifecycleScope.launch {
-                                Repos.workoutRepository(this@ExerciseLibraryActivity)
-                                    .setTargetReps(day, ex.id, chosen)
-                            }
+                val pre = currentReps[ex.id]
+                val idx = pre?.let { repChoices.indexOf(it) } ?: repLabels.lastIndex
+                spinnerReps.setSelection(idx)
+                spinnerReps.onItemSelectedListener = objSel { pos ->
+                    val chosen = if (pos == repLabels.lastIndex) null else repChoices[pos]
+                    currentReps[ex.id] = chosen
+                    if (addedState[ex.id] == true) {
+                        lifecycleScope.launch {
+                            Repos.workoutRepository(this@ExerciseLibraryActivity)
+                                .setTargetReps(currentDay, ex.id, chosen)
                         }
                     }
-                    override fun onNothingSelected(parent: AdapterView<*>?) {}
                 }
 
-                // Button label/state
-                fun refreshBtn() {
+                fun refreshPrimary() {
                     btnPrimary.text = if (addedState[ex.id] == true) "Remove" else "Add"
                 }
-                refreshBtn()
+                fun refreshStar() {
+                    val isAdded = addedState[ex.id] == true
+                    btnRequired.isEnabled = isAdded
+                    val on = (requiredState[ex.id] == true) && isAdded
+                    btnRequired.setImageResource(
+                        if (on) android.R.drawable.btn_star_big_on
+                        else android.R.drawable.btn_star_big_off
+                    )
+                    btnRequired.alpha = if (isAdded) 1f else 0.35f
+                }
+
+                refreshPrimary(); refreshStar()
 
                 btnPrimary.setOnClickListener {
                     lifecycleScope.launch {
                         val repo = Repos.workoutRepository(this@ExerciseLibraryActivity)
-                        val isAdded = addedState[ex.id] == true
-                        if (isAdded) {
-                            repo.removeFromDay(day, ex.id)
+                        if (addedState[ex.id] == true) {
+                            repo.removeFromDay(currentDay, ex.id)
                             addedState[ex.id] = false
                             Toast.makeText(this@ExerciseLibraryActivity, "Removed ${ex.name}", Toast.LENGTH_SHORT).show()
                         } else {
-                            repo.addToDay(
-                                day = day,
-                                exercise = ex,
-                                required = true,
-                                preferred = ex.primaryEquipment,
-                                targetReps = currentReps[ex.id]
-                            )
+                            repo.addToDay(currentDay, ex, required = (requiredState[ex.id] ?: true),
+                                preferred = ex.primaryEquipment, targetReps = currentReps[ex.id])
                             addedState[ex.id] = true
                             Toast.makeText(this@ExerciseLibraryActivity, "Added ${ex.name}", Toast.LENGTH_SHORT).show()
                         }
-                        refreshBtn()
+                        refreshPrimary(); refreshStar()
+                    }
+                }
+
+                btnRequired.setOnClickListener {
+                    if (addedState[ex.id] != true) {
+                        Toast.makeText(this@ExerciseLibraryActivity, "Add the exercise first", Toast.LENGTH_SHORT).show()
+                        return@setOnClickListener
+                    }
+                    lifecycleScope.launch {
+                        val newVal = !(requiredState[ex.id] ?: true)
+                        Repos.workoutRepository(this@ExerciseLibraryActivity)
+                            .setRequired(currentDay, ex.id, newVal)
+                        requiredState[ex.id] = newVal
+                        refreshStar()
                     }
                 }
             }
