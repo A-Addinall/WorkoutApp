@@ -16,6 +16,7 @@
         <activity android:name=".ui.SettingsActivity" android:exported="false"/>
         <activity android:name=".ui.PersonalRecordsActivity" android:exported="false"/>
         <activity android:name=".ui.ExerciseLibraryActivity" android:exported="false"/>
+        <activity android:name=".ui.MetconActivity" android:exported="false"/>
 
         <activity
             android:name=".ui.MainActivity"

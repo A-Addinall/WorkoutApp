@@ -1,4 +1,3 @@
-// app/src/main/java/com/example/safitness/ui/WorkoutActivity.kt
 package com.example.safitness.ui
 
 import android.content.Intent
@@ -11,10 +10,12 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.example.safitness.R
 import com.example.safitness.core.Equipment
+import com.example.safitness.core.Modality
 import com.example.safitness.data.dao.ExerciseWithSelection
 import com.example.safitness.data.repo.Repos
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 
 class WorkoutActivity : AppCompatActivity() {
 
@@ -22,12 +23,12 @@ class WorkoutActivity : AppCompatActivity() {
         WorkoutViewModelFactory(Repos.workoutRepository(this))
     }
 
+    private var sessionId: Long = 0L
     private lateinit var tvWorkoutTitle: TextView
     private lateinit var layoutExercises: LinearLayout
 
     private var dayIndex: Int = 1
     private var workoutName: String = "Workout"
-    private var sessionId: Long = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -40,9 +41,7 @@ class WorkoutActivity : AppCompatActivity() {
         layoutExercises = findViewById(R.id.layoutExercises)
         tvWorkoutTitle.text = workoutName
 
-        findViewById<ImageView>(R.id.ivBack).setOnClickListener { finish() }
-
-        // Start a session on first load
+        // start a session for this day (strength sets will attach to it)
         lifecycleScope.launch(Dispatchers.IO) {
             if (sessionId == 0L) {
                 sessionId = Repos.workoutRepository(this@WorkoutActivity).startSession(dayIndex)
@@ -51,13 +50,18 @@ class WorkoutActivity : AppCompatActivity() {
 
         vm.setDay(dayIndex)
         vm.programForDay.observe(this) { render(it) }
+
+        findViewById<ImageView>(R.id.ivBack).setOnClickListener { finish() }
     }
 
     private fun render(items: List<ExerciseWithSelection>) {
         layoutExercises.removeAllViews()
 
-        val required = items.filter { it.required }
-        val optional = items - required
+        val metcon = items.filter { it.exercise.modality == Modality.METCON }
+        val nonMetcon = items - metcon
+
+        val required = nonMetcon.filter { it.required }
+        val optional = nonMetcon - required
 
         if (required.isNotEmpty()) {
             addSection("Required")
@@ -67,9 +71,13 @@ class WorkoutActivity : AppCompatActivity() {
             addSection("Optional")
             optional.forEach { addExerciseCard(it) }
         }
+
+        // Metcon card (single entry that lists the day’s metcon movements)
+        if (metcon.isNotEmpty()) addMetconCard(metcon)
+
         if (items.isEmpty()) {
             val empty = TextView(this).apply {
-                text = "No exercises planned for Day $dayIndex."
+                text = "No exercises planned for Day $dayIndex.\nOpen the Library to add some."
                 textSize = 16f
                 setPadding(24, 24, 24, 24)
             }
@@ -88,28 +96,67 @@ class WorkoutActivity : AppCompatActivity() {
     }
 
     private fun addExerciseCard(item: ExerciseWithSelection) {
-        val cardView = layoutInflater.inflate(R.layout.item_exercise_card, layoutExercises, false)
+        val card = layoutInflater.inflate(R.layout.item_exercise_card, layoutExercises, false)
 
-        val tvExerciseName = cardView.findViewById<TextView>(R.id.tvExerciseName)
-        val tvRepRange = cardView.findViewById<TextView>(R.id.tvRepRange)
-        val tvLastWeight = cardView.findViewById<TextView>(R.id.tvLastWeight)
+        card.findViewById<TextView>(R.id.tvExerciseName).text = item.exercise.name
+        card.findViewById<TextView>(R.id.tvRepRange).text =
+            item.targetReps?.let { "Reps: $it" } ?: "Reps: --"
 
-        tvExerciseName.text = item.exercise.name
-        tvRepRange.text = item.targetReps?.toString() ?: item.exercise.modality.name
-        tvLastWeight.text = "" // (optional) fill from repository if needed
+        val lastWeight = runBlocking {
+            Repos.workoutRepository(this@WorkoutActivity).getLastSuccessfulWeight(
+                exerciseId = item.exercise.id,
+                equipment = item.preferredEquipment ?: item.exercise.primaryEquipment ?: Equipment.BARBELL,
+                reps = item.targetReps
+            )
+        }
+        card.findViewById<TextView>(R.id.tvLastWeight).text =
+            if (lastWeight != null) "Last: ${lastWeight}kg" else "Last: --kg"
 
-        val equip: Equipment = item.preferredEquipment ?: item.exercise.primaryEquipment
-        cardView.setOnClickListener {
-            val i = Intent(this, ExerciseDetailActivity::class.java).apply {
+        card.setOnClickListener {
+            startActivity(Intent(this, ExerciseDetailActivity::class.java).apply {
                 putExtra("SESSION_ID", sessionId)
                 putExtra("EXERCISE_ID", item.exercise.id)
                 putExtra("EXERCISE_NAME", item.exercise.name)
-                putExtra("EQUIPMENT", equip.name)
-                putExtra("TARGET_REPS", item.targetReps ?: 8)
-            }
-            startActivity(i)
+                putExtra("EQUIPMENT", (item.preferredEquipment ?: item.exercise.primaryEquipment)?.name)
+                putExtra("TARGET_REPS", item.targetReps)
+            })
+        }
+        layoutExercises.addView(card)
+    }
+
+    private fun addMetconCard(items: List<ExerciseWithSelection>) {
+        addSection("Metcon")
+
+        val card = layoutInflater.inflate(R.layout.item_metcon_card, layoutExercises, false)
+        val listContainer = card.findViewById<LinearLayout>(R.id.layoutMetconExercises)
+        val tvLastTime = card.findViewById<TextView>(R.id.tvLastTime)
+
+        // list the metcon movements
+        items.forEach { item ->
+            val row = layoutInflater.inflate(R.layout.item_metcon_exercise, listContainer, false)
+            row.findViewById<TextView>(R.id.tvExerciseName).text = item.exercise.name
+            row.findViewById<TextView>(R.id.tvRepRange).text =
+                item.targetReps?.let { "$it reps" } ?: "As prescribed"
+            listContainer.addView(row)
         }
 
-        layoutExercises.addView(cardView)
+        // observe last time for this day
+        vm.lastMetconSeconds.observe(this) { sec ->
+            tvLastTime.text = if (sec > 0) {
+                "Last time: ${sec / 60}m ${sec % 60}s"
+            } else {
+                "No previous time"
+            }
+        }
+
+        // tap → metcon screen
+        card.setOnClickListener {
+            startActivity(Intent(this, MetconActivity::class.java).apply {
+                putExtra("DAY_INDEX", dayIndex)
+                putExtra("WORKOUT_NAME", workoutName)
+            })
+        }
+
+        layoutExercises.addView(card)
     }
 }

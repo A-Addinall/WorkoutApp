@@ -1,4 +1,3 @@
-// app/src/main/java/com/example/safitness/ui/ExerciseDetailActivity.kt
 package com.example.safitness.ui
 
 import android.os.Bundle
@@ -20,7 +19,7 @@ class ExerciseDetailActivity : AppCompatActivity() {
     }
 
     private lateinit var tvExerciseName: TextView
-    private lateinit var tvLastWeight: TextView
+    private lateinit var tvLastSuccessful: TextView
     private lateinit var tvSuggestedWeight: TextView
     private lateinit var layoutSets: LinearLayout
     private lateinit var btnAddSet: Button
@@ -31,12 +30,14 @@ class ExerciseDetailActivity : AppCompatActivity() {
     private var exerciseId: Long = 0L
     private var exerciseName: String = ""
     private var equipmentName: String = "BARBELL"
-    private var targetReps: Int = 8
+    private var targetReps: Int? = null
 
     private data class SetRow(
         val container: View,
         val etWeight: EditText,
         val etReps: EditText,
+        val btnSuccess: Button,
+        val btnFail: Button,
         var success: Boolean? = null
     )
     private val setRows = mutableListOf<SetRow>()
@@ -49,20 +50,25 @@ class ExerciseDetailActivity : AppCompatActivity() {
         exerciseId = intent.getLongExtra("EXERCISE_ID", 0L)
         exerciseName = intent.getStringExtra("EXERCISE_NAME") ?: ""
         equipmentName = intent.getStringExtra("EQUIPMENT") ?: "BARBELL"
-        targetReps = intent.getIntExtra("TARGET_REPS", 8)
+        targetReps = if (intent.hasExtra("TARGET_REPS")) intent.getIntExtra("TARGET_REPS", 0).takeIf { it > 0 } else null
 
         bindViews()
-        initHeader()
-        loadHeaderData()
+        tvExerciseName.text = exerciseName
+        findViewById<ImageView>(R.id.ivBack).setOnClickListener { finish() }
 
-        addNewSet() // show one row immediately
+        // Prime header info
+        refreshHeader()
+
+        // Start with one row
+        addNewSet()
+
         btnAddSet.setOnClickListener { addNewSet() }
         btnCompleteExercise.setOnClickListener { onCompleteExercise() }
     }
 
     private fun bindViews() {
         tvExerciseName = findViewById(R.id.tvExerciseName)
-        tvLastWeight = findViewById(R.id.tvLastWeight)
+        tvLastSuccessful = findViewById(R.id.tvLastSuccessful)
         tvSuggestedWeight = findViewById(R.id.tvSuggestedWeight)
         layoutSets = findViewById(R.id.layoutSets)
         btnAddSet = findViewById(R.id.btnAddSet)
@@ -70,25 +76,10 @@ class ExerciseDetailActivity : AppCompatActivity() {
         etNotes = findViewById(R.id.etNotes)
     }
 
-    private fun initHeader() {
-        tvExerciseName.text = exerciseName
-        findViewById<ImageView>(R.id.ivBack).setOnClickListener { finish() }
-    }
-
-    private fun loadHeaderData() {
-        lifecycleScope.launch {
-            val last = vm.getLastSuccessfulWeight(exerciseId)
-            tvLastWeight.text = if (last != null) "Last successful lift: ${last}kg" else "No successful lifts yet"
-
-            val suggested = vm.getSuggestedWeight(exerciseId) ?: 20.0
-            tvSuggestedWeight.text = "Suggested: ${suggested}kg"
-        }
-    }
-
     private fun addNewSet() {
         val setNumber = setRows.size + 1
-
         val v = layoutInflater.inflate(R.layout.item_set_entry, layoutSets, false)
+
         val tvSetNumber = v.findViewById<TextView>(R.id.tvSetNumber)
         val etWeight = v.findViewById<EditText>(R.id.etWeight)
         val etReps = v.findViewById<EditText>(R.id.etReps)
@@ -96,86 +87,86 @@ class ExerciseDetailActivity : AppCompatActivity() {
         val btnFail = v.findViewById<Button>(R.id.btnFail)
 
         tvSetNumber.text = "Set $setNumber:"
-        // Pre-populate and lock reps
-        etReps.setText(targetReps.toString())
+        etReps.setText(targetReps?.toString() ?: "")
         etReps.isEnabled = false
-        etReps.isFocusable = false
 
-        // Hint suggested weight
-        lifecycleScope.launch {
-            vm.getSuggestedWeight(exerciseId)?.let { etWeight.hint = it.toString() }
-        }
+        // Start buttons in neutral grey
+        val neutral = ContextCompat.getColor(this, android.R.color.darker_gray)
+        btnSuccess.setBackgroundColor(neutral)
+        btnFail.setBackgroundColor(neutral)
 
-        val row = SetRow(v, etWeight, etReps, null)
+        val row = SetRow(v, etWeight, etReps, btnSuccess, btnFail, null)
         setRows += row
+        layoutSets.addView(v)
 
         val equipment = runCatching { Equipment.valueOf(equipmentName) }.getOrElse { Equipment.BARBELL }
 
         btnSuccess.setOnClickListener {
-            val weightVal = etWeight.text.toString().toDoubleOrNull()
-            val repsVal = targetReps // locked
-            if (weightVal == null || repsVal <= 0) {
-                Toast.makeText(this, "Enter a valid weight", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-            lifecycleScope.launch {
-                vm.logStrengthSet(
-                    sessionId = sessionId,
-                    exerciseId = exerciseId,
-                    equipment = equipment,
-                    setNumber = setNumber,
-                    reps = repsVal,
-                    weight = weightVal,
-                    rpe = 6.0,
-                    success = true,
-                    notes = etNotes.text?.toString()?.ifBlank { null }
-                )
-                row.success = true
-                btnSuccess.setBackgroundColor(ContextCompat.getColor(this@ExerciseDetailActivity, android.R.color.holo_green_light))
-                btnFail.setBackgroundColor(ContextCompat.getColor(this@ExerciseDetailActivity, android.R.color.darker_gray))
-                Toast.makeText(this@ExerciseDetailActivity, "✅ Set logged", Toast.LENGTH_SHORT).show()
-                loadHeaderData()
-            }
+            handleMark(row, isSuccess = true, setNumber = setNumber, equipment = equipment)
         }
-
         btnFail.setOnClickListener {
-            val weightVal = etWeight.text.toString().toDoubleOrNull()
-            val repsVal = targetReps
-            if (weightVal == null || repsVal <= 0) {
-                Toast.makeText(this, "Enter a valid weight", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-            lifecycleScope.launch {
-                vm.logStrengthSet(
-                    sessionId = sessionId,
-                    exerciseId = exerciseId,
-                    equipment = equipment,
-                    setNumber = setNumber,
-                    reps = repsVal,
-                    weight = weightVal,
-                    rpe = 9.0,
-                    success = false,
-                    notes = etNotes.text?.toString()?.ifBlank { null }
-                )
-                row.success = false
-                btnFail.setBackgroundColor(ContextCompat.getColor(this@ExerciseDetailActivity, android.R.color.holo_red_light))
-                btnSuccess.setBackgroundColor(ContextCompat.getColor(this@ExerciseDetailActivity, android.R.color.darker_gray))
-                Toast.makeText(this@ExerciseDetailActivity, "❌ Set logged", Toast.LENGTH_SHORT).show()
-                loadHeaderData()
-            }
+            handleMark(row, isSuccess = false, setNumber = setNumber, equipment = equipment)
+        }
+    }
+
+    private fun handleMark(row: SetRow, isSuccess: Boolean, setNumber: Int, equipment: Equipment) {
+        val weightVal = row.etWeight.text.toString().toDoubleOrNull()
+        val repsVal = targetReps ?: row.etReps.text.toString().toIntOrNull()
+
+        if (weightVal == null || repsVal == null || repsVal <= 0) {
+            Toast.makeText(this, "Enter a valid weight; reps are set by the program.", Toast.LENGTH_SHORT).show()
+            return
         }
 
-        // <- This was missing earlier, so the row never appeared!
-        layoutSets.addView(v)
+        // Require exactly one of success/fail per set
+        row.success = isSuccess
+        val green = ContextCompat.getColor(this, android.R.color.holo_green_light)
+        val red = ContextCompat.getColor(this, android.R.color.holo_red_light)
+        val neutral = ContextCompat.getColor(this, android.R.color.darker_gray)
+        if (isSuccess) {
+            row.btnSuccess.setBackgroundColor(green)
+            row.btnFail.setBackgroundColor(neutral)
+        } else {
+            row.btnSuccess.setBackgroundColor(neutral)
+            row.btnFail.setBackgroundColor(red)
+        }
+
+        // Log without closing the screen
+        lifecycleScope.launch {
+            vm.logStrengthSet(
+                sessionId = sessionId,
+                exerciseId = exerciseId,
+                equipment = equipment,
+                setNumber = setNumber,
+                reps = repsVal,
+                weight = weightVal,
+                rpe = if (isSuccess) 6.0 else 9.0,
+                success = isSuccess,
+                notes = etNotes.text?.toString()?.ifBlank { null }
+            )
+            Toast.makeText(this@ExerciseDetailActivity, if (isSuccess) "✅ Set logged" else "❌ Set logged", Toast.LENGTH_SHORT).show()
+            refreshHeader() // update last/suggested after each log
+        }
     }
 
     private fun onCompleteExercise() {
         val logged = setRows.count { it.success != null }
         if (logged == 0) {
-            Toast.makeText(this, "Please mark at least one set", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Please mark at least one set as Success or Fail", Toast.LENGTH_SHORT).show()
             return
         }
         Toast.makeText(this, "Exercise completed! $logged sets logged.", Toast.LENGTH_SHORT).show()
         finish()
+    }
+
+    private fun refreshHeader() {
+        val equipment = runCatching { Equipment.valueOf(equipmentName) }.getOrElse { Equipment.BARBELL }
+        lifecycleScope.launch {
+            val last = vm.getLastSuccessfulWeight(exerciseId, equipment, targetReps)
+            tvLastSuccessful.text = if (last != null) "Last successful lift: ${last}kg" else "Last successful lift: --kg"
+
+            val suggested = vm.getSuggestedWeight(exerciseId, equipment, targetReps)
+            tvSuggestedWeight.text = "Suggested: ${suggested?.let { String.format("%.1f", it) } ?: "--"}kg"
+        }
     }
 }
