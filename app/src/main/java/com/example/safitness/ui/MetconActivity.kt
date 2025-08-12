@@ -6,6 +6,7 @@ import android.widget.*
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import com.example.safitness.R
+import com.example.safitness.core.MetconResult
 import com.example.safitness.core.Modality
 import com.example.safitness.data.repo.Repos
 
@@ -23,6 +24,10 @@ class MetconActivity : AppCompatActivity() {
     private lateinit var btnComplete: Button
     private lateinit var tvLastTime: TextView
 
+    // NEW: RX / Scaled toggle
+    private lateinit var rbRx: RadioButton
+    private lateinit var rbScaled: RadioButton
+
     private var dayIndex: Int = 1
     private var workoutName: String = "Metcon"
 
@@ -30,6 +35,9 @@ class MetconActivity : AppCompatActivity() {
     private var isRunning = false
     private var timeElapsedMs = 0L
     private var startTime = 0L
+    private lateinit var radioRx: RadioButton
+    private lateinit var radioScaled: RadioButton
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -41,6 +49,8 @@ class MetconActivity : AppCompatActivity() {
         bindViews()
         tvWorkoutTitle.text = "$workoutName – Metcon"
         tvTimer.text = "00:00"
+        radioRx = findViewById(R.id.rbRx)
+        radioScaled = findViewById(R.id.rbScaled)
 
         findViewById<ImageView>(R.id.ivBack).setOnClickListener { finish() }
 
@@ -71,10 +81,14 @@ class MetconActivity : AppCompatActivity() {
             }
         }
 
-        // Last metcon time
-        vm.lastMetconSeconds.observe(this) { sec ->
-            tvLastTime.text = if (sec > 0) "Last time: ${sec / 60}m ${sec % 60}s"
-            else "No previous time"
+        // Last metcon time + tag
+        vm.lastMetcon.observe(this) { sum ->
+            tvLastTime.text = if (sum != null && sum.timeSeconds > 0) {
+                val m = sum.timeSeconds / 60
+                val s = sum.timeSeconds % 60
+                val tag = sum.metconResult?.name ?: ""
+                if (tag.isNotEmpty()) "Last time: ${m}m ${s}s ($tag)" else "Last time: ${m}m ${s}s"
+            } else "No previous time"
         }
 
         btnStartStop.setOnClickListener { if (isRunning) stopTimer() else startTimer() }
@@ -90,6 +104,10 @@ class MetconActivity : AppCompatActivity() {
         btnReset = findViewById(R.id.btnReset)
         btnComplete = findViewById(R.id.btnComplete)
         tvLastTime = findViewById(R.id.tvLastTime)
+
+        // NEW: toggle views
+        rbRx = findViewById(R.id.rbRx)
+        rbScaled = findViewById(R.id.rbScaled)
     }
 
     private fun startTimer() {
@@ -134,8 +152,28 @@ class MetconActivity : AppCompatActivity() {
         }
         if (isRunning) stopTimer()
         val totalSeconds = (timeElapsedMs / 1000).toInt()
-        vm.logMetcon(dayIndex, totalSeconds)
-        Toast.makeText(this, "Metcon completed in ${totalSeconds / 60}m ${totalSeconds % 60}s!", Toast.LENGTH_LONG).show()
+
+        val result: MetconResult? = when {
+            radioRx.isChecked -> MetconResult.RX
+            radioScaled.isChecked -> MetconResult.SCALED
+            else -> null
+        }
+
+        if (result == null) {
+            Toast.makeText(this, "Please select RX or Scaled.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        vm.logMetcon(dayIndex, totalSeconds, result) // now non-null after the check
+
+
+        vm.logMetcon(dayIndex, totalSeconds, result)
+        val tag = result?.name ?: "—"
+        Toast.makeText(
+            this,
+            "Metcon completed in ${totalSeconds / 60}m ${totalSeconds % 60}s ($tag)!",
+            Toast.LENGTH_LONG
+        ).show()
         finish()
     }
 
