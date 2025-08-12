@@ -97,7 +97,7 @@ object ExerciseSeed {
             modality = Modality.METCON
         ),
         Exercise(
-            name = "Row Erg",
+            name = "Row and Swing\n3 rounds for time\n* 10 cal row\n* 10 Kettlebell swings",
             workoutType = WorkoutType.METCON,
             primaryEquipment = Equipment.MACHINE,
             modality = Modality.METCON

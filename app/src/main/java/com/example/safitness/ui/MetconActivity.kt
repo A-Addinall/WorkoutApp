@@ -35,6 +35,9 @@ class MetconActivity : AppCompatActivity() {
     private var isRunning = false
     private var timeElapsedMs = 0L
     private var startTime = 0L
+    private lateinit var radioRx: RadioButton
+    private lateinit var radioScaled: RadioButton
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -46,6 +49,8 @@ class MetconActivity : AppCompatActivity() {
         bindViews()
         tvWorkoutTitle.text = "$workoutName – Metcon"
         tvTimer.text = "00:00"
+        radioRx = findViewById(R.id.rbRx)
+        radioScaled = findViewById(R.id.rbScaled)
 
         findViewById<ImageView>(R.id.ivBack).setOnClickListener { finish() }
 
@@ -148,11 +153,19 @@ class MetconActivity : AppCompatActivity() {
         if (isRunning) stopTimer()
         val totalSeconds = (timeElapsedMs / 1000).toInt()
 
-        val result = when {
-            rbRx.isChecked -> MetconResult.RX
-            rbScaled.isChecked -> MetconResult.SCALED
+        val result: MetconResult? = when {
+            radioRx.isChecked -> MetconResult.RX
+            radioScaled.isChecked -> MetconResult.SCALED
             else -> null
         }
+
+        if (result == null) {
+            Toast.makeText(this, "Please select RX or Scaled.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        vm.logMetcon(dayIndex, totalSeconds, result) // now non-null after the check
+
 
         vm.logMetcon(dayIndex, totalSeconds, result)
         val tag = result?.name ?: "—"

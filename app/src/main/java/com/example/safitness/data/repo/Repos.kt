@@ -1,4 +1,3 @@
-// app/src/main/java/com/example/safitness/data/repo/Repos.kt
 package com.example.safitness.data.repo
 
 import android.content.Context
@@ -10,7 +9,8 @@ object Repos {
             libraryDao = libraryDao(),
             programDao = programDao(),
             sessionDao = sessionDao(),
-            prDao = personalRecordDao()
+            prDao = personalRecordDao(),
+            metconDao = metconDao() // NEW
         )
     }
 }

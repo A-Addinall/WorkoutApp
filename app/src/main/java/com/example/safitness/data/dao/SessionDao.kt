@@ -9,7 +9,7 @@ import com.example.safitness.core.MetconResult
 import com.example.safitness.data.entities.SetLog
 import com.example.safitness.data.entities.WorkoutSession
 
-/** Lightweight projection for last metcon stats. */
+// Top-level so other packages can import it directly.
 data class MetconSummary(
     val timeSeconds: Int,
     val metconResult: MetconResult?
@@ -40,9 +40,7 @@ interface SessionDao {
         reps: Int? = null
     ): List<SetLog>
 
-    /* -------- Metcon helpers -------- */
-
-    // Legacy helper kept for compatibility
+    // Legacy seconds-only helper.
     @Query(
         """
         SELECT sl.timeSeconds FROM SetLog sl
@@ -55,12 +53,12 @@ interface SessionDao {
     )
     suspend fun lastMetconSecondsForDay(day: Int): Int?
 
-    // NEW: returns time + RX/SCALED
+    // New summary; metconResult is NULL until schema adds that column.
     @Query(
         """
         SELECT 
-            sl.timeSeconds AS timeSeconds, 
-            sl.metconResult AS metconResult
+            sl.timeSeconds AS timeSeconds,
+            NULL AS metconResult
         FROM SetLog sl
         JOIN WorkoutSession ws ON ws.id = sl.sessionId
         WHERE ws.dayIndex = :day

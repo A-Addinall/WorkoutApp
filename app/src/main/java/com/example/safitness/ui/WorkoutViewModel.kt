@@ -11,10 +11,11 @@ import kotlinx.coroutines.launch
 class WorkoutViewModel(private val repo: WorkoutRepository) : ViewModel() {
 
     private val dayLive = MutableLiveData<Int>()
+
     val programForDay: LiveData<List<ExerciseWithSelection>> =
         dayLive.switchMap { day -> repo.programForDay(day).asLiveData() }
 
-    private val _lastMetcon = MutableLiveData<MetconSummary?>(null)
+    private val _lastMetcon = MutableLiveData<MetconSummary?>()
     val lastMetcon: LiveData<MetconSummary?> = _lastMetcon
 
     fun setDay(day: Int) {
@@ -48,11 +49,12 @@ class WorkoutViewModel(private val repo: WorkoutRepository) : ViewModel() {
         )
     }
 
-    fun logMetcon(day: Int, seconds: Int, result: MetconResult?) = viewModelScope.launch {
+    fun logMetcon(day: Int, seconds: Int, result: MetconResult) = viewModelScope.launch {
         repo.logMetcon(day, seconds, result)
         _lastMetcon.value = repo.lastMetconForDay(day)
     }
 
+    // Legacy helpers used by ExerciseDetailActivity
     suspend fun getLastSuccessfulWeight(exerciseId: Long, equipment: Equipment, reps: Int?) =
         repo.getLastSuccessfulWeight(exerciseId, equipment, reps)
 
