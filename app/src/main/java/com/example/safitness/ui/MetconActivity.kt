@@ -6,6 +6,7 @@ import android.widget.*
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import com.example.safitness.R
+import com.example.safitness.core.MetconResult
 import com.example.safitness.core.Modality
 import com.example.safitness.data.repo.Repos
 
@@ -22,6 +23,10 @@ class MetconActivity : AppCompatActivity() {
     private lateinit var btnReset: Button
     private lateinit var btnComplete: Button
     private lateinit var tvLastTime: TextView
+
+    // NEW: RX / Scaled toggle
+    private lateinit var rbRx: RadioButton
+    private lateinit var rbScaled: RadioButton
 
     private var dayIndex: Int = 1
     private var workoutName: String = "Metcon"
@@ -71,10 +76,14 @@ class MetconActivity : AppCompatActivity() {
             }
         }
 
-        // Last metcon time
-        vm.lastMetconSeconds.observe(this) { sec ->
-            tvLastTime.text = if (sec > 0) "Last time: ${sec / 60}m ${sec % 60}s"
-            else "No previous time"
+        // Last metcon time + tag
+        vm.lastMetcon.observe(this) { sum ->
+            tvLastTime.text = if (sum != null && sum.timeSeconds > 0) {
+                val m = sum.timeSeconds / 60
+                val s = sum.timeSeconds % 60
+                val tag = sum.metconResult?.name ?: ""
+                if (tag.isNotEmpty()) "Last time: ${m}m ${s}s ($tag)" else "Last time: ${m}m ${s}s"
+            } else "No previous time"
         }
 
         btnStartStop.setOnClickListener { if (isRunning) stopTimer() else startTimer() }
@@ -90,6 +99,10 @@ class MetconActivity : AppCompatActivity() {
         btnReset = findViewById(R.id.btnReset)
         btnComplete = findViewById(R.id.btnComplete)
         tvLastTime = findViewById(R.id.tvLastTime)
+
+        // NEW: toggle views
+        rbRx = findViewById(R.id.rbRx)
+        rbScaled = findViewById(R.id.rbScaled)
     }
 
     private fun startTimer() {
@@ -134,8 +147,20 @@ class MetconActivity : AppCompatActivity() {
         }
         if (isRunning) stopTimer()
         val totalSeconds = (timeElapsedMs / 1000).toInt()
-        vm.logMetcon(dayIndex, totalSeconds)
-        Toast.makeText(this, "Metcon completed in ${totalSeconds / 60}m ${totalSeconds % 60}s!", Toast.LENGTH_LONG).show()
+
+        val result = when {
+            rbRx.isChecked -> MetconResult.RX
+            rbScaled.isChecked -> MetconResult.SCALED
+            else -> null
+        }
+
+        vm.logMetcon(dayIndex, totalSeconds, result)
+        val tag = result?.name ?: "—"
+        Toast.makeText(
+            this,
+            "Metcon completed in ${totalSeconds / 60}m ${totalSeconds % 60}s ($tag)!",
+            Toast.LENGTH_LONG
+        ).show()
         finish()
     }
 

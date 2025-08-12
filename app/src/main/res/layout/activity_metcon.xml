@@ -71,7 +71,7 @@
         android:orientation="horizontal"
         android:gravity="center"
         app:layout_constraintTop_toBottomOf="@id/tvLastTime"
-        android:layout_marginTop="32dp">
+        android:layout_marginTop="24dp">
 
         <Button
             android:id="@+id/btnStartStop"
@@ -94,14 +94,41 @@
 
     </LinearLayout>
 
+    <!-- NEW: RX / Scaled toggle -->
+    <RadioGroup
+        android:id="@+id/rgResult"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        app:layout_constraintTop_toBottomOf="@id/layoutControls"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:gravity="center"
+        android:layout_marginTop="12dp">
+
+        <RadioButton
+            android:id="@+id/rbRx"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="RX"
+            android:checked="true"
+            android:layout_marginEnd="24dp" />
+
+        <RadioButton
+            android:id="@+id/rbScaled"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Scaled" />
+    </RadioGroup>
+
     <!-- Exercises List -->
     <ScrollView
         android:id="@+id/scrollExercises"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        app:layout_constraintTop_toBottomOf="@id/layoutControls"
+        app:layout_constraintTop_toBottomOf="@+id/rgResult"
         app:layout_constraintBottom_toTopOf="@id/btnComplete"
-        android:layout_marginTop="24dp"
+        android:layout_marginTop="16dp"
         android:layout_marginBottom="16dp">
 
         <LinearLayout

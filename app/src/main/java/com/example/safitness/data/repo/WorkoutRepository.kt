@@ -1,12 +1,10 @@
 package com.example.safitness.data.repo
 
 import com.example.safitness.core.Equipment
+import com.example.safitness.core.MetconResult
 import com.example.safitness.core.WorkoutType
 import com.example.safitness.data.dao.*
-import com.example.safitness.data.entities.Exercise
-import com.example.safitness.data.entities.ProgramSelection
-import com.example.safitness.data.entities.SetLog
-import com.example.safitness.data.entities.WorkoutSession
+import com.example.safitness.data.entities.*
 import kotlinx.coroutines.flow.Flow
 
 class WorkoutRepository(
@@ -68,6 +66,7 @@ class WorkoutRepository(
         }
     }
 
+    /* ---------- Sessions / logging ---------- */
     suspend fun startSession(day: Int): Long =
         sessionDao.insertSession(WorkoutSession(dayIndex = day))
 
@@ -104,7 +103,8 @@ class WorkoutRepository(
         timeSeconds: Int,
         rpe: Double?,
         success: Boolean?,
-        notes: String?
+        notes: String?,
+        metconResult: MetconResult?
     ): Long = sessionDao.insertSet(
         SetLog(
             sessionId = sessionId,
@@ -116,14 +116,15 @@ class WorkoutRepository(
             timeSeconds = timeSeconds,
             rpe = rpe,
             success = success,
-            notes = notes
+            notes = notes,
+            metconResult = metconResult
         )
     )
 
-    suspend fun logMetcon(day: Int, seconds: Int) {
+    /** New: log metcon with optional RX/SCALED tag */
+    suspend fun logMetcon(day: Int, seconds: Int, result: MetconResult?) {
         val sessionId = startSession(day)
-        // exerciseId isn't meaningful for metcon timing; store 0L and a neutral equipment.
-        val equip = Equipment.BARBELL // or BODYWEIGHT if you have it
+        val equip = Equipment.BODYWEIGHT // more neutral than BARBELL for metcon rows
         logTimeOnlySet(
             sessionId = sessionId,
             exerciseId = 0L,
@@ -132,16 +133,24 @@ class WorkoutRepository(
             timeSeconds = seconds,
             rpe = null,
             success = null,
-            notes = null
+            notes = null,
+            metconResult = result
         )
     }
 
+    // Backward compatibility for existing call sites
+    suspend fun logMetcon(day: Int, seconds: Int) = logMetcon(day, seconds, null)
+
+    /** Returns last metcon time only (legacy helper). */
     suspend fun lastMetconSecondsForDay(day: Int): Int =
-        sessionDao.lastMetconSecondsForDay(day) ?: 0
+        sessionDao.lastMetconForDay(day)?.timeSeconds ?: 0
+
+    /** New: Returns time + result tag, or null if none logged yet. */
+    suspend fun lastMetconForDay(day: Int): MetconSummary? =
+        sessionDao.lastMetconForDay(day)
 
     /* ---------- PR / suggestions ---------- */
     suspend fun bestPR(exerciseId: Long) = prDao.bestForExercise(exerciseId)
-
 
     suspend fun getLastSuccessfulWeight(
         exerciseId: Long,

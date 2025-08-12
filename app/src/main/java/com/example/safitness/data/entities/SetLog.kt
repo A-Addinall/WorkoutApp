@@ -3,6 +3,7 @@ package com.example.safitness.data.entities
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import com.example.safitness.core.Equipment
+import com.example.safitness.core.MetconResult
 
 @Entity
 data class SetLog(
@@ -16,5 +17,8 @@ data class SetLog(
     val timeSeconds: Int?,    // null for weight-based sets
     val rpe: Double?,         // nullable
     val success: Boolean?,    // nullable for neutral
-    val notes: String? = null
+    val notes: String? = null,
+
+    // NEW: mark metcon attempts as RX or Scaled (null for non-metcon or legacy rows)
+    val metconResult: MetconResult? = null
 )

@@ -1,4 +1,3 @@
-// app/src/main/java/com/example/safitness/data/db/AppDatabase.kt
 package com.example.safitness.data.db
 
 import android.content.Context
@@ -6,6 +5,7 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
+import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.example.safitness.data.dao.*
 import com.example.safitness.data.entities.*
@@ -15,7 +15,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 @Database(
-    version = 1,
+    version = 2, // bumped from 1 → 2 to add SetLog.metconResult
     entities = [
         Exercise::class,
         ProgramSelection::class,
@@ -25,7 +25,7 @@ import kotlinx.coroutines.launch
         UserSettings::class
     ]
 )
-@TypeConverters(Converters::class)  // ← add this
+@TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun libraryDao(): LibraryDao
     abstract fun programDao(): ProgramDao
@@ -36,6 +36,13 @@ abstract class AppDatabase : RoomDatabase() {
     companion object {
         @Volatile private var INSTANCE: AppDatabase? = null
 
+        // Simple additive migration: add TEXT column for enum name
+        private val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE SetLog ADD COLUMN metconResult TEXT")
+            }
+        }
+
         fun get(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -43,7 +50,8 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "safitness.db"
                 )
-                    .fallbackToDestructiveMigration() // dev-friendly
+                    .fallbackToDestructiveMigration() // dev-friendly; keep until real paths exist
+                    .addMigrations(MIGRATION_1_2)
                     .addCallback(object : Callback() {
                         override fun onCreate(dbObj: SupportSQLiteDatabase) {
                             super.onCreate(dbObj)

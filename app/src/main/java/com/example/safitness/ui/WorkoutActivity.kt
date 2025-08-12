@@ -140,10 +140,13 @@ class WorkoutActivity : AppCompatActivity() {
             listContainer.addView(row)
         }
 
-        // observe last time for this day
-        vm.lastMetconSeconds.observe(this) { sec ->
-            tvLastTime.text = if (sec > 0) {
-                "Last time: ${sec / 60}m ${sec % 60}s"
+        // observe last time + tag for this day
+        vm.lastMetcon.observe(this) { sum ->
+            tvLastTime.text = if (sum != null && sum.timeSeconds > 0) {
+                val m = sum.timeSeconds / 60
+                val s = sum.timeSeconds % 60
+                val tag = sum.metconResult?.name ?: ""
+                if (tag.isNotEmpty()) "Last time: ${m}m ${s}s ($tag)" else "Last time: ${m}m ${s}s"
             } else {
                 "No previous time"
             }
