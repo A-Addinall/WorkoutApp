@@ -48,7 +48,7 @@
             android:id="@+id/rbExercises"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Exercises"
+            android:text="Strength"
             android:checked="true"/>
 
         <RadioButton
