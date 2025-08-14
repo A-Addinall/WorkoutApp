@@ -1,86 +1,116 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:orientation="vertical" android:padding="16dp"
-    android:layout_width="match_parent" android:layout_height="match_parent">
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp">
 
-    <ImageView
-        android:id="@+id/ivBack"
-        android:layout_width="24dp"
-        android:layout_height="24dp"
-        android:src="@drawable/ic_arrow_back"
-        android:contentDescription="@string/back" />
-
+    <!-- Top bar -->
     <LinearLayout
-        android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:orientation="horizontal" android:layout_marginTop="8dp">
-
-        <Spinner android:id="@+id/spinnerType"
-            android:layout_width="0dp" android:layout_height="48dp" android:layout_weight="1"/>
-
-        <Spinner android:id="@+id/spinnerEq"
-            android:layout_width="0dp" android:layout_height="48dp" android:layout_weight="1"
-            android:layout_marginStart="8dp"/>
-    </LinearLayout>
-
-    <LinearLayout
-        android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:orientation="horizontal" android:layout_marginTop="8dp"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
         android:gravity="center_vertical">
 
-        <Spinner android:id="@+id/spinnerDay"
-            android:layout_width="0dp" android:layout_height="48dp" android:layout_weight="1"/>
+        <ImageView
+            android:id="@+id/ivBack"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:contentDescription="@string/app_name"
+            android:src="@drawable/ic_arrow_back" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:paddingStart="12dp"
+            android:text="Exercise Library"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/btnClearFilters"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Clear" />
     </LinearLayout>
 
-    <Button
-        android:id="@+id/btnClearFilters"
-        android:layout_width="match_parent" android:layout_height="48dp"
-        android:text="Clear Filters" android:layout_marginTop="8dp"/>
-
-    <!-- NEW: Mode toggle -->
+    <!-- Mode toggle -->
     <RadioGroup
-        android:id="@+id/rgMode"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:layout_marginTop="8dp">
+        android:layout_marginTop="12dp">
 
         <RadioButton
             android:id="@+id/rbExercises"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:text="Strength"
-            android:checked="true"/>
+            android:layout_weight="1"
+            android:checked="true"
+            android:text="Strength" />
 
         <RadioButton
             android:id="@+id/rbMetcons"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:text="Metcons"
-            android:layout_marginStart="24dp"/>
+            android:layout_weight="1"
+            android:text="Metcons" />
     </RadioGroup>
 
-    <!-- EXISTING: Exercise list -->
-    <ListView
-        android:id="@+id/listLibrary"
+    <!-- Filters row (labels change meaning in code per mode) -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="12dp">
+
+        <Spinner
+            android:id="@+id/spinnerType"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1" />
+
+        <Space
+            android:layout_width="12dp"
+            android:layout_height="0dp" />
+
+        <Spinner
+            android:id="@+id/spinnerEq"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1" />
+    </LinearLayout>
+
+    <!-- Scrollable content area (fills remaining space) -->
+    <FrameLayout
+        android:id="@+id/contentContainer"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_marginTop="12dp"
         android:layout_weight="1"
-        android:dividerHeight="8dp" />
+        android:layout_marginTop="12dp">
 
-    <!-- NEW: Metcon plans list (use same weight; Activity toggles visibility) -->
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/rvMetconPlans"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_marginTop="12dp"
-        android:layout_weight="1"
-        android:visibility="gone" />
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rvMetconPlans"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:nestedScrollingEnabled="true"
+            android:visibility="gone" />
 
-    <TextView
-        android:id="@+id/tvEmpty"
-        android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:text="No items match your filters"
-        android:gravity="center" android:padding="16dp"
-        android:visibility="gone"/>
+        <ListView
+            android:id="@+id/listLibrary"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:divider="@android:color/transparent"
+            android:dividerHeight="12dp" />
+
+        <TextView
+            android:id="@+id/tvEmpty"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:text="No items"
+            android:visibility="gone" />
+    </FrameLayout>
 </LinearLayout>

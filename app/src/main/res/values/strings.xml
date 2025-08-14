@@ -10,4 +10,5 @@
     <string name="settings">Settings</string>
     <string name="complete_exercise">Complete Exercise</string>
     <string name="add_set">+ ADD SET</string>
+    <string name="reps">Reps</string>
 </resources>

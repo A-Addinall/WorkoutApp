@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/rowRoot"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
@@ -18,40 +19,93 @@
         android:textStyle="bold"
         android:textSize="18sp" />
 
-    <!-- Meta row (optional; keep for subtitle if you want) -->
+    <!-- Meta row -->
     <TextView
         android:id="@+id/tvMeta"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text=""
+        android:text="Reps"
         android:textSize="14sp"
         android:textColor="#666666"
         android:layout_marginTop="2dp" />
 
-    <!-- Reps selector (Strength-only; hide for non-strength in binder if reused) -->
+    <!-- Reps selector (chips) -->
     <LinearLayout
         android:id="@+id/layoutReps"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:layout_marginTop="8dp">
+        android:layout_marginTop="8dp"
+        android:baselineAligned="false">
 
-        <TextView
-            android:id="@+id/tvRepsLabel"
-            android:layout_width="wrap_content"
+        <com.google.android.material.chip.ChipGroup
+            android:id="@+id/chipGroupReps"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:text="Reps"
-            android:textSize="14sp" />
+            android:layout_marginStart="12dp"
+            android:layout_weight="1"
+            app:singleSelection="true"
+            app:selectionRequired="false"
+            app:singleLine="false">
 
-        <Spinner
-            android:id="@+id/spinnerReps"
-            android:layout_width="120dp"
-            android:layout_height="40dp"
-            android:layout_marginStart="12dp" />
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chipReps3"
+                style="@style/Widget.Material3.Chip.Filter"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="3"
+                app:useMaterialThemeColors="true"
+                app:checkedIconVisible="false" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chipReps5"
+                style="@style/Widget.Material3.Chip.Filter"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="5"
+                app:useMaterialThemeColors="true"
+                app:checkedIconVisible="false" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chipReps8"
+                style="@style/Widget.Material3.Chip.Filter"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="8"
+                app:useMaterialThemeColors="true"
+                app:checkedIconVisible="false" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chipReps10"
+                style="@style/Widget.Material3.Chip.Filter"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="10"
+                app:useMaterialThemeColors="true"
+                app:checkedIconVisible="false" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chipReps12"
+                style="@style/Widget.Material3.Chip.Filter"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="12"
+                app:useMaterialThemeColors="true"
+                app:checkedIconVisible="false" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chipReps15"
+                style="@style/Widget.Material3.Chip.Filter"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="15"
+                app:useMaterialThemeColors="true"
+                app:checkedIconVisible="false" />
+        </com.google.android.material.chip.ChipGroup>
     </LinearLayout>
 
-    <!-- Primary action (same affordance as metcon) -->
+    <!-- Primary action -->
     <Button
         android:id="@+id/btnPrimary"
         android:layout_width="match_parent"
