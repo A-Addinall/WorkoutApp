@@ -98,7 +98,7 @@ class MetconActivity : AppCompatActivity() {
                 }
             }
 
-            // NEW: plan-scoped last result (for-time only)
+            // Plan-scoped last result (for-time only)
             vm.lastMetconForPlan(planId).observe(this) { last ->
                 val label = if (last != null && last.type == "FOR_TIME" && (last.timeSeconds ?: 0) > 0) {
                     val sec = last.timeSeconds!!
@@ -246,6 +246,10 @@ class MetconActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             vm.logMetconForTime(dayIndex, planId, totalSeconds, result)
+
+            // One-shot confirmation beep
+            TimerBeeper().apply { finalBuzz(); release() }
+
             Toast.makeText(
                 this@MetconActivity,
                 "Metcon completed in ${totalSeconds / 60}m ${totalSeconds % 60}s (${result.name})!",

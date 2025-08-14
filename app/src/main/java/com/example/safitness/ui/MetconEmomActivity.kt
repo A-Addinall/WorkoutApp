@@ -11,6 +11,7 @@ import com.example.safitness.core.MetconResult
 import com.example.safitness.data.repo.Repos
 import com.google.android.material.appbar.MaterialToolbar
 import kotlinx.coroutines.launch
+import kotlin.math.floor
 
 class MetconEmomActivity : AppCompatActivity() {
 
@@ -33,6 +34,11 @@ class MetconEmomActivity : AppCompatActivity() {
     private var timer: CountDownTimer? = null
     private var isRunning = false
     private var remainingMs = 0L
+
+    // NEW: beeper + guards
+    private val beeper = TimerBeeper()
+    private var lastWarnSecond = -1
+    private var lastMinuteMark = -1
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -74,12 +80,18 @@ class MetconEmomActivity : AppCompatActivity() {
         isRunning = true
         btnStartStop.text = "PAUSE"
         timer = object : CountDownTimer(remainingMs, 1000) {
-            override fun onTick(ms: Long) { remainingMs = ms; updateTimer() }
+            override fun onTick(ms: Long) {
+                remainingMs = ms
+                updateTimer()
+                maybeBeepMinute()
+                maybeBeepCountdown()
+            }
             override fun onFinish() {
                 isRunning = false
                 remainingMs = 0L
                 btnStartStop.text = "START"
                 updateTimer()
+                beeper.finalBuzz()
                 Toast.makeText(this@MetconEmomActivity, "Time!", Toast.LENGTH_SHORT).show()
             }
         }.also { it.start() }
@@ -93,6 +105,8 @@ class MetconEmomActivity : AppCompatActivity() {
 
     private fun reset() {
         pause()
+        lastWarnSecond = -1
+        lastMinuteMark = -1
         remainingMs = durationSeconds * 1000L
         updateTimer()
     }
@@ -100,6 +114,25 @@ class MetconEmomActivity : AppCompatActivity() {
     private fun updateTimer() {
         val total = (remainingMs / 1000).toInt()
         tvTimer.text = String.format("%02d:%02d", total / 60, total % 60)
+    }
+
+    /** Beep each minute boundary while running (except at 0). */
+    private fun maybeBeepMinute() {
+        val elapsed = durationSeconds - (remainingMs / 1000).toInt()
+        val minute = floor(elapsed / 60.0).toInt()
+        if (elapsed > 0 && minute != lastMinuteMark) {
+            lastMinuteMark = minute
+            beeper.minuteTick()
+        }
+    }
+
+    /** Beep at 3, 2, 1 seconds remaining (once per second). */
+    private fun maybeBeepCountdown() {
+        val secLeft = (remainingMs / 1000).toInt()
+        if (secLeft in 1..3 && secLeft != lastWarnSecond) {
+            lastWarnSecond = secLeft
+            beeper.countdownPip()
+        }
     }
 
     private fun complete() {
@@ -121,6 +154,7 @@ class MetconEmomActivity : AppCompatActivity() {
                 intervalsCompleted = durationSeconds / 60, // 1 per minute
                 result = result
             )
+            beeper.finalBuzz()
             Toast.makeText(this@MetconEmomActivity, "EMOM logged ($result).", Toast.LENGTH_LONG).show()
             finish()
         }
@@ -129,5 +163,6 @@ class MetconEmomActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         timer?.cancel()
+        beeper.release()
     }
 }
