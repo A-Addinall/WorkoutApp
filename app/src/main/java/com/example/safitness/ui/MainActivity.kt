@@ -4,10 +4,12 @@ import android.content.Intent
 import android.os.Bundle
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.cardview.widget.CardView
 import com.example.safitness.R
 import com.example.safitness.core.Modality
 import com.example.safitness.core.WorkoutType
 import com.example.safitness.data.repo.Repos
+import com.google.android.material.button.MaterialButton
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.first
 import java.util.LinkedHashSet
@@ -19,19 +21,17 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        findViewById<androidx.cardview.widget.CardView>(R.id.cardDay1).setOnClickListener { openDay(1) }
-        findViewById<androidx.cardview.widget.CardView>(R.id.cardDay2).setOnClickListener { openDay(2) }
-        findViewById<androidx.cardview.widget.CardView>(R.id.cardDay3).setOnClickListener { openDay(3) }
-        findViewById<androidx.cardview.widget.CardView>(R.id.cardDay4).setOnClickListener { openDay(4) }
-        findViewById<androidx.cardview.widget.CardView>(R.id.cardDay5).setOnClickListener { openDay(5) }
+        // Bind all five day cards with Start/Edit actions
+        bindDayCard(1, R.id.cardDay1)
+        bindDayCard(2, R.id.cardDay2)
+        bindDayCard(3, R.id.cardDay3)
+        bindDayCard(4, R.id.cardDay4)
+        bindDayCard(5, R.id.cardDay5)
 
-        findViewById<androidx.cardview.widget.CardView>(R.id.cardExerciseLibrary)?.setOnClickListener {
-            startActivity(Intent(this, ExerciseLibraryActivity::class.java))
-        }
-        findViewById<androidx.cardview.widget.CardView>(R.id.cardPersonalRecords)?.setOnClickListener {
+        findViewById<CardView>(R.id.cardPersonalRecords)?.setOnClickListener {
             startActivity(Intent(this, PersonalRecordsActivity::class.java))
         }
-        findViewById<androidx.cardview.widget.CardView>(R.id.cardSettings)?.setOnClickListener {
+        findViewById<CardView>(R.id.cardSettings)?.setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
         }
     }
@@ -41,13 +41,29 @@ class MainActivity : AppCompatActivity() {
         refreshDayLabels()
     }
 
+    private fun bindDayCard(day: Int, cardId: Int) {
+        val card = findViewById<androidx.cardview.widget.CardView>(cardId)
+
+        // Start = opens the workout for this day (keep as you have)
+        card.findViewById<com.google.android.material.button.MaterialButton?>(R.id.btnStartDay)
+            ?.setOnClickListener { openDay(day) }
+
+        // EDIT = open the library for THIS day (keep DAY_INDEX!)
+        card.findViewById<com.google.android.material.button.MaterialButton?>(R.id.btnEditDay)
+            ?.setOnClickListener {
+                startActivity(Intent(this, ExerciseLibraryActivity::class.java).apply {
+                    putExtra("DAY_INDEX", day)  // this does NOT filter the catalogue
+                })
+        }
+    }
+
     private fun refreshDayLabels() {
         scope.launch(Dispatchers.IO) {
             val repo = Repos.workoutRepository(this@MainActivity)
 
             for (day in 1..5) {
                 // 1) Strength program for the day (exclude metcon modality)
-                val program = repo.programForDay(day).first() // Flow<List<ExerciseWithSelection>>
+                val program = repo.programForDay(day).first()
                 val strengthItems = program.filter { it.exercise.modality != Modality.METCON }
 
                 // Preserve first-seen order and avoid duplicates
@@ -57,16 +73,15 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 // 2) Metcon selections for the day (if any, append "Metcon")
-                val metcons = repo.metconsForDay(day).first() // Flow<List<SelectionWithPlanAndComponents>>
+                val metcons = repo.metconsForDay(day).first()
                 if (metcons.isNotEmpty()) labels += "Metcon"
 
                 val label = if (labels.isEmpty()) "Empty" else labels.joinToString(" • ")
 
                 withContext(Dispatchers.Main) {
                     val cardId = resources.getIdentifier("cardDay$day", "id", packageName)
-                    val card = findViewById<androidx.cardview.widget.CardView>(cardId)
+                    val card = findViewById<CardView>(cardId)
                     val title = card?.findViewById<TextView>(R.id.tvDayTitle)
-                    // Keep your existing "Day N - ..." format
                     title?.text = "Day $day - $label"
                 }
             }
