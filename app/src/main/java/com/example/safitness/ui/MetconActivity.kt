@@ -44,11 +44,16 @@ class MetconActivity : AppCompatActivity() {
     private var workoutName: String = "Metcon"
     private var planId: Long = -1L
 
-    // Timer state
+    // Timer state (count-up)
     private var timer: CountDownTimer? = null
     private var isRunning = false
     private var timeElapsedMs = 0L
     private var startTime = 0L
+
+    // NEW: pre-start 5s countdown
+    private var preTimer: CountDownTimer? = null
+    private var isCountdown = false
+    private val beeper = TimerBeeper()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -98,7 +103,6 @@ class MetconActivity : AppCompatActivity() {
                 }
             }
 
-            // Plan-scoped last result (for-time only)
             vm.lastMetconForPlan(planId).observe(this) { last ->
                 val label = if (last != null && last.type == "FOR_TIME" && (last.timeSeconds ?: 0) > 0) {
                     val sec = last.timeSeconds!!
@@ -111,7 +115,6 @@ class MetconActivity : AppCompatActivity() {
             }
 
         } else {
-            // Legacy fallback (day-scoped). Prefer to avoid this path in new UI.
             vm.programForDay.observe(this) { items ->
                 val metconItems = items.filter { it.exercise.modality == Modality.METCON }
                 if (cardComponents != null) {
@@ -159,8 +162,14 @@ class MetconActivity : AppCompatActivity() {
             }
         }
 
-        btnStartStop.setOnClickListener { if (isRunning) stopTimer() else startTimer() }
-        btnReset.setOnClickListener { resetTimer() }
+        btnStartStop.setOnClickListener {
+            when {
+                isCountdown -> cancelPreCountdown()
+                isRunning   -> stopTimer()
+                else        -> startPreCountdown()
+            }
+        }
+        btnReset.setOnClickListener { resetAll() }
         btnComplete.setOnClickListener { completeMetcon() }
     }
 
@@ -184,7 +193,34 @@ class MetconActivity : AppCompatActivity() {
         }
     }
 
-    /* ---------------------------- Timer helpers ---------------------------- */
+    /* ---------------------------- Pre-start countdown ---------------------------- */
+
+    private fun startPreCountdown() {
+        if (isRunning || isCountdown) return
+        isCountdown = true
+        btnStartStop.text = "CANCEL"
+        preTimer = object : CountDownTimer(5_000, 1_000) {
+            override fun onTick(ms: Long) {
+                val secLeft = (ms / 1000).toInt() + 1
+                tvTimer.text = String.format("%02d:%02d", 0, secLeft)
+                beeper.countdownPip()
+            }
+            override fun onFinish() {
+                beeper.finalBuzz()
+                isCountdown = false
+                startTimer()
+            }
+        }.also { it.start() }
+    }
+
+    private fun cancelPreCountdown() {
+        preTimer?.cancel()
+        isCountdown = false
+        btnStartStop.text = "START"
+        updateTimerDisplay() // restore current elapsed
+    }
+
+    /* ---------------------------- Main timer (count-up) ---------------------------- */
 
     private fun startTimer() {
         if (isRunning) return
@@ -207,7 +243,9 @@ class MetconActivity : AppCompatActivity() {
         btnStartStop.text = "START"
     }
 
-    private fun resetTimer() {
+    private fun resetAll() {
+        preTimer?.cancel()
+        isCountdown = false
         timer?.cancel()
         isRunning = false
         timeElapsedMs = 0L
@@ -222,6 +260,11 @@ class MetconActivity : AppCompatActivity() {
     }
 
     private fun completeMetcon() {
+        if (isCountdown) {
+            cancelPreCountdown()
+            Toast.makeText(this, "Countdown cancelled.", Toast.LENGTH_SHORT).show()
+            return
+        }
         if (timeElapsedMs == 0L) {
             Toast.makeText(this, "Please start the timer first!", Toast.LENGTH_SHORT).show()
             return
@@ -246,10 +289,7 @@ class MetconActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             vm.logMetconForTime(dayIndex, planId, totalSeconds, result)
-
-            // One-shot confirmation beep
-            TimerBeeper().apply { finalBuzz(); release() }
-
+            beeper.finalBuzz()
             Toast.makeText(
                 this@MetconActivity,
                 "Metcon completed in ${totalSeconds / 60}m ${totalSeconds % 60}s (${result.name})!",
@@ -261,6 +301,8 @@ class MetconActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        preTimer?.cancel()
         timer?.cancel()
+        beeper.release()
     }
 }
