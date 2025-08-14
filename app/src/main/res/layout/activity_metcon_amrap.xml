@@ -4,85 +4,141 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="?attr/colorSurface">
+    android:padding="16dp">
 
+    <!-- Hidden toolbar to satisfy existing code references -->
     <com.google.android.material.appbar.MaterialToolbar
         android:id="@+id/toolbar"
         android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        app:title="AMRAP"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
+        android:layout_height="0dp"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="parent"/>
 
-    <!-- Timer row (counts DOWN) -->
+    <!-- Header (matches activity_metcon) -->
     <LinearLayout
-        android:id="@+id/rowTimer"
+        android:id="@+id/layoutHeader"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:padding="16dp"
-        app:layout_constraintTop_toBottomOf="@id/toolbar"
+        android:gravity="center_vertical"
+        app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
+        <ImageView
+            android:id="@+id/ivBack"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:src="@drawable/ic_arrow_back"
+            android:contentDescription="@string/back" />
+
         <TextView
-            android:id="@+id/tvTimer"
+            android:id="@+id/tvWorkoutTitle"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="00:00"
-            android:textSize="32sp"
-            android:textColor="?attr/colorOnSurface" />
+            android:text="AMRAP"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:gravity="center"
+            android:layout_marginStart="16dp"
+            android:layout_marginEnd="40dp" />
+    </LinearLayout>
+
+    <!-- Big clock -->
+    <TextView
+        android:id="@+id/tvTimer"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="00:00"
+        android:textSize="48sp"
+        android:textStyle="bold"
+        android:gravity="center"
+        app:layout_constraintTop_toBottomOf="@id/layoutHeader"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginTop="32dp" />
+
+    <!-- Last result (AMRAP doesn’t show one by spec, so hide but keep id for parity) -->
+    <TextView
+        android:id="@+id/tvLastTime"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="No previous"
+        android:textSize="14sp"
+        android:textColor="#666666"
+        android:gravity="center"
+        android:visibility="gone"
+        app:layout_constraintTop_toBottomOf="@id/tvTimer"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginTop="8dp" />
+
+    <!-- Controls row -->
+    <LinearLayout
+        android:id="@+id/layoutControls"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center"
+        app:layout_constraintTop_toBottomOf="@id/tvLastTime"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginTop="24dp">
 
         <Button
             android:id="@+id/btnStartStop"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="START" />
+            android:layout_width="0dp"
+            android:layout_height="56dp"
+            android:layout_weight="1"
+            android:text="START"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:layout_marginEnd="8dp" />
 
         <Button
             android:id="@+id/btnReset"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            android:layout_width="0dp"
+            android:layout_height="56dp"
+            android:layout_weight="1"
             android:text="RESET"
+            android:textSize="18sp"
             android:layout_marginStart="8dp" />
     </LinearLayout>
 
-    <!-- RX / Scaled (centre) -->
+    <!-- RX / Scaled centre -->
     <RadioGroup
         android:id="@+id/rgResult"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:gravity="center_horizontal"
-        android:paddingStart="16dp"
-        android:paddingEnd="16dp"
-        app:layout_constraintTop_toBottomOf="@id/rowTimer"
+        android:gravity="center"
+        app:layout_constraintTop_toBottomOf="@id/layoutControls"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginTop="12dp">
 
         <RadioButton
             android:id="@+id/rbRx"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="RX" />
+            android:text="RX"
+            android:layout_marginEnd="24dp" />
 
         <RadioButton
             android:id="@+id/rbScaled"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Scaled"
-            android:layout_marginStart="16dp" />
+            android:text="Scaled" />
     </RadioGroup>
 
-    <!-- AMRAP scoring: rounds + extra reps -->
+    <!-- AMRAP scoring (rounds + extra reps) -->
     <LinearLayout
         android:id="@+id/rowRoundsReps"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="8dp"
+        android:paddingTop="8dp"
         app:layout_constraintTop_toBottomOf="@id/rgResult"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
@@ -100,7 +156,6 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:text="Rounds"
-                android:textColor="?attr/colorOnSurface"
                 android:textSize="16sp" />
 
             <Button
@@ -116,8 +171,7 @@
                 android:text="0"
                 android:textSize="18sp"
                 android:paddingStart="16dp"
-                android:paddingEnd="16dp"
-                android:textColor="?attr/colorOnSurface" />
+                android:paddingEnd="16dp" />
 
             <Button
                 android:id="@+id/btnPlusRound"
@@ -140,7 +194,6 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:text="Extra reps (last round)"
-                android:textColor="?attr/colorOnSurface"
                 android:textSize="16sp" />
 
             <Button
@@ -156,8 +209,7 @@
                 android:text="0"
                 android:textSize="18sp"
                 android:paddingStart="16dp"
-                android:paddingEnd="16dp"
-                android:textColor="?attr/colorOnSurface" />
+                android:paddingEnd="16dp" />
 
             <Button
                 android:id="@+id/btnPlusRep"
@@ -167,30 +219,31 @@
         </LinearLayout>
     </LinearLayout>
 
-    <!-- Optional: show the plan card (title + components) -->
+    <!-- Plan card -->
     <ScrollView
         android:id="@+id/scrollPlan"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:layout_margin="16dp"
         app:layout_constraintTop_toBottomOf="@id/rowRoundsReps"
         app:layout_constraintBottom_toTopOf="@id/btnComplete"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginTop="16dp"
+        android:layout_marginBottom="16dp">
 
-        <include
-            layout="@layout/item_metcon_plan_card"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content" />
+        <include layout="@layout/item_metcon_plan_card"/>
     </ScrollView>
 
-    <com.google.android.material.button.MaterialButton
+    <!-- Complete button -->
+    <Button
         android:id="@+id/btnComplete"
         android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:text="Complete AMRAP"
-        android:layout_margin="16dp"
+        android:layout_height="56dp"
+        android:text="COMPLETE AMRAP"
+        android:textSize="18sp"
+        android:textStyle="bold"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintBottom_toBottomOf="parent" />
+
 </androidx.constraintlayout.widget.ConstraintLayout>

@@ -45,6 +45,10 @@ class MetconAmrapActivity : AppCompatActivity() {
     private var rounds = 0
     private var extraReps = 0
 
+    // NEW: beeper + guard so we don’t double-beep the same second
+    private val beeper = TimerBeeper()
+    private var lastWarnSecond = -1
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_metcon_amrap)
@@ -64,7 +68,7 @@ class MetconAmrapActivity : AppCompatActivity() {
             remainingMs = durationSeconds * 1000L
             updateTimer()
 
-            // Bind plan card (optional)
+            // (optional) bind card UI
             findViewById<TextView?>(R.id.tvPlanCardTitle)?.text = pwc?.plan?.title ?: "AMRAP"
             val comps = pwc?.components?.sortedBy { it.orderInPlan }.orEmpty()
             val cont = findViewById<LinearLayout?>(R.id.layoutPlanComponents)
@@ -84,7 +88,7 @@ class MetconAmrapActivity : AppCompatActivity() {
         btnComplete.setOnClickListener { complete() }
     }
 
-    private fun bindViews() {
+    private fun bindViews() { /* unchanged */
         toolbar = findViewById(R.id.toolbar)
         tvTimer = findViewById(R.id.tvTimer)
         btnStartStop = findViewById(R.id.btnStartStop)
@@ -100,11 +104,8 @@ class MetconAmrapActivity : AppCompatActivity() {
         btnMinusRep = findViewById(R.id.btnMinusRep)
     }
 
-    private fun setupScoreControls() {
-        fun refresh() {
-            tvRounds.text = rounds.toString()
-            tvReps.text = extraReps.toString()
-        }
+    private fun setupScoreControls() { /* unchanged */
+        fun refresh() { tvRounds.text = rounds.toString(); tvReps.text = extraReps.toString() }
         refresh()
         btnPlusRound.setOnClickListener { rounds += 1; refresh() }
         btnMinusRound.setOnClickListener { rounds = max(0, rounds - 1); refresh() }
@@ -117,12 +118,17 @@ class MetconAmrapActivity : AppCompatActivity() {
         isRunning = true
         btnStartStop.text = "PAUSE"
         timer = object : CountDownTimer(remainingMs, 1000) {
-            override fun onTick(ms: Long) { remainingMs = ms; updateTimer() }
+            override fun onTick(ms: Long) {
+                remainingMs = ms
+                updateTimer()
+                maybeBeepCountdown()
+            }
             override fun onFinish() {
                 isRunning = false
                 remainingMs = 0L
                 btnStartStop.text = "START"
                 updateTimer()
+                beeper.finalBuzz()
                 Toast.makeText(this@MetconAmrapActivity, "Time!", Toast.LENGTH_SHORT).show()
             }
         }.also { it.start() }
@@ -136,6 +142,7 @@ class MetconAmrapActivity : AppCompatActivity() {
 
     private fun reset() {
         pause()
+        lastWarnSecond = -1
         remainingMs = durationSeconds * 1000L
         updateTimer()
     }
@@ -143,6 +150,15 @@ class MetconAmrapActivity : AppCompatActivity() {
     private fun updateTimer() {
         val total = (remainingMs / 1000).toInt()
         tvTimer.text = String.format("%02d:%02d", total / 60, total % 60)
+    }
+
+    /** Beep at 3, 2, 1 seconds remaining (once per second). */
+    private fun maybeBeepCountdown() {
+        val secLeft = (remainingMs / 1000).toInt()
+        if (secLeft in 1..3 && secLeft != lastWarnSecond) {
+            lastWarnSecond = secLeft
+            beeper.countdownPip()
+        }
     }
 
     private fun complete() {
@@ -165,6 +181,7 @@ class MetconAmrapActivity : AppCompatActivity() {
                 extraReps = extraReps,
                 result = result
             )
+            beeper.finalBuzz() // feedback on commit
             Toast.makeText(this@MetconAmrapActivity, "Logged: $rounds rounds + $extraReps reps ($result).", Toast.LENGTH_LONG).show()
             finish()
         }
@@ -173,5 +190,6 @@ class MetconAmrapActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         timer?.cancel()
+        beeper.release()
     }
 }
