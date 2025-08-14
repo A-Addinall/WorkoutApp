@@ -100,4 +100,13 @@ interface MetconDao {
         LIMIT 1
     """)
     fun lastForDay(day: Int): Flow<MetconLog?>
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertPlansIgnore(plans: List<MetconPlan>): List<Long>
+
+    @Query("SELECT id FROM metcon_plan WHERE title = :title LIMIT 1")
+    suspend fun getPlanIdByTitle(title: String): Long
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertComponentsIgnore(components: List<MetconComponent>)
 }

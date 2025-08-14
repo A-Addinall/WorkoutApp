@@ -5,9 +5,13 @@ import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
+// MetconComponent.kt
 @Entity(
     tableName = "metcon_component",
-    indices = [Index("planId")],
+    indices = [
+        Index("planId"),
+        Index(value = ["planId", "orderInPlan"], unique = true) // <— add
+    ],
     foreignKeys = [ForeignKey(
         entity = MetconPlan::class,
         parentColumns = ["id"],
