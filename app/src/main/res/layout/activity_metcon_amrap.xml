@@ -13,7 +13,7 @@
         android:visibility="gone"
         app:layout_constraintTop_toTopOf="parent" />
 
-    <!-- Header (matches activity_metcon) -->
+    <!-- Header -->
     <LinearLayout
         android:id="@+id/layoutHeader"
         android:layout_width="0dp"
@@ -143,7 +143,7 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/rgResult">
 
-        <!-- Rounds -->
+        <!-- Rounds (direct input) -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -158,29 +158,29 @@
                 android:text="Rounds"
                 android:textSize="16sp" />
 
-            <Button
-                android:id="@+id/btnMinusRound"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:text="−" />
-
-            <TextView
-                android:id="@+id/tvRounds"
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/tilRounds"
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:paddingStart="16dp"
-                android:paddingEnd="16dp"
-                android:text="0"
-                android:textSize="18sp" />
+                android:hint="@string/reps"
+                app:counterEnabled="true"
+                app:counterMaxLength="4">
 
-            <Button
-                android:id="@+id/btnPlusRound"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:text="+" />
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/etRounds"
+                    android:layout_width="100dp"
+                    android:layout_height="wrap_content"
+                    android:inputType="number"
+                    android:imeOptions="actionNext"
+                    android:maxLength="4"
+                    android:text="0"
+                    android:importantForAutofill="no"
+                    android:textColor="?attr/colorOnSurface" />
+            </com.google.android.material.textfield.TextInputLayout>
         </LinearLayout>
 
-        <!-- Extra reps -->
+        <!-- Extra reps (direct input) -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -196,26 +196,26 @@
                 android:text="Extra reps (last round)"
                 android:textSize="16sp" />
 
-            <Button
-                android:id="@+id/btnMinusRep"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:text="−" />
-
-            <TextView
-                android:id="@+id/tvReps"
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/tilReps"
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:paddingStart="16dp"
-                android:paddingEnd="16dp"
-                android:text="0"
-                android:textSize="18sp" />
+                android:hint="@string/rounds"
+                app:counterEnabled="true"
+                app:counterMaxLength="4">
 
-            <Button
-                android:id="@+id/btnPlusRep"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:text="+" />
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/etReps"
+                    android:layout_width="100dp"
+                    android:layout_height="wrap_content"
+                    android:inputType="number"
+                    android:imeOptions="actionDone"
+                    android:maxLength="4"
+                    android:text="0"
+                    android:importantForAutofill="no"
+                    android:textColor="?attr/colorOnSurface" />
+            </com.google.android.material.textfield.TextInputLayout>
         </LinearLayout>
     </LinearLayout>
 

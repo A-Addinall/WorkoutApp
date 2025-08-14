@@ -11,4 +11,14 @@
     <string name="complete_exercise">Complete Exercise</string>
     <string name="add_set">+ ADD SET</string>
     <string name="reps">Reps</string>
+    <string name="rounds">Rounds</string>
+
+    <!-- Validation messages -->
+    <string name="enter_valid_rounds">Enter valid rounds (0+)</string>
+    <string name="enter_valid_reps">Enter valid reps (0+)</string>
+
+    <!-- (Optional) a11y for minus/plus buttons if you keep them anywhere -->
+    <string name="decrement_rounds">Decrease rounds</string>
+    <string name="increment_rounds">Increase rounds</string>
+
 </resources>
