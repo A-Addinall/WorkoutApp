@@ -43,34 +43,47 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun metconDao(): MetconDao
 
     companion object {
-        @Volatile private var INSTANCE: AppDatabase? = null
+        @Volatile
+        private var INSTANCE: AppDatabase? = null
 
         fun get(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
-                val instance = Room.databaseBuilder(
+                val inst = Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
                     "safitness.db"
                 )
-                    .fallbackToDestructiveMigration() // dev-friendly while schema is evolving
+                    .fallbackToDestructiveMigration() // DEV only; remove before release
                     .addCallback(object : Callback() {
                         override fun onCreate(dbObj: SupportSQLiteDatabase) {
                             super.onCreate(dbObj)
                             CoroutineScope(Dispatchers.IO).launch {
-                                val db = get(context)
+                                // INSTANCE is set by the time onCreate runs
+                                val db = INSTANCE ?: return@launch
 
                                 if (db.libraryDao().countExercises() == 0) {
                                     db.libraryDao().insertAll(ExerciseSeed.DEFAULT_EXERCISES)
                                 }
                                 if (db.metconDao().countPlans() == 0) {
-                                    MetconSeed.seed(db)
+                                    MetconSeed.seed(db) // first-install bootstrap only
                                 }
                             }
                         }
+
+                        override fun onOpen(dbObj: SupportSQLiteDatabase) {
+                            super.onOpen(dbObj)
+                            CoroutineScope(Dispatchers.IO).launch {
+                                val db = INSTANCE ?: return@launch
+                                // Always converge to latest seed
+                                MetconSeed.seedOrUpdate(db)
+                                // Optional: also converge exercises if you added ExerciseSeed.seedOrUpdate(db)
+                                // ExerciseSeed.seedOrUpdate(db)
+                            }
+                        }
                     })
-                    .build()
-                INSTANCE = instance
-                instance
+                    .build()                      // <-- missing in your file
+                INSTANCE = inst                  // <-- and this assignment
+                inst
             }
         }
     }

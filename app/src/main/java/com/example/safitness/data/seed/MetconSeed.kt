@@ -1,5 +1,6 @@
 package com.example.safitness.data.seed
 
+import androidx.room.withTransaction
 import com.example.safitness.core.MetconType
 import com.example.safitness.data.db.AppDatabase
 import com.example.safitness.data.entities.MetconComponent
@@ -7,216 +8,138 @@ import com.example.safitness.data.entities.MetconPlan
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+/**
+ * Idempotent + convergent seeding using stable keys.
+ * - Re-runnable on every app start.
+ * - Adds missing rows, updates changed fields, and (optionally) prunes extra components.
+ */
 object MetconSeed {
 
-    suspend fun seed(db: AppDatabase) = withContext(Dispatchers.IO) {
-        val dao = db.metconDao()
-        val plans = listOf(
-            MetconPlan(title = "Cindy (AMRAP 20)", type = MetconType.AMRAP, durationMinutes = 20),
-
-            // — FOR_TIME: add estimated durations for filtering —
-            MetconPlan(
-                title = "Helen (For Time)",
-                type = MetconType.FOR_TIME,
-                durationMinutes = 12
-            ),                // typical 9–15
-            MetconPlan(
-                title = "Chipper 50-40-30-20-10",
-                type = MetconType.FOR_TIME,
-                durationMinutes = 18
-            ),         // typical 15–25
-            MetconPlan(
-                title = "For Time: 5 x 400 m + Deadlifts",
-                type = MetconType.FOR_TIME,
-                durationMinutes = 25
-            ), // typical 20–30
-            MetconPlan(
-                title = "Karen (For Time)",
-                type = MetconType.FOR_TIME,
-                durationMinutes = 10
-            ),                // typical 6–12
-            MetconPlan(
-                title = "For Time: 4 Rounds Row & Push Press",
-                type = MetconType.FOR_TIME,
-                durationMinutes = 22
-            ),
-
-            // EMOM/AMRAP keep using duration or interval as you already do
-            MetconPlan(
-                title = "EMOM 12: Bike/KB/TTB",
-                type = MetconType.EMOM,
-                emomIntervalSec = 60,
-                durationMinutes = 12
-            ),
-            MetconPlan(
-                title = "AMRAP 16: Box/DB Thruster/Sit-up",
-                type = MetconType.AMRAP,
-                durationMinutes = 16
-            ),
-            MetconPlan(
-                title = "EMOM 20: Row/Burpees + Squats",
-                type = MetconType.EMOM,
-                emomIntervalSec = 60,
-                durationMinutes = 20
-            ),
-            MetconPlan(
-                title = "AMRAP 10: Wall Balls & Box Jumps",
-                type = MetconType.AMRAP,
-                durationMinutes = 10
-            ),
-            MetconPlan(
-                title = "EMOM 15: Clean + TTB",
-                type = MetconType.EMOM,
-                emomIntervalSec = 60,
-                durationMinutes = 15
-            ),
-            MetconPlan(
-                title = "AMRAP 18: Run/Burpees/DB Snatch",
-                type = MetconType.AMRAP,
-                durationMinutes = 18
-            )
-        )
-
-// Insert-or-ignore, then UPDATE IDs by resolving ignored rows via title
-        val inserted = dao.insertPlansIgnore(plans) // returns -1L for ignored
-        val planIds = plans.indices.map { i ->
-            val id = inserted[i]
-            if (id != -1L) id else dao.getPlanIdByTitle(plans[i].title)
-        }
-
-// Shorthand for components
-        val p1 = planIds[0];
-        val p2 = planIds[1];
-        val p3 = planIds[2];
-        val p4 = planIds[3]
-        val p5 = planIds[4];
-        val p6 = planIds[5];
-        val p7 = planIds[6];
-        val p8 = planIds[7]
-        val p9 = planIds[8];
-        val p10 = planIds[9];
-        val p11 = planIds[10];
-        val p12 = planIds[11]
-
-        val comps = buildList {
-            // 1) Cindy (AMRAP 20)
-            add(MetconComponent(planId = p1, orderInPlan = 1, text = "5 Pull-ups"))
-            add(MetconComponent(planId = p1, orderInPlan = 2, text = "10 Push-ups"))
-            add(MetconComponent(planId = p1, orderInPlan = 3, text = "15 Air Squats"))
-
-            // 2) Helen (For Time) — 3 rounds
-            add(MetconComponent(planId = p2, orderInPlan = 1, text = "Run 400 m"))
-            add(
-                MetconComponent(
-                    planId = p2,
-                    orderInPlan = 2,
-                    text = "21 Kettlebell Swings (24/16 kg)"
-                )
-            )
-            add(MetconComponent(planId = p2, orderInPlan = 3, text = "12 Pull-ups"))
-            add(MetconComponent(planId = p2, orderInPlan = 4, text = "Repeat for 3 rounds"))
-
-            // 3) Chipper 50-40-30-20-10 (For Time)
-            add(MetconComponent(planId = p3, orderInPlan = 1, text = "50 Box Jumps (24/20 in)"))
-            add(
-                MetconComponent(
-                    planId = p3,
-                    orderInPlan = 2,
-                    text = "40 Kettlebell Swings (24/16 kg)"
-                )
-            )
-            add(MetconComponent(planId = p3, orderInPlan = 3, text = "30 Toes-to-Bar"))
-            add(MetconComponent(planId = p3, orderInPlan = 4, text = "20 Burpees"))
-            add(MetconComponent(planId = p3, orderInPlan = 5, text = "10 Clean & Jerk (60/40 kg)"))
-
-            // 4) EMOM 12: Bike/KB/TTB
-            add(MetconComponent(planId = p4, orderInPlan = 1, text = "Minute 1: 14/12 cal Bike"))
-            add(
-                MetconComponent(
-                    planId = p4,
-                    orderInPlan = 2,
-                    text = "Minute 2: 15 Kettlebell Swings (24/16 kg)"
-                )
-            )
-            add(MetconComponent(planId = p4, orderInPlan = 3, text = "Minute 3: 10 Toes-to-Bar"))
-
-            // 5) For Time: 5 x 400 m + Deadlifts
-            add(MetconComponent(planId = p5, orderInPlan = 1, text = "Run 400 m"))
-            add(MetconComponent(planId = p5, orderInPlan = 2, text = "15 Deadlifts (60/40 kg)"))
-            add(MetconComponent(planId = p5, orderInPlan = 3, text = "Repeat for 5 rounds"))
-
-            // 6) AMRAP 16: Box/DB Thruster/Sit-up
-            add(MetconComponent(planId = p6, orderInPlan = 1, text = "8 Box Jump Overs (24/20 in)"))
-            add(
-                MetconComponent(
-                    planId = p6,
-                    orderInPlan = 2,
-                    text = "10 Dumbbell Thrusters (2×15 kg)"
-                )
-            )
-            add(MetconComponent(planId = p6, orderInPlan = 3, text = "12 Sit-ups"))
-
-            // 7) EMOM 20: Row/Burpees + Squats
-            add(MetconComponent(planId = p7, orderInPlan = 1, text = "Odd minutes: 12/10 cal Row"))
-            add(
-                MetconComponent(
-                    planId = p7,
-                    orderInPlan = 2,
-                    text = "Even minutes: 10 Burpees + 20 Air Squats"
-                )
-            )
-
-            // 8) Karen (For Time)
-            add(
-                MetconComponent(
-                    planId = p8,
-                    orderInPlan = 1,
-                    text = "150 Wall Balls (9/6 kg to 10/9 ft)"
-                )
-            )
-
-            // 9) AMRAP 10: Wall Balls & Box Jumps
-            add(MetconComponent(planId = p9, orderInPlan = 1, text = "10 Wall Balls (9/6 kg)"))
-            add(MetconComponent(planId = p9, orderInPlan = 2, text = "10 Box Jumps (24/20 in)"))
-
-            // 10) EMOM 15: Clean + TTB
-            add(
-                MetconComponent(
-                    planId = p10,
-                    orderInPlan = 1,
-                    text = "Minute 1: 1–3 Power Clean (build)"
-                )
-            )
-            add(MetconComponent(planId = p10, orderInPlan = 2, text = "Minute 2: 10 Toes-to-Bar"))
-            add(
-                MetconComponent(
-                    planId = p10,
-                    orderInPlan = 3,
-                    text = "Minute 3: 12 Hand-release Push-ups"
-                )
-            )
-
-            // 11) For Time: 4 Rounds Row & Push Press
-            add(MetconComponent(planId = p11, orderInPlan = 1, text = "Row 500 m"))
-            add(MetconComponent(planId = p11, orderInPlan = 2, text = "12 Push Press (40/30 kg)"))
-            add(MetconComponent(planId = p11, orderInPlan = 3, text = "Repeat for 4 rounds"))
-
-            // 12) AMRAP 18: Run/Burpees/DB Snatch
-            add(MetconComponent(planId = p12, orderInPlan = 1, text = "Run 200 m"))
-            add(MetconComponent(planId = p12, orderInPlan = 2, text = "12 Burpees"))
-            add(
-                MetconComponent(
-                    planId = p12,
-                    orderInPlan = 3,
-                    text = "12 Dumbbell Snatches (alternating)"
-                )
-            )
-        }
-
-        dao.insertComponentsIgnore(comps)
-    }
+    private data class PlanDef(
+        val key: String,
+        val title: String,
+        val type: MetconType,
+        val duration: Int?,          // minutes (AMRAP total / EMOM total / FOR_TIME estimate)
+        val emom: Int? = null,       // seconds; EMOM only
+        val archived: Boolean = false
+    )
+    suspend fun seed(db: AppDatabase) = seedOrUpdate(db)
     suspend fun seedOrUpdate(db: AppDatabase) = withContext(Dispatchers.IO) {
-        // simply reuse the idempotent logic you already wrote in seed(...)
-        seed(db)
+        val dao = db.metconDao()
+
+        db.withTransaction {
+            val defs = listOf(
+                PlanDef("CINDY_AMRAP20", "Cindy (AMRAP 20)", MetconType.AMRAP, 20),
+
+                // --- FOR_TIME (include estimates for filtering) ---
+                PlanDef("HELEN_FT", "Helen (For Time)", MetconType.FOR_TIME, 12),
+                PlanDef("CHIPPER_50_40_30_20_10_FT", "Chipper 50-40-30-20-10", MetconType.FOR_TIME, 18),
+                PlanDef("FT_5X400M_DL", "For Time: 5 x 400 m + Deadlifts", MetconType.FOR_TIME, 25),
+                PlanDef("KAREN_FT", "Karen (For Time)", MetconType.FOR_TIME, 10),
+                PlanDef("FT_4R_ROW_PP", "For Time: 4 Rounds Row & Push Press", MetconType.FOR_TIME, 22),
+
+                // --- Timed formats (use total duration) ---
+                PlanDef("EMOM12_BIKE_KB_TTB", "EMOM 12: Bike/KB/TTB", MetconType.EMOM, 12, emom = 60),
+                PlanDef("AMRAP16_BOX_DBTHR_SIT", "AMRAP 16: Box/DB Thruster/Sit-up", MetconType.AMRAP, 16),
+                PlanDef("EMOM20_ROW_BUR_SQ", "EMOM 20: Row/Burpees + Squats", MetconType.EMOM, 20, emom = 60),
+                PlanDef("AMRAP10_WB_BJ", "AMRAP 10: Wall Balls & Box Jumps", MetconType.AMRAP, 10),
+                PlanDef("EMOM15_CLN_TTB", "EMOM 15: Clean + TTB", MetconType.EMOM, 15, emom = 60),
+                PlanDef("AMRAP18_RUN_BUR_SN", "AMRAP 18: Run/Burpees/DB Snatch", MetconType.AMRAP, 18)
+            )
+
+            // 1) Insert-or-ignore plans, then resolve IDs by key; update rows to converge with seed
+            val plans = defs.map { d ->
+                MetconPlan(
+                    canonicalKey = d.key,
+                    title = d.title,
+                    type = d.type,
+                    durationMinutes = d.duration,
+                    emomIntervalSec = d.emom,
+                    isArchived = d.archived
+                )
+            }
+
+            val inserted = dao.insertPlansIgnore(plans)
+            val idByKey = defs.indices.associate { i ->
+                val id = if (inserted[i] != -1L) inserted[i] else dao.getPlanIdByKey(defs[i].key)
+                defs[i].key to id
+            }
+            defs.forEach { d ->
+                dao.updatePlanByKey(d.key, d.title, d.type, d.duration, d.emom, d.archived)
+            }
+
+            // 2) Build components declaratively; (planId, orderInPlan) is the identity for a row
+            val comps = buildList {
+                fun addLine(key: String, order: Int, text: String) =
+                    add(MetconComponent(planId = idByKey.getValue(key), orderInPlan = order, text = text))
+
+                // Cindy
+                addLine("CINDY_AMRAP20", 1, "5 Pull-ups")
+                addLine("CINDY_AMRAP20", 2, "10 Push-ups")
+                addLine("CINDY_AMRAP20", 3, "15 Air Squats")
+
+                // Helen — 3 rounds
+                addLine("HELEN_FT", 1, "Run 400 m")
+                addLine("HELEN_FT", 2, "21 Kettlebell Swings (24/16 kg)")
+                addLine("HELEN_FT", 3, "12 Pull-ups")
+                addLine("HELEN_FT", 4, "Repeat for 3 rounds")
+
+                // Chipper 50-40-30-20-10
+                addLine("CHIPPER_50_40_30_20_10_FT", 1, "50 Box Jumps (24/20 in)")
+                addLine("CHIPPER_50_40_30_20_10_FT", 2, "40 Kettlebell Swings (24/16 kg)")
+                addLine("CHIPPER_50_40_30_20_10_FT", 3, "30 Toes-to-Bar")
+                addLine("CHIPPER_50_40_30_20_10_FT", 4, "20 Burpees")
+                addLine("CHIPPER_50_40_30_20_10_FT", 5, "10 Clean & Jerk (60/40 kg)")
+
+                // For Time: 5 × 400 m + Deadlifts — 5 rounds
+                addLine("FT_5X400M_DL", 1, "Run 400 m")
+                addLine("FT_5X400M_DL", 2, "15 Deadlifts (60/40 kg)")
+                addLine("FT_5X400M_DL", 3, "Repeat for 5 rounds")
+
+                // Karen
+                addLine("KAREN_FT", 1, "150 Wall Balls (9/6 kg to 10/9 ft)")
+
+                // For Time: 4 Rounds Row & Push Press
+                addLine("FT_4R_ROW_PP", 1, "Row 500 m")
+                addLine("FT_4R_ROW_PP", 2, "12 Push Press (40/30 kg)")
+                addLine("FT_4R_ROW_PP", 3, "Repeat for 4 rounds")
+
+                // EMOM/AMRAPs
+                addLine("EMOM12_BIKE_KB_TTB", 1, "Minute 1: 14/12 cal Bike")
+                addLine("EMOM12_BIKE_KB_TTB", 2, "Minute 2: 15 Kettlebell Swings (24/16 kg)")
+                addLine("EMOM12_BIKE_KB_TTB", 3, "Minute 3: 10 Toes-to-Bar")
+
+                addLine("AMRAP16_BOX_DBTHR_SIT", 1, "8 Box Jump Overs (24/20 in)")
+                addLine("AMRAP16_BOX_DBTHR_SIT", 2, "10 Dumbbell Thrusters (2×15 kg)")
+                addLine("AMRAP16_BOX_DBTHR_SIT", 3, "12 Sit-ups")
+
+                addLine("EMOM20_ROW_BUR_SQ", 1, "Odd minutes: 12/10 cal Row")
+                addLine("EMOM20_ROW_BUR_SQ", 2, "Even minutes: 10 Burpees + 20 Air Squats")
+
+                addLine("AMRAP10_WB_BJ", 1, "10 Wall Balls (9/6 kg)")
+                addLine("AMRAP10_WB_BJ", 2, "10 Box Jumps (24/20 in)")
+
+                addLine("EMOM15_CLN_TTB", 1, "Minute 1: 1–3 Power Clean (build)")
+                addLine("EMOM15_CLN_TTB", 2, "Minute 2: 10 Toes-to-Bar")
+                addLine("EMOM15_CLN_TTB", 3, "Minute 3: 12 Hand-release Push-ups")
+
+                addLine("AMRAP18_RUN_BUR_SN", 1, "Run 200 m")
+                addLine("AMRAP18_RUN_BUR_SN", 2, "12 Burpees")
+                addLine("AMRAP18_RUN_BUR_SN", 3, "12 Dumbbell Snatches (alternating)")
+            }
+
+            // 3) Upsert + converge components, then (optionally) prune extras
+            dao.insertComponentsIgnore(comps)
+            comps.forEach { c -> dao.updateComponentText(c.planId, c.orderInPlan, c.text) }
+
+            // Optional prune: keep DB exactly matching the seed
+            val ordersByPlan = comps.groupBy { it.planId }.mapValues { (_, rows) ->
+                rows.map { it.orderInPlan }
+            }
+            ordersByPlan.forEach { (planId, validOrders) ->
+                if (validOrders.isEmpty()) dao.deleteAllComponentsForPlan(planId)
+                else dao.deleteComponentsNotIn(planId, validOrders)
+            }
+        }
     }
 }

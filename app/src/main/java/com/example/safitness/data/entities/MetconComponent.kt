@@ -5,12 +5,15 @@ import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
-// MetconComponent.kt
+/**
+ * A line/item within a plan.
+ * Uniqueness by (planId, orderInPlan) lets us upsert text safely on reseed.
+ */
 @Entity(
     tableName = "metcon_component",
     indices = [
         Index("planId"),
-        Index(value = ["planId", "orderInPlan"], unique = true) // <— add
+        Index(value = ["planId", "orderInPlan"], unique = true)
     ],
     foreignKeys = [ForeignKey(
         entity = MetconPlan::class,
