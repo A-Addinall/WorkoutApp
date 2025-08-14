@@ -131,12 +131,9 @@
         android:layout_marginTop="16dp"
         android:layout_marginBottom="16dp">
 
-        <LinearLayout
-            android:id="@+id/layoutMetconExercises"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical" />
-
+        <!-- Replace the old LinearLayout with the card include -->
+        <include
+            layout="@layout/item_metcon_plan_card" />
     </ScrollView>
 
     <!-- Complete Button -->
