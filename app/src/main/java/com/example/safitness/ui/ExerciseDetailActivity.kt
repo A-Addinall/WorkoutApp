@@ -1,7 +1,7 @@
 package com.example.safitness.ui
 
+import android.annotation.SuppressLint
 import android.os.Bundle
-import android.view.View
 import android.widget.*
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
@@ -10,7 +10,10 @@ import androidx.lifecycle.lifecycleScope
 import com.example.safitness.R
 import com.example.safitness.core.Equipment
 import com.example.safitness.data.repo.Repos
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.util.Locale
 
 class ExerciseDetailActivity : AppCompatActivity() {
 
@@ -33,12 +36,10 @@ class ExerciseDetailActivity : AppCompatActivity() {
     private var targetReps: Int? = null
 
     private data class SetRow(
-        val container: View,
+        val container: android.view.View,
         val etWeight: EditText,
         val etReps: EditText,
-        val btnSuccess: Button,
-        val btnFail: Button,
-        var success: Boolean? = null
+        val rgResult: RadioGroup
     )
     private val setRows = mutableListOf<SetRow>()
 
@@ -50,16 +51,16 @@ class ExerciseDetailActivity : AppCompatActivity() {
         exerciseId = intent.getLongExtra("EXERCISE_ID", 0L)
         exerciseName = intent.getStringExtra("EXERCISE_NAME") ?: ""
         equipmentName = intent.getStringExtra("EQUIPMENT") ?: "BARBELL"
-        targetReps = if (intent.hasExtra("TARGET_REPS")) intent.getIntExtra("TARGET_REPS", 0).takeIf { it > 0 } else null
+        targetReps = if (intent.hasExtra("TARGET_REPS"))
+            intent.getIntExtra("TARGET_REPS", 0).takeIf { it > 0 } else null
 
         bindViews()
         tvExerciseName.text = exerciseName
         findViewById<ImageView>(R.id.ivBack).setOnClickListener { finish() }
 
-        // Prime header info
         refreshHeader()
 
-        // Start with one row
+        // Start with one set row
         addNewSet()
 
         btnAddSet.setOnClickListener { addNewSet() }
@@ -83,90 +84,97 @@ class ExerciseDetailActivity : AppCompatActivity() {
         val tvSetNumber = v.findViewById<TextView>(R.id.tvSetNumber)
         val etWeight = v.findViewById<EditText>(R.id.etWeight)
         val etReps = v.findViewById<EditText>(R.id.etReps)
-        val btnSuccess = v.findViewById<Button>(R.id.btnSuccess)
-        val btnFail = v.findViewById<Button>(R.id.btnFail)
+        val rgResult = v.findViewById<RadioGroup>(R.id.rgStrengthResult)
 
         tvSetNumber.text = "Set $setNumber:"
         etReps.setText(targetReps?.toString() ?: "")
         etReps.isEnabled = false
 
-        // Start buttons in neutral grey
-        val neutral = ContextCompat.getColor(this, android.R.color.darker_gray)
-        btnSuccess.setBackgroundColor(neutral)
-        btnFail.setBackgroundColor(neutral)
+        // Subtle hint colour for weight input
+        etWeight.setHintTextColor(ContextCompat.getColor(this, android.R.color.darker_gray))
 
-        val row = SetRow(v, etWeight, etReps, btnSuccess, btnFail, null)
+        val row = SetRow(v, etWeight, etReps, rgResult)
         setRows += row
         layoutSets.addView(v)
-
-        val equipment = runCatching { Equipment.valueOf(equipmentName) }.getOrElse { Equipment.BARBELL }
-
-        btnSuccess.setOnClickListener {
-            handleMark(row, isSuccess = true, setNumber = setNumber, equipment = equipment)
-        }
-        btnFail.setOnClickListener {
-            handleMark(row, isSuccess = false, setNumber = setNumber, equipment = equipment)
-        }
     }
 
-    private fun handleMark(row: SetRow, isSuccess: Boolean, setNumber: Int, equipment: Equipment) {
-        val weightVal = row.etWeight.text.toString().toDoubleOrNull()
-        val repsVal = targetReps ?: row.etReps.text.toString().toIntOrNull()
-
-        if (weightVal == null || repsVal == null || repsVal <= 0) {
-            Toast.makeText(this, "Enter a valid weight; reps are set by the program.", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        // Require exactly one of success/fail per set
-        row.success = isSuccess
-        val green = ContextCompat.getColor(this, android.R.color.holo_green_light)
-        val red = ContextCompat.getColor(this, android.R.color.holo_red_light)
-        val neutral = ContextCompat.getColor(this, android.R.color.darker_gray)
-        if (isSuccess) {
-            row.btnSuccess.setBackgroundColor(green)
-            row.btnFail.setBackgroundColor(neutral)
-        } else {
-            row.btnSuccess.setBackgroundColor(neutral)
-            row.btnFail.setBackgroundColor(red)
-        }
-
-        // Log without closing the screen
-        lifecycleScope.launch {
-            vm.logStrengthSet(
-                sessionId = sessionId,
-                exerciseId = exerciseId,
-                equipment = equipment,
-                setNumber = setNumber,
-                reps = repsVal,
-                weight = weightVal,
-                rpe = if (isSuccess) 6.0 else 9.0,
-                success = isSuccess,
-                notes = etNotes.text?.toString()?.ifBlank { null }
-            )
-            Toast.makeText(this@ExerciseDetailActivity, if (isSuccess) "✅ Set logged" else "❌ Set logged", Toast.LENGTH_SHORT).show()
-            refreshHeader() // update last/suggested after each log
-        }
-    }
-
+    /** Only logs once per set when the user taps Complete. */
     private fun onCompleteExercise() {
-        val logged = setRows.count { it.success != null }
-        if (logged == 0) {
-            Toast.makeText(this, "Please mark at least one set as Success or Fail", Toast.LENGTH_SHORT).show()
+        if (setRows.isEmpty()) {
+            Toast.makeText(this, "Please add at least one set.", Toast.LENGTH_SHORT).show()
             return
         }
-        Toast.makeText(this, "Exercise completed! $logged sets logged.", Toast.LENGTH_SHORT).show()
-        finish()
+
+        val equipment = runCatching { Equipment.valueOf(equipmentName) }
+            .getOrElse { Equipment.BARBELL }
+
+        // Validate inputs before logging
+        for ((index, row) in setRows.withIndex()) {
+            if (row.rgResult.checkedRadioButtonId == -1) {
+                Toast.makeText(this, "Select Success/Fail for set ${index + 1}.", Toast.LENGTH_SHORT).show()
+                return
+            }
+            val weightVal = row.etWeight.text.toString().toDoubleOrNull()
+            val repsVal = targetReps ?: row.etReps.text.toString().toIntOrNull()
+            if (weightVal == null || repsVal == null || repsVal <= 0) {
+                Toast.makeText(this, "Enter a valid weight; reps are set by the programme.", Toast.LENGTH_SHORT).show()
+                return
+            }
+        }
+
+        lifecycleScope.launch(Dispatchers.IO) {
+            var logged = 0
+            setRows.forEachIndexed { index, row ->
+                val success = when (row.rgResult.checkedRadioButtonId) {
+                    R.id.rbSuccess -> true
+                    R.id.rbFail -> false
+                    else -> false // shouldn't happen due to validation
+                }
+
+                val weightVal = row.etWeight.text.toString().toDoubleOrNull() ?: 0.0
+                val repsVal = targetReps ?: row.etReps.text.toString().toIntOrNull() ?: 0
+
+                vm.logStrengthSet(
+                    sessionId = sessionId,
+                    exerciseId = exerciseId,
+                    equipment = equipment,
+                    setNumber = index + 1,
+                    reps = repsVal,
+                    weight = weightVal,
+                    rpe = if (success) 6.0 else 9.0,
+                    success = success,
+                    notes = etNotes.text?.toString()?.ifBlank { null }
+                )
+                logged++
+            }
+
+            withContext(Dispatchers.Main) {
+                Toast.makeText(
+                    this@ExerciseDetailActivity,
+                    "Exercise completed! $logged sets logged.",
+                    Toast.LENGTH_SHORT
+                ).show()
+                finish()
+            }
+        }
     }
 
+    @SuppressLint("SetTextI18n")
     private fun refreshHeader() {
-        val equipment = runCatching { Equipment.valueOf(equipmentName) }.getOrElse { Equipment.BARBELL }
-        lifecycleScope.launch {
-            val last = vm.getLastSuccessfulWeight(exerciseId, equipment, targetReps)
-            tvLastSuccessful.text = if (last != null) "Last successful lift: ${last}kg" else "Last successful lift: --kg"
+        val equipment = runCatching { Equipment.valueOf(equipmentName) }
+            .getOrElse { Equipment.BARBELL }
 
+        lifecycleScope.launch(Dispatchers.IO) {
+            val last = vm.getLastSuccessfulWeight(exerciseId, equipment, targetReps)
             val suggested = vm.getSuggestedWeight(exerciseId, equipment, targetReps)
-            tvSuggestedWeight.text = "Suggested: ${suggested?.let { String.format("%.1f", it) } ?: "--"}kg"
+
+            val lastText = last?.let { String.format(Locale.UK, "%.1f kg", it) } ?: "-- kg"
+            val suggestedText = suggested?.let { String.format(Locale.UK, "%.1f kg", it) } ?: "-- kg"
+
+            withContext(Dispatchers.Main) {
+                tvLastSuccessful.text = "Last successful lift: $lastText"
+                tvSuggestedWeight.text = "Suggested: $suggestedText"
+            }
         }
     }
 }

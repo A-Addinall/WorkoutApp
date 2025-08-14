@@ -5,7 +5,8 @@
     android:layout_height="wrap_content"
     android:layout_marginBottom="8dp"
     app:cardCornerRadius="8dp"
-    app:cardElevation="2dp">
+    app:cardElevation="2dp"
+    app:cardBackgroundColor="?attr/colorSurface">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -20,6 +21,7 @@
             android:text="Set 1:"
             android:textSize="16sp"
             android:textStyle="bold"
+            android:textColor="?attr/colorOnSurface"
             android:layout_marginBottom="8dp" />
 
         <LinearLayout
@@ -28,7 +30,6 @@
             android:orientation="horizontal"
             android:gravity="center_vertical">
 
-            <!-- User-entered weight -->
             <EditText
                 android:id="@+id/etWeight"
                 android:layout_width="0dp"
@@ -38,9 +39,10 @@
                 android:inputType="numberDecimal"
                 android:importantForAutofill="no"
                 android:autofillHints=""
+                android:textColor="?attr/colorOnSurface"
                 android:layout_marginEnd="8dp" />
 
-            <!-- Reps come from the day selection; make read-only -->
+            <!-- Reps come from the programme selection; read-only here -->
             <EditText
                 android:id="@+id/etReps"
                 android:layout_width="0dp"
@@ -51,35 +53,32 @@
                 android:enabled="false"
                 android:focusable="false"
                 android:clickable="false"
+                android:textColor="?attr/colorOnSurface"
                 android:layout_marginStart="8dp" />
         </LinearLayout>
 
-        <LinearLayout
+        <!-- Success / Fail single-choice toggle, centred like Metcon -->
+        <RadioGroup
+            android:id="@+id/rgStrengthResult"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:layout_marginTop="12dp">
+            android:layout_marginTop="12dp"
+            android:gravity="center_horizontal">
 
-            <Button
-                android:id="@+id/btnSuccess"
-                android:layout_width="0dp"
-                android:layout_height="40dp"
-                android:layout_weight="1"
-                android:text="✓ SUCCESS"
-                android:layout_marginEnd="8dp"
-                android:backgroundTint="@color/button_default"
-                android:textColor="@color/white" />
+            <RadioButton
+                android:id="@+id/rbSuccess"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Success" />
 
-            <Button
-                android:id="@+id/btnFail"
-                android:layout_width="0dp"
-                android:layout_height="40dp"
-                android:layout_weight="1"
-                android:text="✗ FAIL"
-                android:layout_marginStart="8dp"
-                android:backgroundTint="@color/button_default"
-                android:textColor="@color/white" />
-        </LinearLayout>
+            <RadioButton
+                android:id="@+id/rbFail"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Fail"
+                android:layout_marginStart="16dp" />
+        </RadioGroup>
 
     </LinearLayout>
 </androidx.cardview.widget.CardView>

@@ -6,4 +6,5 @@
     <!-- Material surface colour (resolves from your theme: light or dark) -->
     <solid android:color="?attr/colorSurface"/>
     <!-- no padding here; padding is set on the layout to avoid double-padding -->
+    <stroke android:width="2dp" android:color="?attr/colorOutline"/>
 </shape>
