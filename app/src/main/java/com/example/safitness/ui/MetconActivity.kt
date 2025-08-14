@@ -1,8 +1,10 @@
+// app/src/main/java/com/example/safitness/ui/MetconActivity.kt
 package com.example.safitness.ui
 
 import android.os.Bundle
 import android.os.CountDownTimer
 import android.widget.*
+import android.widget.ImageView
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import com.example.safitness.R
@@ -16,7 +18,7 @@ class MetconActivity : AppCompatActivity() {
         WorkoutViewModelFactory(Repos.workoutRepository(this))
     }
 
-    private lateinit var layoutMetconExercises: LinearLayout
+    // Header + timer controls
     private lateinit var tvWorkoutTitle: TextView
     private lateinit var tvTimer: TextView
     private lateinit var btnStartStop: Button
@@ -24,71 +26,143 @@ class MetconActivity : AppCompatActivity() {
     private lateinit var btnComplete: Button
     private lateinit var tvLastTime: TextView
 
-    // NEW: RX / Scaled toggle
+    // RX / Scaled toggle
     private lateinit var rbRx: RadioButton
     private lateinit var rbScaled: RadioButton
 
+    // Preferred: views from item_metcon_plan_card.xml (when the layout includes the card)
+    private var cardTitle: TextView? = null
+    private var cardComponents: LinearLayout? = null
+    private var cardLast: TextView? = null
+
+    // Legacy container (when the layout still has a vertical list)
+    private var legacyExercisesContainer: LinearLayout? = null
+
+    // Intent args
     private var dayIndex: Int = 1
     private var workoutName: String = "Metcon"
+    private var planId: Long = -1L
 
+    // Timer state
     private var timer: CountDownTimer? = null
     private var isRunning = false
     private var timeElapsedMs = 0L
     private var startTime = 0L
-    private lateinit var radioRx: RadioButton
-    private lateinit var radioScaled: RadioButton
-
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_metcon)
 
-        dayIndex = intent.getIntExtra("DAY_INDEX", 1).coerceIn(1, 5)
+        dayIndex   = intent.getIntExtra("DAY_INDEX", 1).coerceIn(1, 5)
         workoutName = intent.getStringExtra("WORKOUT_NAME") ?: "Day $dayIndex"
+        planId     = intent.getLongExtra("PLAN_ID", -1L)
 
         bindViews()
+
+        // Title seeded; will be refined once data arrives
         tvWorkoutTitle.text = "$workoutName – Metcon"
         tvTimer.text = "00:00"
-        radioRx = findViewById(R.id.rbRx)
-        radioScaled = findViewById(R.id.rbScaled)
 
         findViewById<ImageView>(R.id.ivBack).setOnClickListener { finish() }
 
-        // Load metcon list for the day
+        // Load day context (populates last-metcon labels)
         vm.setDay(dayIndex)
-        vm.programForDay.observe(this) { items ->
-            layoutMetconExercises.removeAllViews()
-            val metconItems = items.filter { it.exercise.modality == Modality.METCON }
-            if (metconItems.isEmpty()) {
-                val tv = TextView(this).apply {
-                    text = "No metcon exercises for Day $dayIndex."
-                    textSize = 16f
-                    setPadding(16, 16, 16, 16)
+
+        // If a specific plan was tapped, render *that* plan; otherwise fall back to legacy list.
+        if (planId > 0L) {
+            vm.planWithComponents(planId).observe(this) { pwc ->
+                val plan = pwc.plan
+                val comps = pwc.components.sortedBy { it.orderInPlan }
+
+                // Header + card title
+                tvWorkoutTitle.text = "$workoutName – ${plan.title}"
+                cardTitle?.text = plan.title
+
+                // Prefer card components if present; otherwise render into legacy list container
+                cardComponents?.let { container ->
+                    container.removeAllViews()
+                    comps.forEach { c ->
+                        container.addView(TextView(this).apply {
+                            text = "• ${c.text}"
+                            textSize = 16f
+                            setPadding(0, 4, 0, 4)
+                        })
+                    }
+                } ?: run {
+                    legacyExercisesContainer?.let { container ->
+                        container.removeAllViews()
+                        comps.forEach { c ->
+                            container.addView(TextView(this).apply {
+                                text = "• ${c.text}"
+                                textSize = 16f
+                                setPadding(0, 4, 0, 4)
+                            })
+                        }
+                    }
                 }
-                layoutMetconExercises.addView(tv)
-            } else {
-                metconItems.forEach { item ->
-                    val row = layoutInflater.inflate(
-                        R.layout.item_metcon_exercise,
-                        layoutMetconExercises,
-                        false
-                    )
-                    row.findViewById<TextView>(R.id.tvExerciseName).text = item.exercise.name
-                    row.findViewById<TextView>(R.id.tvRepRange).text =
-                        item.targetReps?.let { "$it reps" } ?: "As prescribed"
-                    layoutMetconExercises.addView(row)
+            }
+        } else {
+            // Legacy fallback: render all metcon exercises for the day
+            vm.programForDay.observe(this) { items ->
+                val metconItems = items.filter { it.exercise.modality == Modality.METCON }
+
+                // If we’ve got the card, use it; otherwise use the legacy list container.
+                if (cardComponents != null) {
+                    cardTitle?.text = "Metcon"
+                    cardComponents!!.removeAllViews()
+                    if (metconItems.isEmpty()) {
+                        cardComponents!!.addView(TextView(this).apply {
+                            text = "No metcon exercises for Day $dayIndex."
+                            textSize = 16f
+                            setPadding(16, 16, 16, 16)
+                        })
+                    } else {
+                        metconItems.forEach { item ->
+                            cardComponents!!.addView(TextView(this).apply {
+                                text = "• ${item.exercise.name}"
+                                textSize = 16f
+                                setPadding(0, 4, 0, 4)
+                            })
+                        }
+                    }
+                } else {
+                    // Legacy list container path
+                    legacyExercisesContainer?.let { container ->
+                        container.removeAllViews()
+                        if (metconItems.isEmpty()) {
+                            container.addView(TextView(this).apply {
+                                text = "No metcon exercises for Day $dayIndex."
+                                textSize = 16f
+                                setPadding(16, 16, 16, 16)
+                            })
+                        } else {
+                            metconItems.forEach { item ->
+                                val row = layoutInflater.inflate(
+                                    R.layout.item_metcon_exercise,
+                                    container,
+                                    false
+                                )
+                                row.findViewById<TextView>(R.id.tvExerciseName).text = item.exercise.name
+                                row.findViewById<TextView>(R.id.tvRepRange).text =
+                                    item.targetReps?.let { "$it reps" } ?: "As prescribed"
+                                container.addView(row)
+                            }
+                        }
+                    }
                 }
             }
         }
 
-        // Last metcon time + tag
+        // Last metcon time (+ RX/Scaled tag if present) — mirror into card footer if available
         vm.lastMetcon.observe(this) { sum ->
-            tvLastTime.text = if (sum != null && sum.timeSeconds > 0) {
+            val label = if (sum != null && sum.timeSeconds > 0) {
                 val m = sum.timeSeconds / 60
                 val s = sum.timeSeconds % 60
                 val tag = sum.metconResult?.name ?: ""
                 if (tag.isNotEmpty()) "Last time: ${m}m ${s}s ($tag)" else "Last time: ${m}m ${s}s"
             } else "No previous time"
+            tvLastTime.text = label
+            cardLast?.text = label
         }
 
         btnStartStop.setOnClickListener { if (isRunning) stopTimer() else startTimer() }
@@ -97,7 +171,7 @@ class MetconActivity : AppCompatActivity() {
     }
 
     private fun bindViews() {
-        layoutMetconExercises = findViewById(R.id.layoutMetconExercises)
+        // Header + timer + actions
         tvWorkoutTitle = findViewById(R.id.tvWorkoutTitle)
         tvTimer = findViewById(R.id.tvTimer)
         btnStartStop = findViewById(R.id.btnStartStop)
@@ -105,10 +179,22 @@ class MetconActivity : AppCompatActivity() {
         btnComplete = findViewById(R.id.btnComplete)
         tvLastTime = findViewById(R.id.tvLastTime)
 
-        // NEW: toggle views
+        // Toggle
         rbRx = findViewById(R.id.rbRx)
         rbScaled = findViewById(R.id.rbScaled)
+
+        // Prefer the plan card ids if present in the layout…
+        cardTitle = findViewById(R.id.tvPlanCardTitle)
+        cardComponents = findViewById(R.id.layoutPlanComponents)
+        cardLast = findViewById(R.id.tvPlanLastTime)
+
+        // …otherwise fall back to the legacy container id (older layout variant)
+        if (cardComponents == null) {
+            legacyExercisesContainer = findViewById(R.id.layoutMetconExercises)
+        }
     }
+
+    /* ---------------------------- Timer helpers ---------------------------- */
 
     private fun startTimer() {
         if (isRunning) return
@@ -153,25 +239,22 @@ class MetconActivity : AppCompatActivity() {
         if (isRunning) stopTimer()
         val totalSeconds = (timeElapsedMs / 1000).toInt()
 
-        val result: MetconResult? = when {
-            radioRx.isChecked -> MetconResult.RX
-            radioScaled.isChecked -> MetconResult.SCALED
+        val result = when {
+            rbRx.isChecked -> MetconResult.RX
+            rbScaled.isChecked -> MetconResult.SCALED
             else -> null
         }
-
         if (result == null) {
             Toast.makeText(this, "Please select RX or Scaled.", Toast.LENGTH_SHORT).show()
             return
         }
 
-        vm.logMetcon(dayIndex, totalSeconds, result) // now non-null after the check
-
-
+        // Logs at *day* level in current schema (per-plan logging would require persisting planId)
         vm.logMetcon(dayIndex, totalSeconds, result)
-        val tag = result?.name ?: "—"
+
         Toast.makeText(
             this,
-            "Metcon completed in ${totalSeconds / 60}m ${totalSeconds % 60}s ($tag)!",
+            "Metcon completed in ${totalSeconds / 60}m ${totalSeconds % 60}s (${result.name})!",
             Toast.LENGTH_LONG
         ).show()
         finish()

@@ -1,8 +1,8 @@
 package com.example.safitness.core
 
-enum class WorkoutType { PUSH, PULL, LEGS_CORE, METCON }
+enum class WorkoutType { PUSH, PULL, LEGS_CORE }
 
-enum class Equipment { BARBELL, DUMBBELL, CABLE, BODYWEIGHT, KETTLEBELL, MACHINE }
+enum class Equipment { BARBELL, DUMBBELL, CABLE, BODYWEIGHT, KETTLEBELL }
 
 enum class Modality { STRENGTH, METCON }
 

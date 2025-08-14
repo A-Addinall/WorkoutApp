@@ -7,6 +7,7 @@ import com.example.safitness.data.dao.*
 import com.example.safitness.data.entities.*
 import kotlinx.coroutines.flow.Flow
 import com.example.safitness.data.dao.SelectionWithPlanAndComponents
+import com.example.safitness.data.dao.PlanWithComponents
 
 class WorkoutRepository(
     private val libraryDao: LibraryDao,
@@ -121,24 +122,23 @@ class WorkoutRepository(
         )
     )
 
-    suspend fun logMetcon(day: Int, seconds: Int) {
-        val sessionId = startSession(day)
-        val equip = Equipment.BODYWEIGHT // neutral for metcons
-        logTimeOnlySet(
-            sessionId = sessionId,
-            exerciseId = 0L, // metcon is not an Exercise row
-            equipment = equip,
-            setNumber = 1,
-            timeSeconds = seconds,
-            rpe = null,
-            success = null,
-            notes = null
-        )
-    }
-
-    // Overload to accept RX/Scaled; stored once schema is extended.
     suspend fun logMetcon(day: Int, seconds: Int, resultType: MetconResult) {
-        logMetcon(day, seconds)
+        val sessionId = startSession(day)
+        val equip = Equipment.BODYWEIGHT
+        sessionDao.insertSet(
+            SetLog(
+                sessionId = sessionId,
+                exerciseId = 0L,
+                equipment = equip,
+                setNumber = 1,
+                reps = 0,
+                weight = null,
+                timeSeconds = seconds,
+                rpe = null,
+                success = null,
+                notes = null,
+                metconResult = resultType
+        ))
     }
 
     suspend fun lastMetconSecondsForDay(day: Int): Int =
@@ -176,6 +176,9 @@ class WorkoutRepository(
 
     fun metconsForDay(day: Int): Flow<List<SelectionWithPlanAndComponents>> =
         metconDao.getMetconsForDay(day)
+
+    fun planWithComponents(planId: Long): Flow<PlanWithComponents> =
+        metconDao.getPlanWithComponents(planId)
 
     suspend fun addMetconToDay(
         day: Int,

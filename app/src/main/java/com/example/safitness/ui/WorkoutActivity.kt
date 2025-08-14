@@ -14,17 +14,15 @@ import android.widget.Toast
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.setPadding
-import androidx.lifecycle.asLiveData
 import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.RecyclerView
 import com.example.safitness.R
-import com.example.safitness.core.Equipment
 import com.example.safitness.core.Modality
 import com.example.safitness.data.dao.ExerciseWithSelection
-import com.example.safitness.data.dao.MetconDao
+import com.example.safitness.data.dao.SelectionWithPlanAndComponents
 import com.example.safitness.data.repo.Repos
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import com.example.safitness.data.dao.SelectionWithPlanAndComponents
 
 class WorkoutActivity : AppCompatActivity() {
 
@@ -39,7 +37,7 @@ class WorkoutActivity : AppCompatActivity() {
     private var workoutName: String = ""
     private var sessionId: Long = 0L
 
-    // cache to rebuild the UI coherently
+    // Caches used to rebuild UI when LiveData updates arrive
     private var lastProgramItems: List<ExerciseWithSelection> = emptyList()
     private var lastMetconSelections: List<SelectionWithPlanAndComponents> = emptyList()
 
@@ -54,29 +52,29 @@ class WorkoutActivity : AppCompatActivity() {
         layoutExercises = findViewById(R.id.layoutExercises)
         tvWorkoutTitle.text = workoutName
 
-        // optional back button if present in the header
+        // Optional back button if present in the header
         findViewById<ImageView?>(R.id.ivBack)?.setOnClickListener { finish() }
 
-        // start a session for this day (strength sets will attach to it)
+        // Start a session for this day (strength sets will attach to it)
         lifecycleScope.launch(Dispatchers.IO) {
             if (sessionId == 0L) {
                 sessionId = Repos.workoutRepository(this@WorkoutActivity).startSession(dayIndex)
             }
         }
 
-        // observe strength program for the day
+        // Observe strength program for the day
         vm.programForDay.observe(this) { items ->
             lastProgramItems = items ?: emptyList()
             rebuildWorkoutUi()
         }
 
-        // observe selected Metcon plans for the day
+        // Observe selected Metcon plans for the day
         vm.metconsForDay.observe(this) { selections ->
             lastMetconSelections = selections ?: emptyList()
             rebuildWorkoutUi()
         }
 
-        // ensure VM knows which day we're on (also loads lastMetconSeconds)
+        // Ensure VM knows which day we're on (also loads lastMetconSeconds in the VM)
         vm.setDay(dayIndex)
     }
 
@@ -100,9 +98,9 @@ class WorkoutActivity : AppCompatActivity() {
             optional.forEach { addExerciseCard(it) }
         }
 
-        // Prefer new Metcon Plans card; if none selected, fall back to legacy metcon-exercise card
+        // NEW: One pretty card per selected Metcon plan (if any). Fallback to legacy metcon-exercise card.
         if (lastMetconSelections.isNotEmpty()) {
-            addOrUpdateMetconPlansCard(lastMetconSelections)
+            addMetconPlanCards(lastMetconSelections)
         } else if (metconExercises.isNotEmpty()) {
             addLegacyMetconCard(metconExercises)
         }
@@ -110,23 +108,29 @@ class WorkoutActivity : AppCompatActivity() {
         if (required.isEmpty() && optional.isEmpty() &&
             metconExercises.isEmpty() && lastMetconSelections.isEmpty()
         ) {
-            addSectionHeader("Empty")
+            val emptyView = TextView(this).apply {
+                text = "No programmed work for today."
+                setTextColor(Color.parseColor("#999999"))
+                textSize = 16f
+                setPadding(24)
+            }
+            layoutExercises.addView(emptyView)
         }
     }
 
-    /* -------------------- UI helpers -------------------- */
+    /* ------------------------------ Strength UI ------------------------------ */
 
     private fun addSectionHeader(title: String) {
         val tv = TextView(this).apply {
             text = title
             textSize = 18f
             setTypeface(typeface, Typeface.BOLD)
-            setPadding(8)
+            setTextColor(Color.WHITE)
+            setPadding(8, 16, 8, 8)
         }
         layoutExercises.addView(tv)
     }
 
-    /** Minimal, dependency-free strength card; launches ExerciseDetailActivity on tap. */
     private fun addExerciseCard(item: ExerciseWithSelection) {
         val card = androidx.cardview.widget.CardView(this).apply {
             radius = 8f
@@ -142,12 +146,10 @@ class WorkoutActivity : AppCompatActivity() {
                 setTypeface(typeface, Typeface.BOLD)
             }
             val meta = TextView(context).apply {
-                text = buildString {
-                    append(item.exercise.workoutType.name)
-                    append(" • ")
-                    append((item.preferredEquipment ?: item.exercise.primaryEquipment).name)
-                    item.targetReps?.let { append(" • Target: ${it} reps") }
-                }
+                val typeName = item.exercise.workoutType.name
+                val equipName = (item.preferredEquipment ?: item.exercise.primaryEquipment).name
+                val repsText = item.targetReps?.let { " • target ${it} reps" } ?: ""
+                text = "$typeName • $equipName$repsText"
                 textSize = 14f
                 setTextColor(Color.parseColor("#666666"))
             }
@@ -171,96 +173,10 @@ class WorkoutActivity : AppCompatActivity() {
         layoutExercises.addView(card)
     }
 
-    /**
-     * Pretty Metcon Plans card (new model) – matches your mock.
-     * Requires layout: res/layout/item_metcon_plan_card.xml (as provided earlier).
-     */
-    private fun addOrUpdateMetconPlansCard(
-        selections: List<SelectionWithPlanAndComponents>
-    ) {
-        // remove prior instance (avoid duplicates)
-        for (i in 0 until layoutExercises.childCount) {
-            val child = layoutExercises.getChildAt(i)
-            if (child.tag == "metcon-plans") {
-                layoutExercises.removeViewAt(i)
-                break
-            }
-        }
-        if (selections.isEmpty()) return
+    /* ----------------------------- Metcon (legacy) ---------------------------- */
 
-        val card = layoutInflater.inflate(R.layout.item_metcon_plan_card, layoutExercises, false)
-        card.tag = "metcon-plans"
-
-        val tvTitle = card.findViewById<TextView>(R.id.tvPlanCardTitle)
-        val compsContainer = card.findViewById<LinearLayout>(R.id.layoutPlanComponents)
-        val tvLast = card.findViewById<TextView>(R.id.tvPlanLastTime)
-
-        // If multiple plans are selected, concatenate titles
-        val title = selections.sortedBy { it.selection.displayOrder }
-            .joinToString(" • ") { it.planWithComponents.plan.title }
-        tvTitle.text = title
-
-        compsContainer.removeAllViews()
-        selections.sortedBy { it.selection.displayOrder }.forEach { sel ->
-            val plan = sel.planWithComponents.plan
-            val components = sel.planWithComponents.components.sortedBy { it.orderInPlan }
-
-            // Optional subheading per plan if there are multiple
-            if (selections.size > 1) {
-                val sub = TextView(this).apply {
-                    text = plan.title
-                    setTextColor(Color.WHITE)
-                    setTypeface(typeface, Typeface.BOLD)
-                    textSize = 16f
-                    setPadding(0, if (compsContainer.childCount == 0) 0 else 12, 0, 4)
-                }
-                compsContainer.addView(sub)
-            }
-
-            components.forEach { comp ->
-                val row = TextView(this).apply {
-                    text = "• ${comp.text}"
-                    setTextColor(Color.WHITE)
-                    textSize = 16f
-                    setPadding(0, 4, 0, 4)
-                }
-                compsContainer.addView(row)
-            }
-
-            // spacer between plans
-            if (selections.size > 1) {
-                val spacer = View(this)
-                spacer.layoutParams = LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, 12
-                )
-                compsContainer.addView(spacer)
-            }
-        }
-
-        // last metcon time text
-        vm.lastMetconSeconds.observe(this) { sec ->
-            tvLast.text = if (sec != null && sec > 0) {
-                val m = sec / 60; val s = sec % 60
-                "Last time: ${m}m ${s}s"
-            } else {
-                "No previous time"
-            }
-        }
-
-        // tap → open Metcon timer
-        card.setOnClickListener {
-            startActivity(Intent(this, MetconActivity::class.java).apply {
-                putExtra("DAY_INDEX", dayIndex)
-                putExtra("WORKOUT_NAME", workoutName)
-            })
-        }
-
-        layoutExercises.addView(card)
-    }
-
-    /** Legacy metcon (old model: exercises flagged as Modality.METCON). */
     private fun addLegacyMetconCard(items: List<ExerciseWithSelection>) {
-        // If you still have res/layout/item_metcon_card.xml, we can inflate it; otherwise use a simple fallback.
+        // If you still have res/layout/item_metcon_card.xml, inflate it; otherwise use a simple fallback.
         val resId = resources.getIdentifier("item_metcon_card", "layout", packageName)
         if (resId != 0) {
             val card = layoutInflater.inflate(resId, layoutExercises, false)
@@ -276,13 +192,14 @@ class WorkoutActivity : AppCompatActivity() {
             items.forEach { ex ->
                 val row = TextView(this).apply {
                     text = "• ${ex.exercise.name}"
-                    textSize = 14f
+                    textSize = 16f
+                    setPadding(0, 4, 0, 4)
                 }
                 container?.addView(row)
             }
 
-            // Last-time label if present
-            val lastId = resources.getIdentifier("tvLastTime", "id", packageName)
+            // Day-level "last time" (your current data model)
+            val lastId = resources.getIdentifier("tvMetconLastTime", "id", packageName)
             val tvLast = card.findViewById<TextView?>(lastId)
             vm.lastMetconSeconds.observe(this) { sec ->
                 tvLast?.text = if (sec != null && sec > 0) {
@@ -300,7 +217,7 @@ class WorkoutActivity : AppCompatActivity() {
 
             layoutExercises.addView(card)
         } else {
-            // Very small programmatic fallback
+            // Programmatic fallback
             val cv = androidx.cardview.widget.CardView(this).apply {
                 radius = 8f; cardElevation = 2f
                 val l = LinearLayout(context).apply {
@@ -317,6 +234,59 @@ class WorkoutActivity : AppCompatActivity() {
                 addView(l)
             }
             layoutExercises.addView(cv)
+        }
+    }
+
+    /* -------------------------- Metcon (new: per-plan) ------------------------- */
+
+    /** One pretty card per selected Metcon plan (new model). */
+    private fun addMetconPlanCards(
+        selections: List<SelectionWithPlanAndComponents>
+    ) {
+        if (selections.isEmpty()) return
+
+        selections.sortedBy { it.selection.displayOrder }.forEach { sel ->
+            val card = layoutInflater.inflate(R.layout.item_metcon_plan_card, layoutExercises, false)
+
+            val tvTitle = card.findViewById<TextView>(R.id.tvPlanCardTitle)
+            val compsContainer = card.findViewById<LinearLayout>(R.id.layoutPlanComponents)
+            val tvLast = card.findViewById<TextView>(R.id.tvPlanLastTime)
+
+            val plan = sel.planWithComponents.plan
+            val components = sel.planWithComponents.components.sortedBy { it.orderInPlan }
+
+            // Title
+            tvTitle.text = plan.title
+
+            // Components as bullets
+            compsContainer.removeAllViews()
+            components.forEach { comp ->
+                compsContainer.addView(TextView(this).apply {
+                    text = "• ${comp.text}"
+                    setTextColor(Color.WHITE)
+                    textSize = 16f
+                    setPadding(0, 4, 0, 4)
+                })
+            }
+
+            // Day-level last time (current schema is day-scoped, not per-plan)
+            vm.lastMetconSeconds.observe(this) { sec ->
+                tvLast.text = if (sec != null && sec > 0) {
+                    val m = sec / 60; val s = sec % 60
+                    "Last time: ${m}m ${s}s"
+                } else "No previous time"
+            }
+
+            // Tap → open Metcon timer scoped to THIS plan
+            card.setOnClickListener {
+                startActivity(Intent(this, MetconActivity::class.java).apply {
+                    putExtra("DAY_INDEX", dayIndex)
+                    putExtra("WORKOUT_NAME", workoutName)
+                    putExtra("PLAN_ID", plan.id) // CRITICAL
+                })
+            }
+
+            layoutExercises.addView(card)
         }
     }
 }
