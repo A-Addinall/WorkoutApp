@@ -10,6 +10,9 @@ import kotlinx.coroutines.launch
 import com.example.safitness.data.dao.SelectionWithPlanAndComponents
 import androidx.lifecycle.asLiveData
 import com.example.safitness.data.dao.PlanWithComponents
+import androidx.lifecycle.LiveData
+import androidx.lifecycle.asLiveData
+import kotlinx.coroutines.flow.combine
 
 class WorkoutViewModel(private val repo: WorkoutRepository) : ViewModel() {
 
@@ -76,6 +79,49 @@ class WorkoutViewModel(private val repo: WorkoutRepository) : ViewModel() {
         equipment: Equipment,
         reps: Int?
     ) = repo.getSuggestedWeight(exerciseId, equipment, reps)
+
+
+    data class DaySummary(val subtitle: String)
+
+    fun daySummary(day: Int): LiveData<DaySummary> {
+        // programForDay → strength items (metcon is stored separately)
+        val strengthFlow = repo.programForDay(day) // Flow<List<ExerciseWithSelection>>
+        val metconFlow = repo.metconsForDay(day)   // Flow<List<SelectionWithPlanAndComponents>>
+
+        return combine(strengthFlow, metconFlow) { program, metcons ->
+            val hasMetcon = metcons.isNotEmpty()
+
+            // Only consider non-metcon exercises for the strength category summary
+            val strengthCats = program
+                .filter { it.exercise.modality != com.example.safitness.core.Modality.METCON }
+                .filter { it.required } // if you prefer to reflect only the required focus
+                .map { it.exercise.workoutType } // e.g. PUSH, PULL, LEGS_CORE
+                .map(::mapWorkoutTypeToLabel)
+                .distinct()
+
+            val subtitle = when {
+                strengthCats.isEmpty() && hasMetcon -> "Metcon"
+                strengthCats.isEmpty() && !hasMetcon -> "Empty"
+                strengthCats.size == 1 && !hasMetcon -> strengthCats.first()
+                strengthCats.size == 1 && hasMetcon -> "${strengthCats.first()} + Metcon"
+                else -> {
+                    // Mixed strength day; show the top 2 to keep it readable
+                    val mixed = strengthCats.take(2).joinToString(" · ")
+                    if (hasMetcon) "Mixed ($mixed) + Metcon" else "Mixed ($mixed)"
+                }
+            }
+
+            DaySummary(subtitle = subtitle)
+        }.asLiveData()
+    }
+
+    private fun mapWorkoutTypeToLabel(t: com.example.safitness.core.WorkoutType): String = when (t) {
+        com.example.safitness.core.WorkoutType.PUSH -> "Push"
+        com.example.safitness.core.WorkoutType.PULL -> "Pull"
+        com.example.safitness.core.WorkoutType.LEGS_CORE -> "Legs & Core"
+        // Fall back for any future/other types:
+        else -> t.name.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }
+    }
 
 
 }

@@ -125,7 +125,6 @@ class WorkoutActivity : AppCompatActivity() {
             text = title
             textSize = 18f
             setTypeface(typeface, Typeface.BOLD)
-            setTextColor(Color.WHITE)
             setPadding(8, 16, 8, 8)
         }
         layoutExercises.addView(tv)
@@ -263,7 +262,6 @@ class WorkoutActivity : AppCompatActivity() {
             components.forEach { comp ->
                 compsContainer.addView(TextView(this).apply {
                     text = "• ${comp.text}"
-                    setTextColor(Color.WHITE)
                     textSize = 16f
                     setPadding(0, 4, 0, 4)
                 })
