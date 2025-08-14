@@ -6,6 +6,8 @@ import com.example.safitness.data.entities.MetconPlan
 import com.example.safitness.data.entities.ProgramMetconSelection
 import com.example.safitness.data.entities.MetconLog   // <-- added
 import kotlinx.coroutines.flow.Flow
+import com.example.safitness.core.MetconType
+
 
 /* -- Relations for convenient reads -- */
 
@@ -34,7 +36,7 @@ interface MetconDao {
 
     /* ----- Library (plans) ----- */
 
-    @Query("SELECT * FROM metcon_plan ORDER BY title ASC")
+    @Query("SELECT * FROM metcon_plan WHERE isArchived = 0 ORDER BY title ASC")
     fun getAllPlans(): Flow<List<MetconPlan>>
 
     @Transaction
@@ -100,4 +102,51 @@ interface MetconDao {
         LIMIT 1
     """)
     fun lastForDay(day: Int): Flow<MetconLog?>
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertPlansIgnore(plans: List<MetconPlan>): List<Long>
+
+    @Query("SELECT id FROM metcon_plan WHERE title = :title LIMIT 1")
+    suspend fun getPlanIdByTitle(title: String): Long
+
+    @Query("SELECT id FROM metcon_plan WHERE canonicalKey = :key LIMIT 1")
+    suspend fun getPlanIdByKey(key: String): Long
+
+    @Query("""
+        UPDATE metcon_plan
+        SET title = :title,
+            type = :type,
+            durationMinutes = :durationMinutes,
+            emomIntervalSec = :emomIntervalSec,
+            isArchived = :isArchived
+        WHERE canonicalKey = :key
+    """)
+    suspend fun updatePlanByKey(
+        key: String,
+        title: String,
+        type: MetconType,
+        durationMinutes: Int?,
+        emomIntervalSec: Int?,
+        isArchived: Boolean = false
+    )
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertComponentsIgnore(components: List<MetconComponent>)
+
+    @Query("""
+        UPDATE metcon_component
+        SET text = :text
+        WHERE planId = :planId AND orderInPlan = :orderInPlan
+    """)
+    suspend fun updateComponentText(planId: Long, orderInPlan: Int, text: String)
+
+    @Query("DELETE FROM metcon_component WHERE planId = :planId")
+    suspend fun deleteAllComponentsForPlan(planId: Long)
+
+    @Query("""
+        DELETE FROM metcon_component
+        WHERE planId = :planId AND orderInPlan NOT IN (:validOrders)
+    """)
+    suspend fun deleteComponentsNotIn(planId: Long, validOrders: List<Int>)
+
 }
