@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
+
     <corners android:radius="16dp"/>
-    <solid android:color="#5A5A5A"/>
-    <padding android:left="16dp" android:top="16dp" android:right="16dp" android:bottom="16dp"/>
+    <!-- Material surface colour (resolves from your theme: light or dark) -->
+    <solid android:color="?attr/colorSurface"/>
+    <!-- no padding here; padding is set on the layout to avoid double-padding -->
+    <stroke android:width="2dp" android:color="?attr/colorOutline"/>
 </shape>

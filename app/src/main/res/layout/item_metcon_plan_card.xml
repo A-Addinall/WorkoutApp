@@ -7,7 +7,7 @@
     android:background="@drawable/bg_metcon_card"
     android:padding="16dp">
 
-    <!-- Big title inside card -->
+    <!-- Title -->
     <TextView
         android:id="@+id/tvPlanCardTitle"
         android:layout_width="match_parent"
@@ -15,7 +15,7 @@
         android:text="Metcon Circuit"
         android:textStyle="bold"
         android:textSize="20sp"
-        android:textColor="@android:color/white"/>
+        android:textColor="?attr/colorOnSurface"/>
 
     <!-- Components container -->
     <LinearLayout
@@ -25,13 +25,13 @@
         android:orientation="vertical"
         android:layout_marginTop="12dp"/>
 
-    <!-- Last time -->
+    <!-- Last time (de-emphasised) -->
     <TextView
         android:id="@+id/tvPlanLastTime"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="No previous time"
         android:textSize="14sp"
-        android:textColor="#CFCFCF"
+        android:textColor="?attr/colorOnSurfaceVariant"
         android:layout_marginTop="12dp"/>
 </LinearLayout>
