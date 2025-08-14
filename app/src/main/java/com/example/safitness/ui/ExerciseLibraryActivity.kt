@@ -13,7 +13,6 @@ import com.example.safitness.R
 import com.example.safitness.core.Equipment
 import com.example.safitness.core.WorkoutType
 import com.example.safitness.data.entities.Exercise
-import com.example.safitness.data.entities.MetconPlan
 import com.example.safitness.data.repo.Repos
 import kotlinx.coroutines.launch
 
@@ -32,19 +31,21 @@ class ExerciseLibraryActivity : AppCompatActivity() {
     private lateinit var emptyText: TextView
     private lateinit var btnClearFilters: Button
 
-    // NEW: toggle + metcon RecyclerView
+    // Toggle between Exercises (strength list) and Metcons (plans)
     private lateinit var radioExercises: RadioButton
     private lateinit var radioMetcons: RadioButton
     private lateinit var rvMetconPlans: RecyclerView
     private lateinit var metconAdapter: MetconPlanAdapter
 
+    // Strength reps support
     private val repChoices = listOf(3, 5, 8, 10, 12, 15)
-    private val repLabels = repChoices.map { "$it reps" } + "—"
+    private val repLabels = repChoices.map { "$it reps" } + "—" // "—" means unset/null
     private val currentReps = mutableMapOf<Long, Int?>()
-    private val addedState = mutableMapOf<Long, Boolean>()
-    private val requiredState = mutableMapOf<Long, Boolean>() // ⭐ required state
 
-    // NEW: track plan membership for current day
+    // Selection state per exercise
+    private val addedState = mutableMapOf<Long, Boolean>()
+
+    // Track metcon membership for current day
     private var metconAddedIds: Set<Long> = emptySet()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -58,7 +59,6 @@ class ExerciseLibraryActivity : AppCompatActivity() {
         emptyText = findViewById(R.id.tvEmpty)
         btnClearFilters = findViewById(R.id.btnClearFilters)
 
-        // NEW: hook up toggle + recycler
         radioExercises = findViewById(R.id.rbExercises)
         radioMetcons = findViewById(R.id.rbMetcons)
         rvMetconPlans = findViewById(R.id.rvMetconPlans)
@@ -67,26 +67,38 @@ class ExerciseLibraryActivity : AppCompatActivity() {
 
         currentDay = intent.getIntExtra("DAY_INDEX", 1).coerceIn(1, 5)
 
-        spinnerType.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item,
-            arrayOf("All") + WorkoutType.values().map { it.name })
-        spinnerEq.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item,
-            arrayOf("All") + Equipment.values().map { it.name })
-        spinnerDay.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item,
-            arrayOf("Day 1","Day 2","Day 3","Day 4","Day 5"))
+        spinnerType.adapter = ArrayAdapter(
+            this,
+            android.R.layout.simple_spinner_dropdown_item,
+            arrayOf("All") + WorkoutType.values().map { it.name }
+        )
+        spinnerEq.adapter = ArrayAdapter(
+            this,
+            android.R.layout.simple_spinner_dropdown_item,
+            arrayOf("All") + Equipment.values().map { it.name }
+        )
+        spinnerDay.adapter = ArrayAdapter(
+            this,
+            android.R.layout.simple_spinner_dropdown_item,
+            arrayOf("Day 1", "Day 2", "Day 3", "Day 4", "Day 5")
+        )
         spinnerDay.setSelection(currentDay - 1)
 
         spinnerType.onItemSelectedListener = objSel { _ ->
-            vm.setTypeFilter(if (spinnerType.selectedItem == "All") null
-            else WorkoutType.valueOf(spinnerType.selectedItem as String))
+            vm.setTypeFilter(
+                if (spinnerType.selectedItem == "All") null
+                else WorkoutType.valueOf(spinnerType.selectedItem as String)
+            )
         }
         spinnerEq.onItemSelectedListener = objSel { _ ->
-            vm.setEqFilter(if (spinnerEq.selectedItem == "All") null
-            else Equipment.valueOf(spinnerEq.selectedItem as String))
+            vm.setEqFilter(
+                if (spinnerEq.selectedItem == "All") null
+                else Equipment.valueOf(spinnerEq.selectedItem as String)
+            )
         }
         spinnerDay.onItemSelectedListener = objSel { pos ->
             currentDay = (pos + 1).coerceIn(1, 5)
-            vm.setMetconDay(currentDay) // NEW: update VM day for metcon selections
-            // Refresh exercise row states too
+            vm.setMetconDay(currentDay) // keep metcon list in sync
             refreshExerciseStates()
         }
 
@@ -95,7 +107,7 @@ class ExerciseLibraryActivity : AppCompatActivity() {
             spinnerEq.setSelection(0)
         }
 
-        // EXISTING: exercises list
+        // Exercises (Strength) list
         vm.exercises.observe(this) { list ->
             if (list.isNullOrEmpty()) {
                 emptyText.visibility = View.VISIBLE
@@ -108,20 +120,18 @@ class ExerciseLibraryActivity : AppCompatActivity() {
                 list.forEach { ex ->
                     addedState[ex.id] = repo.isInProgram(currentDay, ex.id)
                     currentReps[ex.id] = repo.selectedTargetReps(currentDay, ex.id)
-                    requiredState[ex.id] = repo.requiredFor(currentDay, ex.id)
                 }
                 listLibrary.adapter = LibraryAdapter(list)
             }
         }
 
-        // NEW: Metcon plans list + adapter
+        // Metcon plans
         rvMetconPlans.layoutManager = LinearLayoutManager(this)
         metconAdapter = MetconPlanAdapter(
             onPrimary = { plan, isAdded ->
                 if (isAdded) {
                     vm.removeMetconFromDay(currentDay, plan.id)
                 } else {
-                    // default required=true, order = current size
                     val order = metconAddedIds.size
                     vm.addMetconToDay(currentDay, plan.id, required = true, order = order)
                 }
@@ -129,7 +139,6 @@ class ExerciseLibraryActivity : AppCompatActivity() {
         )
         rvMetconPlans.adapter = metconAdapter
 
-        // Observe plans and membership
         vm.metconPlans.observe(this) { plans ->
             metconAdapter.submit(plans ?: emptyList(), metconAddedIds)
         }
@@ -137,14 +146,14 @@ class ExerciseLibraryActivity : AppCompatActivity() {
             metconAddedIds = idSet ?: emptySet()
             metconAdapter.updateMembership(metconAddedIds)
         }
-        vm.setMetconDay(currentDay) // initial
+        vm.setMetconDay(currentDay)
 
         // Toggle behaviour
         fun applyMode() {
-            val metcons = radioMetcons.isChecked
-            rvMetconPlans.visibility = if (metcons) View.VISIBLE else View.GONE
-            listLibrary.visibility = if (metcons) View.GONE else View.VISIBLE
-            emptyText.visibility = View.GONE // managed per-mode
+            val showMetcons = radioMetcons.isChecked
+            rvMetconPlans.visibility = if (showMetcons) View.VISIBLE else View.GONE
+            listLibrary.visibility = if (showMetcons) View.GONE else View.VISIBLE
+            emptyText.visibility = View.GONE
         }
         radioExercises.setOnCheckedChangeListener { _, _ -> applyMode() }
         radioMetcons.setOnCheckedChangeListener { _, _ -> applyMode() }
@@ -159,7 +168,7 @@ class ExerciseLibraryActivity : AppCompatActivity() {
             val repo = Repos.workoutRepository(this@ExerciseLibraryActivity)
             adapter.items.forEach { ex ->
                 addedState[ex.id] = repo.isInProgram(currentDay, ex.id)
-                requiredState[ex.id] = repo.requiredFor(currentDay, ex.id)
+                // keep currentReps as-is; repo already persisted any chosen reps
             }
             (listLibrary.adapter as BaseAdapter).notifyDataSetChanged()
         }
@@ -167,8 +176,9 @@ class ExerciseLibraryActivity : AppCompatActivity() {
 
     private fun objSel(block: (Int) -> Unit) =
         object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(p: AdapterView<*>?, v: View?, pos: Int, id: Long) = block(pos)
-            override fun onNothingSelected(p: AdapterView<*>?) {}
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) =
+                block(position)
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
 
     private inner class LibraryAdapter(val items: List<Exercise>) : BaseAdapter() {
@@ -192,17 +202,15 @@ class ExerciseLibraryActivity : AppCompatActivity() {
         private inner class VH(v: View) {
             private val tvTitle = v.findViewById<TextView>(R.id.tvTitle)
             private val tvMeta = v.findViewById<TextView>(R.id.tvMeta)
-            private val tvEquip = v.findViewById<TextView>(R.id.tvEquip)
             private val spinnerReps = v.findViewById<Spinner>(R.id.spinnerReps)
             private val btnPrimary = v.findViewById<Button>(R.id.btnPrimary)
-            private val btnRequired = v.findViewById<ImageButton>(R.id.btnRequired)
 
             fun bind(ex: Exercise) {
                 tvTitle.text = ex.name
+                // Optional subtitle; keep subtle like metcon
                 tvMeta.text = ex.workoutType.name
-                tvEquip.text = ex.primaryEquipment.name
 
-                // reps spinner
+                // Reps spinner (defaults to saved reps or unset)
                 val repsAdapter = ArrayAdapter(
                     this@ExerciseLibraryActivity,
                     android.R.layout.simple_spinner_dropdown_item,
@@ -223,19 +231,10 @@ class ExerciseLibraryActivity : AppCompatActivity() {
                     }
                 }
 
-                fun refreshPrimary() { btnPrimary.text = if (addedState[ex.id] == true) "Remove" else "Add" }
-                fun refreshStar() {
-                    val isAdded = addedState[ex.id] == true
-                    btnRequired.isEnabled = isAdded
-                    val on = (requiredState[ex.id] == true) && isAdded
-                    btnRequired.setImageResource(
-                        if (on) android.R.drawable.btn_star_big_on
-                        else android.R.drawable.btn_star_big_off
-                    )
-                    btnRequired.alpha = if (isAdded) 1f else 0.35f
+                fun refreshPrimary() {
+                    btnPrimary.text = if (addedState[ex.id] == true) "Remove" else "Add to Day"
                 }
-
-                refreshPrimary(); refreshStar()
+                refreshPrimary()
 
                 btnPrimary.setOnClickListener {
                     lifecycleScope.launch {
@@ -243,28 +242,27 @@ class ExerciseLibraryActivity : AppCompatActivity() {
                         if (addedState[ex.id] == true) {
                             repo.removeFromDay(currentDay, ex.id)
                             addedState[ex.id] = false
-                            Toast.makeText(this@ExerciseLibraryActivity, "Removed ${ex.name}", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(
+                                this@ExerciseLibraryActivity,
+                                "Removed ${ex.name}",
+                                Toast.LENGTH_SHORT
+                            ).show()
                         } else {
-                            repo.addToDay(currentDay, ex, required = (requiredState[ex.id] ?: true),
-                                preferred = ex.primaryEquipment, targetReps = currentReps[ex.id])
+                            repo.addToDay(
+                                day = currentDay,
+                                exercise = ex,
+                                required = true, // all workouts are required now
+                                preferred = ex.primaryEquipment,
+                                targetReps = currentReps[ex.id]
+                            )
                             addedState[ex.id] = true
-                            Toast.makeText(this@ExerciseLibraryActivity, "Added ${ex.name}", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(
+                                this@ExerciseLibraryActivity,
+                                "Added ${ex.name}",
+                                Toast.LENGTH_SHORT
+                            ).show()
                         }
-                        refreshPrimary(); refreshStar()
-                    }
-                }
-
-                btnRequired.setOnClickListener {
-                    if (addedState[ex.id] != true) {
-                        Toast.makeText(this@ExerciseLibraryActivity, "Add the exercise first", Toast.LENGTH_SHORT).show()
-                        return@setOnClickListener
-                    }
-                    lifecycleScope.launch {
-                        val newVal = !(requiredState[ex.id] ?: true)
-                        Repos.workoutRepository(this@ExerciseLibraryActivity)
-                            .setRequired(currentDay, ex.id, newVal)
-                        requiredState[ex.id] = newVal
-                        refreshStar()
+                        refreshPrimary()
                     }
                 }
             }
