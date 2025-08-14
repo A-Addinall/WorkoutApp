@@ -1,7 +1,11 @@
 package com.example.safitness.ui
 
+import android.content.Context
 import android.os.Bundle
 import android.os.CountDownTimer
+import android.view.View
+import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputMethodManager
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.RadioButton
@@ -9,11 +13,14 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.lifecycleScope
 import com.example.safitness.R
 import com.example.safitness.core.MetconResult
 import com.example.safitness.data.repo.Repos
 import com.google.android.material.appbar.MaterialToolbar
+import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
 import kotlinx.coroutines.launch
 import kotlin.math.max
 
@@ -31,12 +38,11 @@ class MetconAmrapActivity : AppCompatActivity() {
     private lateinit var rbRx: RadioButton
     private lateinit var rbScaled: RadioButton
 
-    private lateinit var tvRounds: TextView
-    private lateinit var tvReps: TextView
-    private lateinit var btnPlusRound: Button
-    private lateinit var btnMinusRound: Button
-    private lateinit var btnPlusRep: Button
-    private lateinit var btnMinusRep: Button
+    // Direct input fields (replacing +/- buttons)
+    private lateinit var tilRounds: TextInputLayout
+    private lateinit var etRounds: TextInputEditText
+    private lateinit var tilReps: TextInputLayout
+    private lateinit var etReps: TextInputEditText
 
     private var dayIndex: Int = 1
     private var planId: Long = -1L
@@ -92,7 +98,7 @@ class MetconAmrapActivity : AppCompatActivity() {
             }
         }
 
-        setupScoreControls()
+        setupScoreInputs()
 
         btnStartStop.setOnClickListener {
             when (phase) {
@@ -113,24 +119,55 @@ class MetconAmrapActivity : AppCompatActivity() {
         btnComplete = findViewById(R.id.btnComplete)
         rbRx = findViewById(R.id.rbRx)
         rbScaled = findViewById(R.id.rbScaled)
-        tvRounds = findViewById(R.id.tvRounds)
-        tvReps = findViewById(R.id.tvReps)
-        btnPlusRound = findViewById(R.id.btnPlusRound)
-        btnMinusRound = findViewById(R.id.btnMinusRound)
-        btnPlusRep = findViewById(R.id.btnPlusRep)
-        btnMinusRep = findViewById(R.id.btnMinusRep)
+
+        tilRounds = findViewById(R.id.tilRounds)
+        etRounds = findViewById(R.id.etRounds)
+        tilReps = findViewById(R.id.tilReps)
+        etReps = findViewById(R.id.etReps)
+
+        // Initialise to 0 to match defaults in layout
+        etRounds.setText(rounds.toString())
+        etReps.setText(extraReps.toString())
     }
 
-    private fun setupScoreControls() {
-        fun refresh() {
-            tvRounds.text = rounds.toString()
-            tvReps.text = extraReps.toString()
+    /** Replace +/- with validated numeric input **/
+    private fun setupScoreInputs() {
+        fun parseIntOrNull(cs: CharSequence?): Int? =
+            cs?.toString()?.trim()?.takeIf { it.isNotEmpty() }?.toIntOrNull()
+
+        etRounds.doAfterTextChanged { text ->
+            val v = parseIntOrNull(text)
+            when {
+                v == null || v < 0 -> {
+                    tilRounds.error = getString(R.string.enter_valid_rounds) // "Enter valid rounds (0+)"
+                }
+                else -> {
+                    tilRounds.error = null
+                    rounds = v
+                }
+            }
         }
-        refresh()
-        btnPlusRound.setOnClickListener { rounds += 1; refresh() }
-        btnMinusRound.setOnClickListener { rounds = max(0, rounds - 1); refresh() }
-        btnPlusRep.setOnClickListener { extraReps += 1; refresh() }
-        btnMinusRep.setOnClickListener { extraReps = max(0, extraReps - 1); refresh() }
+
+        etReps.doAfterTextChanged { text ->
+            val v = parseIntOrNull(text)
+            when {
+                v == null || v < 0 -> {
+                    tilReps.error = getString(R.string.enter_valid_reps) // "Enter valid reps (0+)"
+                }
+                else -> {
+                    tilReps.error = null
+                    extraReps = v
+                }
+            }
+        }
+
+        etReps.setOnEditorActionListener { v, actionId, _ ->
+            if (actionId == EditorInfo.IME_ACTION_DONE) {
+                v.clearFocus()
+                hideKeyboard(v)
+                true
+            } else false
+        }
     }
 
     /* ---------------------------- Pre-start countdown (5s) ---------------------------- */
@@ -152,7 +189,7 @@ class MetconAmrapActivity : AppCompatActivity() {
             }
             override fun onFinish() {
                 preTimer = null
-                if (phase != TimerPhase.PRECOUNT) return // activity finishing, etc.
+                if (phase != TimerPhase.PRECOUNT) return
                 beeper.finalBuzz()
                 startMainCountdown()
             }
@@ -197,7 +234,6 @@ class MetconAmrapActivity : AppCompatActivity() {
         timer?.cancel(); timer = null
         phase = TimerPhase.IDLE
         btnStartStop.text = "START"
-        // Keep remainingMs as-is; no reseed until reset.
     }
 
     private fun resetAll() {
@@ -208,6 +244,10 @@ class MetconAmrapActivity : AppCompatActivity() {
         lastWarnSecond = -1
         remainingMs = durationSeconds * 1000L
         updateTimer()
+        // Reset inputs to 0 for clarity
+        rounds = 0; extraReps = 0
+        etRounds.setText("0"); etReps.setText("0")
+        tilRounds.error = null; tilReps.error = null
     }
 
     private fun updateTimer() {
@@ -239,6 +279,14 @@ class MetconAmrapActivity : AppCompatActivity() {
             Toast.makeText(this, "Please select RX or Scaled.", Toast.LENGTH_SHORT).show()
             return
         }
+
+        // Validate numbers before logging
+        val valid = (rounds >= 0 && extraReps >= 0)
+        if (!valid) {
+            Toast.makeText(this, "Enter valid rounds/reps (0+).", Toast.LENGTH_SHORT).show()
+            return
+        }
+
         lifecycleScope.launch {
             vm.logMetconAmrap(
                 day = dayIndex,
@@ -256,6 +304,11 @@ class MetconAmrapActivity : AppCompatActivity() {
             ).show()
             finish()
         }
+    }
+
+    private fun hideKeyboard(view: View) {
+        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        imm.hideSoftInputFromWindow(view.windowToken, 0)
     }
 
     override fun onDestroy() {
