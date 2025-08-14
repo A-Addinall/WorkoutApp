@@ -15,7 +15,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 @Database(
-    version = 3,
+    version = 5, // bumped from 4 -> 5
     entities = [
         Exercise::class,
         ProgramSelection::class,
@@ -23,10 +23,12 @@ import kotlinx.coroutines.launch
         SetLog::class,
         PersonalRecord::class,
         UserSettings::class,
-        // NEW metcon library:
+        // Metcon library:
         MetconPlan::class,
         MetconComponent::class,
-        ProgramMetconSelection::class
+        ProgramMetconSelection::class,
+        // NEW: plan-scoped metcon results
+        MetconLog::class
     ]
 )
 @TypeConverters(Converters::class)
@@ -37,7 +39,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun personalRecordDao(): PersonalRecordDao
     abstract fun exerciseDao(): ExerciseDao
 
-    // NEW
+    // Metcon
     abstract fun metconDao(): MetconDao
 
     companion object {
@@ -50,19 +52,16 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "safitness.db"
                 )
-                    .fallbackToDestructiveMigration() // dev-friendly
+                    .fallbackToDestructiveMigration() // dev-friendly while schema is evolving
                     .addCallback(object : Callback() {
                         override fun onCreate(dbObj: SupportSQLiteDatabase) {
                             super.onCreate(dbObj)
                             CoroutineScope(Dispatchers.IO).launch {
                                 val db = get(context)
 
-                                // Seed exercises if empty
                                 if (db.libraryDao().countExercises() == 0) {
                                     db.libraryDao().insertAll(ExerciseSeed.DEFAULT_EXERCISES)
                                 }
-
-                                // Seed metcon plans/components if empty
                                 if (db.metconDao().countPlans() == 0) {
                                     MetconSeed.seed(db)
                                 }

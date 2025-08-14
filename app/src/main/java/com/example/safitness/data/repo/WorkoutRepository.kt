@@ -6,8 +6,7 @@ import com.example.safitness.core.WorkoutType
 import com.example.safitness.data.dao.*
 import com.example.safitness.data.entities.*
 import kotlinx.coroutines.flow.Flow
-import com.example.safitness.data.dao.SelectionWithPlanAndComponents
-import com.example.safitness.data.dao.PlanWithComponents
+
 
 class WorkoutRepository(
     private val libraryDao: LibraryDao,
@@ -203,4 +202,74 @@ class WorkoutRepository(
     suspend fun setMetconOrder(day: Int, planId: Long, orderInDay: Int) =
         metconDao.setDisplayOrder(day, planId, orderInDay)
 
+
+    /** Observe the most recent metcon log for a specific plan. */
+    fun lastMetconForPlan(planId: Long): Flow<MetconLog?> =
+        metconDao.lastForPlan(planId)
+
+    /** FOR_TIME: store the actual completion time (seconds) against the plan. */
+    suspend fun logMetconForTime(
+        day: Int,
+        planId: Long,
+        timeSeconds: Int,
+        result: MetconResult
+    ) {
+        val log = MetconLog(
+            dayIndex = day,
+            planId = planId,
+            type = "FOR_TIME",
+            durationSeconds = 0,
+            timeSeconds = timeSeconds,
+            rounds = null,
+            extraReps = null,
+            intervalsCompleted = null,
+            result = result.name
+        )
+        metconDao.insertLog(log)
+    }
+
+    /** AMRAP: store programmed duration + rounds + extra reps. */
+    suspend fun logMetconAmrap(
+        day: Int,
+        planId: Long,
+        durationSeconds: Int,
+        rounds: Int,
+        extraReps: Int,
+        result: MetconResult
+    ) {
+        val log = MetconLog(
+            dayIndex = day,
+            planId = planId,
+            type = "AMRAP",
+            durationSeconds = durationSeconds,
+            timeSeconds = null,
+            rounds = rounds,
+            extraReps = extraReps,
+            intervalsCompleted = null,
+            result = result.name
+        )
+        metconDao.insertLog(log)
+    }
+
+    /** EMOM: store programmed duration (+ optional intervals completed). */
+    suspend fun logMetconEmom(
+        day: Int,
+        planId: Long,
+        durationSeconds: Int,
+        intervalsCompleted: Int?,
+        result: MetconResult
+    ) {
+        val log = MetconLog(
+            dayIndex = day,
+            planId = planId,
+            type = "EMOM",
+            durationSeconds = durationSeconds,
+            timeSeconds = null,
+            rounds = null,
+            extraReps = null,
+            intervalsCompleted = intervalsCompleted,
+            result = result.name
+        )
+        metconDao.insertLog(log)
+    }
 }

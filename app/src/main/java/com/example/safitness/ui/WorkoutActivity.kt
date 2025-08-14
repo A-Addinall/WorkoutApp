@@ -47,7 +47,6 @@ class WorkoutActivity : AppCompatActivity() {
 
         findViewById<ImageView?>(R.id.ivBack)?.setOnClickListener { finish() }
 
-        // Start a session for this day (strength logs attach to it)
         lifecycleScope.launch(Dispatchers.IO) {
             if (sessionId == 0L) {
                 sessionId = Repos.workoutRepository(this@WorkoutActivity).startSession(dayIndex)
@@ -66,19 +65,15 @@ class WorkoutActivity : AppCompatActivity() {
         vm.setDay(dayIndex)
     }
 
-    /** Rebuilds the day screen: Strength (all items), then Metcon plan cards. */
     private fun rebuildWorkoutUi() {
         layoutExercises.removeAllViews()
 
-        // Strength = everything that is NOT metcon
         val strength = lastProgramItems.filter { it.exercise.modality != Modality.METCON }
-
         if (strength.isNotEmpty()) {
             addSectionHeader("Strength")
             strength.forEach { addStrengthCard(it) }
         }
 
-        // One card per selected Metcon plan (plan-based only; legacy removed)
         if (lastMetconSelections.isNotEmpty()) {
             addMetconPlanCards(lastMetconSelections)
         }
@@ -92,8 +87,6 @@ class WorkoutActivity : AppCompatActivity() {
             layoutExercises.addView(emptyView)
         }
     }
-
-    /* ------------------------------ Strength UI ------------------------------ */
 
     private fun addSectionHeader(title: String) {
         val tv = TextView(this).apply {
@@ -118,11 +111,10 @@ class WorkoutActivity : AppCompatActivity() {
 
         val title = TextView(this).apply {
             text = item.exercise.name
-            textSize = 20f                // match metcon title size
+            textSize = 20f
             setTypeface(typeface, Typeface.BOLD)
         }
 
-        // Show only reps from the selection added in the library (targetReps)
         val reps = item.targetReps
         val meta = TextView(this).apply {
             textSize = 14f
@@ -133,8 +125,6 @@ class WorkoutActivity : AppCompatActivity() {
         if (reps != null && reps > 0) card.addView(meta)
 
         card.setOnClickListener {
-            // We still pass equipment etc. to ExerciseDetailActivity to log sets,
-            // but we no longer show those details on the card itself.
             val equip = (item.preferredEquipment ?: item.exercise.primaryEquipment).name
             startActivity(Intent(this, ExerciseDetailActivity::class.java).apply {
                 putExtra("SESSION_ID", sessionId)
@@ -154,14 +144,10 @@ class WorkoutActivity : AppCompatActivity() {
         )
     }
 
-    /* -------------------------- Metcon (plan-based) -------------------------- */
-
-    /** One pretty card per selected Metcon plan (new model only). */
+    /** One pretty card per selected Metcon plan (plan-based). */
     private fun addMetconPlanCards(
         selections: List<SelectionWithPlanAndComponents>
     ) {
-        if (selections.isEmpty()) return
-
         selections.sortedBy { it.selection.displayOrder }.forEach { sel ->
             val card = layoutInflater.inflate(R.layout.item_metcon_plan_card, layoutExercises, false)
 
@@ -183,19 +169,42 @@ class WorkoutActivity : AppCompatActivity() {
                 })
             }
 
-            vm.lastMetconSeconds.observe(this) { sec ->
-                tvLast.text = if (sec != null && sec > 0) {
-                    val m = sec / 60; val s = sec % 60
-                    "Last time: ${m}m ${s}s"
-                } else "No previous time"
+            // NEW: plan-scoped last label varies by metcon type (best-effort by title)
+            vm.lastMetconForPlan(plan.id).observe(this) { last ->
+                tvLast.text = when (last?.type) {
+                    "FOR_TIME" -> {
+                        val sec = last.timeSeconds ?: 0
+                        if (sec > 0) "Last: ${sec / 60}m ${sec % 60}s (${last.result})"
+                        else "No previous result"
+                    }
+                    "AMRAP" -> {
+                        val r = last.rounds ?: 0
+                        val er = last.extraReps ?: 0
+                        if (r + er > 0) "Last: ${r} rds + ${er} reps (${last.result})"
+                        else "No previous result"
+                    }
+                    "EMOM" -> {
+                        val intv = last.intervalsCompleted ?: 0
+                        if (intv > 0) "Last: ${intv} intervals (${last.result})"
+                        else "No previous result"
+                    }
+                    else -> "No previous result"
+                }
             }
 
             card.setOnClickListener {
-                startActivity(Intent(this, MetconActivity::class.java).apply {
+                val title = plan.title.lowercase()
+                val intent = when {
+                    title.contains("amrap") -> Intent(this, MetconAmrapActivity::class.java)
+                    title.contains("emom")  -> Intent(this, MetconEmomActivity::class.java)
+                    else                    -> Intent(this, MetconActivity::class.java) // For Time
+                }.apply {
                     putExtra("DAY_INDEX", dayIndex)
                     putExtra("WORKOUT_NAME", workoutName)
                     putExtra("PLAN_ID", plan.id)
-                })
+                    putExtra("DURATION_MINUTES", plan.durationMinutes)
+                }
+                startActivity(intent)
             }
 
             layoutExercises.addView(card)

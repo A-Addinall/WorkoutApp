@@ -1,4 +1,3 @@
-// app/src/main/java/com/example/safitness/ui/MetconActivity.kt
 package com.example.safitness.ui
 
 import android.os.Bundle
@@ -7,10 +6,12 @@ import android.widget.*
 import android.widget.ImageView
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import com.example.safitness.R
 import com.example.safitness.core.MetconResult
 import com.example.safitness.core.Modality
 import com.example.safitness.data.repo.Repos
+import kotlinx.coroutines.launch
 
 class MetconActivity : AppCompatActivity() {
 
@@ -35,7 +36,7 @@ class MetconActivity : AppCompatActivity() {
     private var cardComponents: LinearLayout? = null
     private var cardLast: TextView? = null
 
-    // Legacy container (when the layout still has a vertical list)
+    // Legacy container (older layout variant)
     private var legacyExercisesContainer: LinearLayout? = null
 
     // Intent args
@@ -59,26 +60,21 @@ class MetconActivity : AppCompatActivity() {
 
         bindViews()
 
-        // Title seeded; will be refined once data arrives
         tvWorkoutTitle.text = "$workoutName – Metcon"
         tvTimer.text = "00:00"
 
         findViewById<ImageView>(R.id.ivBack).setOnClickListener { finish() }
 
-        // Load day context (populates last-metcon labels)
         vm.setDay(dayIndex)
 
-        // If a specific plan was tapped, render *that* plan; otherwise fall back to legacy list.
         if (planId > 0L) {
             vm.planWithComponents(planId).observe(this) { pwc ->
                 val plan = pwc.plan
                 val comps = pwc.components.sortedBy { it.orderInPlan }
 
-                // Header + card title
                 tvWorkoutTitle.text = "$workoutName – ${plan.title}"
                 cardTitle?.text = plan.title
 
-                // Prefer card components if present; otherwise render into legacy list container
                 cardComponents?.let { container ->
                     container.removeAllViews()
                     comps.forEach { c ->
@@ -101,12 +97,23 @@ class MetconActivity : AppCompatActivity() {
                     }
                 }
             }
+
+            // NEW: plan-scoped last result (for-time only)
+            vm.lastMetconForPlan(planId).observe(this) { last ->
+                val label = if (last != null && last.type == "FOR_TIME" && (last.timeSeconds ?: 0) > 0) {
+                    val sec = last.timeSeconds!!
+                    val m = sec / 60; val s = sec % 60
+                    val tag = last.result
+                    "Last time: ${m}m ${s}s ($tag)"
+                } else "No previous time"
+                tvLastTime.text = label
+                cardLast?.text = label
+            }
+
         } else {
-            // Legacy fallback: render all metcon exercises for the day
+            // Legacy fallback (day-scoped). Prefer to avoid this path in new UI.
             vm.programForDay.observe(this) { items ->
                 val metconItems = items.filter { it.exercise.modality == Modality.METCON }
-
-                // If we’ve got the card, use it; otherwise use the legacy list container.
                 if (cardComponents != null) {
                     cardTitle?.text = "Metcon"
                     cardComponents!!.removeAllViews()
@@ -126,7 +133,6 @@ class MetconActivity : AppCompatActivity() {
                         }
                     }
                 } else {
-                    // Legacy list container path
                     legacyExercisesContainer?.let { container ->
                         container.removeAllViews()
                         if (metconItems.isEmpty()) {
@@ -153,25 +159,12 @@ class MetconActivity : AppCompatActivity() {
             }
         }
 
-        // Last metcon time (+ RX/Scaled tag if present) — mirror into card footer if available
-        vm.lastMetcon.observe(this) { sum ->
-            val label = if (sum != null && sum.timeSeconds > 0) {
-                val m = sum.timeSeconds / 60
-                val s = sum.timeSeconds % 60
-                val tag = sum.metconResult?.name ?: ""
-                if (tag.isNotEmpty()) "Last time: ${m}m ${s}s ($tag)" else "Last time: ${m}m ${s}s"
-            } else "No previous time"
-            tvLastTime.text = label
-            cardLast?.text = label
-        }
-
         btnStartStop.setOnClickListener { if (isRunning) stopTimer() else startTimer() }
         btnReset.setOnClickListener { resetTimer() }
         btnComplete.setOnClickListener { completeMetcon() }
     }
 
     private fun bindViews() {
-        // Header + timer + actions
         tvWorkoutTitle = findViewById(R.id.tvWorkoutTitle)
         tvTimer = findViewById(R.id.tvTimer)
         btnStartStop = findViewById(R.id.btnStartStop)
@@ -179,16 +172,13 @@ class MetconActivity : AppCompatActivity() {
         btnComplete = findViewById(R.id.btnComplete)
         tvLastTime = findViewById(R.id.tvLastTime)
 
-        // Toggle
         rbRx = findViewById(R.id.rbRx)
         rbScaled = findViewById(R.id.rbScaled)
 
-        // Prefer the plan card ids if present in the layout…
         cardTitle = findViewById(R.id.tvPlanCardTitle)
         cardComponents = findViewById(R.id.layoutPlanComponents)
         cardLast = findViewById(R.id.tvPlanLastTime)
 
-        // …otherwise fall back to the legacy container id (older layout variant)
         if (cardComponents == null) {
             legacyExercisesContainer = findViewById(R.id.layoutMetconExercises)
         }
@@ -249,15 +239,20 @@ class MetconActivity : AppCompatActivity() {
             return
         }
 
-        // Logs at *day* level in current schema (per-plan logging would require persisting planId)
-        vm.logMetcon(dayIndex, totalSeconds, result)
+        if (planId <= 0L) {
+            Toast.makeText(this, "No plan ID — cannot log plan-scoped time.", Toast.LENGTH_LONG).show()
+            return
+        }
 
-        Toast.makeText(
-            this,
-            "Metcon completed in ${totalSeconds / 60}m ${totalSeconds % 60}s (${result.name})!",
-            Toast.LENGTH_LONG
-        ).show()
-        finish()
+        lifecycleScope.launch {
+            vm.logMetconForTime(dayIndex, planId, totalSeconds, result)
+            Toast.makeText(
+                this@MetconActivity,
+                "Metcon completed in ${totalSeconds / 60}m ${totalSeconds % 60}s (${result.name})!",
+                Toast.LENGTH_LONG
+            ).show()
+            finish()
+        }
     }
 
     override fun onDestroy() {
