@@ -7,6 +7,8 @@ import com.example.safitness.data.dao.ExerciseWithSelection
 import com.example.safitness.data.dao.MetconSummary
 import com.example.safitness.data.repo.WorkoutRepository
 import kotlinx.coroutines.launch
+import com.example.safitness.data.dao.SelectionWithPlanAndComponents
+import androidx.lifecycle.asLiveData
 
 class WorkoutViewModel(private val repo: WorkoutRepository) : ViewModel() {
 
@@ -18,6 +20,12 @@ class WorkoutViewModel(private val repo: WorkoutRepository) : ViewModel() {
     private val _lastMetcon = MutableLiveData<MetconSummary?>()
     val lastMetcon: LiveData<MetconSummary?> = _lastMetcon
 
+    val metconsForDay: LiveData<List<SelectionWithPlanAndComponents>> =
+        dayLive.switchMap { day -> repo.metconsForDay(day).asLiveData() }
+
+    // ADD: seconds-only summary for last metcon (used by WorkoutActivity plan card)
+    private val _lastMetconSeconds = MutableLiveData(0)
+    val lastMetconSeconds: LiveData<Int> = _lastMetconSeconds
     fun setDay(day: Int) {
         dayLive.value = day
         viewModelScope.launch {
@@ -63,4 +71,6 @@ class WorkoutViewModel(private val repo: WorkoutRepository) : ViewModel() {
         equipment: Equipment,
         reps: Int?
     ) = repo.getSuggestedWeight(exerciseId, equipment, reps)
+
+
 }

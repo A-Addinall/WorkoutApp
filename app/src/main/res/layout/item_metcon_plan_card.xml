@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/metconPlanCardRoot"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/bg_metcon_card"
+    android:padding="16dp">
+
+    <!-- Big title inside card -->
+    <TextView
+        android:id="@+id/tvPlanCardTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Metcon Circuit"
+        android:textStyle="bold"
+        android:textSize="20sp"
+        android:textColor="@android:color/white"/>
+
+    <!-- Components container -->
+    <LinearLayout
+        android:id="@+id/layoutPlanComponents"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:layout_marginTop="12dp"/>
+
+    <!-- Last time -->
+    <TextView
+        android:id="@+id/tvPlanLastTime"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="No previous time"
+        android:textSize="14sp"
+        android:textColor="#CFCFCF"
+        android:layout_marginTop="12dp"/>
+</LinearLayout>
