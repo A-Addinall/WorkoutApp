@@ -15,4 +15,5 @@ class Converters {
 
     @TypeConverter fun toMetconType(value: String?): MetconType? = value?.let { MetconType.valueOf(it) }
     @TypeConverter fun fromMetconType(v: MetconType?): String? = v?.name
+
 }
