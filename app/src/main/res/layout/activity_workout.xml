@@ -2,8 +2,7 @@
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:background="@color/white">
+    android:layout_height="match_parent">
 
     <!-- Header -->
     <LinearLayout
@@ -23,7 +22,7 @@
             android:layout_height="24dp"
             android:src="@drawable/ic_arrow_back"
             android:contentDescription="@string/back"
-            app:tint="@color/purple_500" />
+            app:tint="?attr/colorOnSurface" />
 
         <TextView
             android:id="@+id/tvWorkoutTitle"
@@ -33,11 +32,10 @@
             android:text="Workout"
             android:textSize="20sp"
             android:textStyle="bold"
-            android:textColor="@color/purple_700"
+            android:textColor="?attr/colorOnSurface"
             android:gravity="center"
             android:layout_marginStart="16dp"
             android:layout_marginEnd="40dp" />
-
     </LinearLayout>
 
     <ScrollView
@@ -48,14 +46,13 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
+        <!-- Content area: no forced background; cards inside provide the white surfaces -->
         <LinearLayout
             android:id="@+id/layoutExercises"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="16dp"
-            android:background="@color/white" />
-
+            android:padding="16dp" />
     </ScrollView>
 
 </androidx.constraintlayout.widget.ConstraintLayout>
