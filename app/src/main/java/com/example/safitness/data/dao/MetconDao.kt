@@ -4,6 +4,7 @@ import androidx.room.*
 import com.example.safitness.data.entities.MetconComponent
 import com.example.safitness.data.entities.MetconPlan
 import com.example.safitness.data.entities.ProgramMetconSelection
+import com.example.safitness.data.entities.MetconLog   // <-- added
 import kotlinx.coroutines.flow.Flow
 
 /* -- Relations for convenient reads -- */
@@ -78,4 +79,25 @@ interface MetconDao {
         WHERE dayIndex = :day AND planId = :planId
     """)
     suspend fun setDisplayOrder(day: Int, planId: Long, orderInDay: Int)
+
+    /* ----- NEW: Plan-scoped metcon logs ----- */
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertLog(log: MetconLog): Long
+
+    @Query("""
+        SELECT * FROM metcon_log
+        WHERE planId = :planId
+        ORDER BY createdAt DESC
+        LIMIT 1
+    """)
+    fun lastForPlan(planId: Long): Flow<MetconLog?>
+
+    @Query("""
+        SELECT * FROM metcon_log
+        WHERE dayIndex = :day
+        ORDER BY createdAt DESC
+        LIMIT 1
+    """)
+    fun lastForDay(day: Int): Flow<MetconLog?>
 }

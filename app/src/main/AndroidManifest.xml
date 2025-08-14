@@ -17,6 +17,8 @@
         <activity android:name=".ui.PersonalRecordsActivity" android:exported="false"/>
         <activity android:name=".ui.ExerciseLibraryActivity" android:exported="false"/>
         <activity android:name=".ui.MetconActivity" android:exported="false"/>
+        <activity android:name=".ui.MetconAmrapActivity" />
+        <activity android:name=".ui.MetconEmomActivity" />
 
         <activity
             android:name=".ui.MainActivity"

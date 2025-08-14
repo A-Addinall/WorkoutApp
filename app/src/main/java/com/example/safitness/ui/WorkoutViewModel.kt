@@ -1,45 +1,56 @@
 package com.example.safitness.ui
 
-import androidx.lifecycle.*
+import androidx.lifecycle.LiveData
+import androidx.lifecycle.MutableLiveData
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.asLiveData
+import androidx.lifecycle.switchMap
+import androidx.lifecycle.viewModelScope
 import com.example.safitness.core.Equipment
 import com.example.safitness.core.MetconResult
 import com.example.safitness.data.dao.ExerciseWithSelection
 import com.example.safitness.data.dao.MetconSummary
-import com.example.safitness.data.repo.WorkoutRepository
-import kotlinx.coroutines.launch
-import com.example.safitness.data.dao.SelectionWithPlanAndComponents
-import androidx.lifecycle.asLiveData
 import com.example.safitness.data.dao.PlanWithComponents
-import androidx.lifecycle.LiveData
-import androidx.lifecycle.asLiveData
+import com.example.safitness.data.dao.SelectionWithPlanAndComponents
+import com.example.safitness.data.entities.MetconLog
+import com.example.safitness.data.repo.WorkoutRepository
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.launch
 
 class WorkoutViewModel(private val repo: WorkoutRepository) : ViewModel() {
 
     private val dayLive = MutableLiveData<Int>()
 
+    /** Strength (non-metcon) programme entries for the selected day. */
     val programForDay: LiveData<List<ExerciseWithSelection>> =
         dayLive.switchMap { day -> repo.programForDay(day).asLiveData() }
 
+    /** Legacy day-scoped last metcon summary (kept for compatibility). */
     private val _lastMetcon = MutableLiveData<MetconSummary?>()
     val lastMetcon: LiveData<MetconSummary?> = _lastMetcon
 
+    /** Metcon plan selections for the selected day. */
     val metconsForDay: LiveData<List<SelectionWithPlanAndComponents>> =
         dayLive.switchMap { day -> repo.metconsForDay(day).asLiveData() }
 
+    /** Load a specific metcon plan with its components. */
     fun planWithComponents(planId: Long): LiveData<PlanWithComponents> =
         repo.planWithComponents(planId).asLiveData()
 
-    // ADD: seconds-only summary for last metcon (used by WorkoutActivity plan card)
+    /** Legacy seconds-only label (day-scoped), used by some existing UI. */
     private val _lastMetconSeconds = MutableLiveData(0)
     val lastMetconSeconds: LiveData<Int> = _lastMetconSeconds
+
     fun setDay(day: Int) {
         dayLive.value = day
         viewModelScope.launch {
+            // legacy day-scoped summaries
             _lastMetcon.value = repo.lastMetconForDay(day)
-            _lastMetconSeconds.value = repo.lastMetconSecondsForDay(day) // ADD
+            _lastMetconSeconds.value = repo.lastMetconSecondsForDay(day)
         }
     }
+
+    /* ----------------------------- Strength logging ----------------------------- */
 
     fun logStrengthSet(
         sessionId: Long,
@@ -65,37 +76,65 @@ class WorkoutViewModel(private val repo: WorkoutRepository) : ViewModel() {
         )
     }
 
+    /* ----------------------------- Legacy metcon (day-scoped) ----------------------------- */
+
     fun logMetcon(day: Int, seconds: Int, result: MetconResult) = viewModelScope.launch {
+        // kept for old For-Time path; new screens use the plan-scoped methods below
         repo.logMetcon(day, seconds, result)
         _lastMetcon.value = repo.lastMetconForDay(day)
     }
 
-    // Legacy helpers used by ExerciseDetailActivity
-    suspend fun getLastSuccessfulWeight(exerciseId: Long, equipment: Equipment, reps: Int?) =
-        repo.getLastSuccessfulWeight(exerciseId, equipment, reps)
+    /* ----------------------------- NEW: plan-scoped metcon API ----------------------------- */
 
-    suspend fun getSuggestedWeight(
-        exerciseId: Long,
-        equipment: Equipment,
-        reps: Int?
-    ) = repo.getSuggestedWeight(exerciseId, equipment, reps)
+    /** Observe the most recent metcon log for a specific plan (FOR_TIME / AMRAP / EMOM). */
+    fun lastMetconForPlan(planId: Long): LiveData<MetconLog?> =
+        repo.lastMetconForPlan(planId).asLiveData()
 
+    /** FOR_TIME: store the actual completion time (seconds) against the plan. */
+    fun logMetconForTime(day: Int, planId: Long, timeSeconds: Int, result: MetconResult) =
+        viewModelScope.launch {
+            repo.logMetconForTime(day, planId, timeSeconds, result)
+        }
+
+    /** AMRAP: store programmed duration + rounds + extra reps. */
+    fun logMetconAmrap(
+        day: Int,
+        planId: Long,
+        durationSeconds: Int,
+        rounds: Int,
+        extraReps: Int,
+        result: MetconResult
+    ) = viewModelScope.launch {
+        repo.logMetconAmrap(day, planId, durationSeconds, rounds, extraReps, result)
+    }
+
+    /** EMOM: store programmed duration (+ optional intervals completed). */
+    fun logMetconEmom(
+        day: Int,
+        planId: Long,
+        durationSeconds: Int,
+        intervalsCompleted: Int?,
+        result: MetconResult
+    ) = viewModelScope.launch {
+        repo.logMetconEmom(day, planId, durationSeconds, intervalsCompleted, result)
+    }
+
+    /* ----------------------------- Day summary label ----------------------------- */
 
     data class DaySummary(val subtitle: String)
 
     fun daySummary(day: Int): LiveData<DaySummary> {
-        // programForDay → strength items (metcon is stored separately)
+        // programForDay → strength items (metcon plans are stored separately)
         val strengthFlow = repo.programForDay(day) // Flow<List<ExerciseWithSelection>>
         val metconFlow = repo.metconsForDay(day)   // Flow<List<SelectionWithPlanAndComponents>>
 
         return combine(strengthFlow, metconFlow) { program, metcons ->
             val hasMetcon = metcons.isNotEmpty()
 
-            // Only consider non-metcon exercises for the strength category summary
             val strengthCats = program
                 .filter { it.exercise.modality != com.example.safitness.core.Modality.METCON }
-                .filter { it.required } // if you prefer to reflect only the required focus
-                .map { it.exercise.workoutType } // e.g. PUSH, PULL, LEGS_CORE
+                .filter { it.required }
+                .map { it.exercise.workoutType }
                 .map(::mapWorkoutTypeToLabel)
                 .distinct()
 
@@ -105,7 +144,6 @@ class WorkoutViewModel(private val repo: WorkoutRepository) : ViewModel() {
                 strengthCats.size == 1 && !hasMetcon -> strengthCats.first()
                 strengthCats.size == 1 && hasMetcon -> "${strengthCats.first()} + Metcon"
                 else -> {
-                    // Mixed strength day; show the top 2 to keep it readable
                     val mixed = strengthCats.take(2).joinToString(" · ")
                     if (hasMetcon) "Mixed ($mixed) + Metcon" else "Mixed ($mixed)"
                 }
@@ -119,9 +157,15 @@ class WorkoutViewModel(private val repo: WorkoutRepository) : ViewModel() {
         com.example.safitness.core.WorkoutType.PUSH -> "Push"
         com.example.safitness.core.WorkoutType.PULL -> "Pull"
         com.example.safitness.core.WorkoutType.LEGS_CORE -> "Legs & Core"
-        // Fall back for any future/other types:
         else -> t.name.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }
     }
 
+    /* ----------------------------- Strength heuristics ----------------------------- */
 
+    // Legacy helpers consumed by ExerciseDetailActivity
+    suspend fun getLastSuccessfulWeight(exerciseId: Long, equipment: Equipment, reps: Int?) =
+        repo.getLastSuccessfulWeight(exerciseId, equipment, reps)
+
+    suspend fun getSuggestedWeight(exerciseId: Long, equipment: Equipment, reps: Int?) =
+        repo.getSuggestedWeight(exerciseId, equipment, reps)
 }
