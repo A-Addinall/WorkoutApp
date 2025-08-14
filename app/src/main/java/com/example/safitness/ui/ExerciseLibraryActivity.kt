@@ -7,10 +7,13 @@ import android.widget.*
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.example.safitness.R
 import com.example.safitness.core.Equipment
 import com.example.safitness.core.WorkoutType
 import com.example.safitness.data.entities.Exercise
+import com.example.safitness.data.entities.MetconPlan
 import com.example.safitness.data.repo.Repos
 import kotlinx.coroutines.launch
 
@@ -29,11 +32,20 @@ class ExerciseLibraryActivity : AppCompatActivity() {
     private lateinit var emptyText: TextView
     private lateinit var btnClearFilters: Button
 
+    // NEW: toggle + metcon RecyclerView
+    private lateinit var radioExercises: RadioButton
+    private lateinit var radioMetcons: RadioButton
+    private lateinit var rvMetconPlans: RecyclerView
+    private lateinit var metconAdapter: MetconPlanAdapter
+
     private val repChoices = listOf(3, 5, 8, 10, 12, 15)
     private val repLabels = repChoices.map { "$it reps" } + "—"
     private val currentReps = mutableMapOf<Long, Int?>()
     private val addedState = mutableMapOf<Long, Boolean>()
     private val requiredState = mutableMapOf<Long, Boolean>() // ⭐ required state
+
+    // NEW: track plan membership for current day
+    private var metconAddedIds: Set<Long> = emptySet()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -45,6 +57,11 @@ class ExerciseLibraryActivity : AppCompatActivity() {
         listLibrary = findViewById(R.id.listLibrary)
         emptyText = findViewById(R.id.tvEmpty)
         btnClearFilters = findViewById(R.id.btnClearFilters)
+
+        // NEW: hook up toggle + recycler
+        radioExercises = findViewById(R.id.rbExercises)
+        radioMetcons = findViewById(R.id.rbMetcons)
+        rvMetconPlans = findViewById(R.id.rvMetconPlans)
 
         findViewById<ImageView>(R.id.ivBack).setOnClickListener { finish() }
 
@@ -58,14 +75,19 @@ class ExerciseLibraryActivity : AppCompatActivity() {
             arrayOf("Day 1","Day 2","Day 3","Day 4","Day 5"))
         spinnerDay.setSelection(currentDay - 1)
 
-        spinnerType.onItemSelectedListener = objSel { pos ->
-            vm.setTypeFilter(if (pos == 0) null else WorkoutType.valueOf(spinnerType.selectedItem as String))
+        spinnerType.onItemSelectedListener = objSel { _ ->
+            vm.setTypeFilter(if (spinnerType.selectedItem == "All") null
+            else WorkoutType.valueOf(spinnerType.selectedItem as String))
         }
-        spinnerEq.onItemSelectedListener = objSel { pos ->
-            vm.setEqFilter(if (pos == 0) null else Equipment.valueOf(spinnerEq.selectedItem as String))
+        spinnerEq.onItemSelectedListener = objSel { _ ->
+            vm.setEqFilter(if (spinnerEq.selectedItem == "All") null
+            else Equipment.valueOf(spinnerEq.selectedItem as String))
         }
         spinnerDay.onItemSelectedListener = objSel { pos ->
             currentDay = (pos + 1).coerceIn(1, 5)
+            vm.setMetconDay(currentDay) // NEW: update VM day for metcon selections
+            // Refresh exercise row states too
+            refreshExerciseStates()
         }
 
         btnClearFilters.setOnClickListener {
@@ -73,6 +95,7 @@ class ExerciseLibraryActivity : AppCompatActivity() {
             spinnerEq.setSelection(0)
         }
 
+        // EXISTING: exercises list
         vm.exercises.observe(this) { list ->
             if (list.isNullOrEmpty()) {
                 emptyText.visibility = View.VISIBLE
@@ -80,7 +103,6 @@ class ExerciseLibraryActivity : AppCompatActivity() {
                 return@observe
             }
             emptyText.visibility = View.GONE
-
             lifecycleScope.launch {
                 val repo = Repos.workoutRepository(this@ExerciseLibraryActivity)
                 list.forEach { ex ->
@@ -91,6 +113,56 @@ class ExerciseLibraryActivity : AppCompatActivity() {
                 listLibrary.adapter = LibraryAdapter(list)
             }
         }
+
+        // NEW: Metcon plans list + adapter
+        rvMetconPlans.layoutManager = LinearLayoutManager(this)
+        metconAdapter = MetconPlanAdapter(
+            onPrimary = { plan, isAdded ->
+                if (isAdded) {
+                    vm.removeMetconFromDay(currentDay, plan.id)
+                } else {
+                    // default required=true, order = current size
+                    val order = metconAddedIds.size
+                    vm.addMetconToDay(currentDay, plan.id, required = true, order = order)
+                }
+            }
+        )
+        rvMetconPlans.adapter = metconAdapter
+
+        // Observe plans and membership
+        vm.metconPlans.observe(this) { plans ->
+            metconAdapter.submit(plans ?: emptyList(), metconAddedIds)
+        }
+        vm.metconPlanIdsForDay.observe(this) { idSet ->
+            metconAddedIds = idSet ?: emptySet()
+            metconAdapter.updateMembership(metconAddedIds)
+        }
+        vm.setMetconDay(currentDay) // initial
+
+        // Toggle behaviour
+        fun applyMode() {
+            val metcons = radioMetcons.isChecked
+            rvMetconPlans.visibility = if (metcons) View.VISIBLE else View.GONE
+            listLibrary.visibility = if (metcons) View.GONE else View.VISIBLE
+            emptyText.visibility = View.GONE // managed per-mode
+        }
+        radioExercises.setOnCheckedChangeListener { _, _ -> applyMode() }
+        radioMetcons.setOnCheckedChangeListener { _, _ -> applyMode() }
+        radioExercises.isChecked = true
+        radioMetcons.isChecked = false
+        applyMode()
+    }
+
+    private fun refreshExerciseStates() {
+        val adapter = listLibrary.adapter as? LibraryAdapter ?: return
+        lifecycleScope.launch {
+            val repo = Repos.workoutRepository(this@ExerciseLibraryActivity)
+            adapter.items.forEach { ex ->
+                addedState[ex.id] = repo.isInProgram(currentDay, ex.id)
+                requiredState[ex.id] = repo.requiredFor(currentDay, ex.id)
+            }
+            (listLibrary.adapter as BaseAdapter).notifyDataSetChanged()
+        }
     }
 
     private fun objSel(block: (Int) -> Unit) =
@@ -99,7 +171,7 @@ class ExerciseLibraryActivity : AppCompatActivity() {
             override fun onNothingSelected(p: AdapterView<*>?) {}
         }
 
-    private inner class LibraryAdapter(private val items: List<Exercise>) : BaseAdapter() {
+    private inner class LibraryAdapter(val items: List<Exercise>) : BaseAdapter() {
         override fun getCount() = items.size
         override fun getItem(position: Int) = items[position]
         override fun getItemId(position: Int) = items[position].id
@@ -151,9 +223,7 @@ class ExerciseLibraryActivity : AppCompatActivity() {
                     }
                 }
 
-                fun refreshPrimary() {
-                    btnPrimary.text = if (addedState[ex.id] == true) "Remove" else "Add"
-                }
+                fun refreshPrimary() { btnPrimary.text = if (addedState[ex.id] == true) "Remove" else "Add" }
                 fun refreshStar() {
                     val isAdded = addedState[ex.id] == true
                     btnRequired.isEnabled = isAdded

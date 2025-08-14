@@ -9,8 +9,6 @@ data class MetconPlan(
     @PrimaryKey(autoGenerate = true) val id: Long = 0L,
     val title: String,
     val type: MetconType,
-    /** Total minutes for AMRAP/EMOM; null for FOR_TIME. */
-    val durationMinutes: Int? = null,
-    /** EMOM interval seconds (usually 60); null except for EMOM. */
-    val emomIntervalSec: Int? = null
+    val durationMinutes: Int? = null,   // for AMRAP or time-capped plans
+    val emomIntervalSec: Int? = null    // for EMOM
 )

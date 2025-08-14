@@ -7,13 +7,13 @@ import androidx.room.PrimaryKey
 
 @Entity(
     tableName = "metcon_component",
+    indices = [Index("planId")],
     foreignKeys = [ForeignKey(
         entity = MetconPlan::class,
         parentColumns = ["id"],
         childColumns = ["planId"],
         onDelete = ForeignKey.CASCADE
-    )],
-    indices = [Index("planId"), Index(value = ["planId","orderInPlan"])]
+    )]
 )
 data class MetconComponent(
     @PrimaryKey(autoGenerate = true) val id: Long = 0L,

@@ -1,12 +1,15 @@
 package com.example.safitness.data.db
 
 import android.content.Context
-import androidx.room.*
-import androidx.room.migration.Migration
+import androidx.room.Database
+import androidx.room.Room
+import androidx.room.RoomDatabase
+import androidx.room.TypeConverters
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.example.safitness.data.dao.*
 import com.example.safitness.data.entities.*
-import com.example.safitness.data.seed.*
+import com.example.safitness.data.seed.ExerciseSeed
+import com.example.safitness.data.seed.MetconSeed
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -20,7 +23,7 @@ import kotlinx.coroutines.launch
         SetLog::class,
         PersonalRecord::class,
         UserSettings::class,
-        // NEW:
+        // NEW metcon library:
         MetconPlan::class,
         MetconComponent::class,
         ProgramMetconSelection::class
@@ -40,62 +43,28 @@ abstract class AppDatabase : RoomDatabase() {
     companion object {
         @Volatile private var INSTANCE: AppDatabase? = null
 
-        private val MIGRATION_2_3 = object : Migration(2, 3) {
-            override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL("""
-                    CREATE TABLE IF NOT EXISTS metcon_plan (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-                        title TEXT NOT NULL,
-                        type TEXT NOT NULL,
-                        durationMinutes INTEGER,
-                        emomIntervalSec INTEGER
-                    )
-                """.trimIndent())
-                db.execSQL("""
-                    CREATE TABLE IF NOT EXISTS metcon_component (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-                        planId INTEGER NOT NULL,
-                        orderInPlan INTEGER NOT NULL,
-                        text TEXT NOT NULL,
-                        FOREIGN KEY(planId) REFERENCES metcon_plan(id) ON DELETE CASCADE
-                    )
-                """.trimIndent())
-                db.execSQL("CREATE INDEX IF NOT EXISTS index_metcon_component_planId ON metcon_component(planId)")
-                db.execSQL("CREATE INDEX IF NOT EXISTS index_metcon_component_planId_orderInPlan ON metcon_component(planId, orderInPlan)")
-                db.execSQL("""
-                    CREATE TABLE IF NOT EXISTS program_metcon_selection (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-                        dayIndex INTEGER NOT NULL,
-                        planId INTEGER NOT NULL,
-                        required INTEGER NOT NULL,
-                        displayOrder INTEGER NOT NULL,
-                        FOREIGN KEY(planId) REFERENCES metcon_plan(id) ON DELETE CASCADE
-                    )
-                """.trimIndent())
-                db.execSQL("CREATE INDEX IF NOT EXISTS index_program_metcon_selection_dayIndex ON program_metcon_selection(dayIndex)")
-                db.execSQL("CREATE INDEX IF NOT EXISTS index_program_metcon_selection_dayIndex_displayOrder ON program_metcon_selection(dayIndex, displayOrder)")
-            }
-        }
-
-        fun get(context: Context): AppDatabase =
-            INSTANCE ?: synchronized(this) {
+        fun get(context: Context): AppDatabase {
+            return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
                     "safitness.db"
                 )
-                    .addMigrations(MIGRATION_2_3)
-                    .fallbackToDestructiveMigration() // dev-friendly; remove for prod
+                    .fallbackToDestructiveMigration() // dev-friendly
                     .addCallback(object : Callback() {
                         override fun onCreate(dbObj: SupportSQLiteDatabase) {
                             super.onCreate(dbObj)
                             CoroutineScope(Dispatchers.IO).launch {
                                 val db = get(context)
+
+                                // Seed exercises if empty
                                 if (db.libraryDao().countExercises() == 0) {
                                     db.libraryDao().insertAll(ExerciseSeed.DEFAULT_EXERCISES)
                                 }
+
+                                // Seed metcon plans/components if empty
                                 if (db.metconDao().countPlans() == 0) {
-                                    MetconSeed.seedDefaults(db)
+                                    MetconSeed.seed(db)
                                 }
                             }
                         }
@@ -104,5 +73,6 @@ abstract class AppDatabase : RoomDatabase() {
                 INSTANCE = instance
                 instance
             }
+        }
     }
 }

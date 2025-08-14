@@ -4,12 +4,7 @@ import com.example.safitness.core.Equipment
 import com.example.safitness.core.MetconResult
 import com.example.safitness.core.WorkoutType
 import com.example.safitness.data.dao.*
-import com.example.safitness.data.entities.Exercise
-import com.example.safitness.data.entities.MetconPlan
-import com.example.safitness.data.entities.ProgramMetconSelection
-import com.example.safitness.data.entities.ProgramSelection
-import com.example.safitness.data.entities.SetLog
-import com.example.safitness.data.entities.WorkoutSession
+import com.example.safitness.data.entities.*
 import kotlinx.coroutines.flow.Flow
 
 class WorkoutRepository(
@@ -17,10 +12,10 @@ class WorkoutRepository(
     private val programDao: ProgramDao,
     private val sessionDao: SessionDao,
     private val prDao: PersonalRecordDao,
-    private val metconDao: MetconDao
+    private val metconDao: MetconDao // NEW
 ) {
     /* ---------- Library ---------- */
-    fun getExercises(type: WorkoutType?, eq: Equipment?) =
+    fun getExercises(type: com.example.safitness.core.WorkoutType?, eq: com.example.safitness.core.Equipment?) =
         libraryDao.getExercises(type, eq)
 
     suspend fun countExercises() = libraryDao.countExercises()
@@ -30,7 +25,7 @@ class WorkoutRepository(
         day: Int,
         exercise: Exercise,
         required: Boolean,
-        preferred: Equipment?,
+        preferred: com.example.safitness.core.Equipment?,
         targetReps: Int?
     ) = programDao.upsert(
         ProgramSelection(
@@ -125,13 +120,13 @@ class WorkoutRepository(
         )
     )
 
-    // Existing 2-arg API.
     suspend fun logMetcon(day: Int, seconds: Int) {
         val sessionId = startSession(day)
+        val equip = Equipment.BODYWEIGHT // neutral for metcons
         logTimeOnlySet(
             sessionId = sessionId,
-            exerciseId = 0L,
-            equipment = Equipment.BARBELL, // or BODYWEIGHT
+            exerciseId = 0L, // metcon is not an Exercise row
+            equipment = equip,
             setNumber = 1,
             timeSeconds = seconds,
             rpe = null,
@@ -174,32 +169,33 @@ class WorkoutRepository(
         reps: Int?
     ): Double? = getLastSuccessfulWeight(exerciseId, equipment, reps)?.let { it * 1.02 }
 
-    /* ---------- Metcon plans ---------- */
+    /* ---------- Metcon library (plans) ---------- */
+
     fun metconPlans(): Flow<List<MetconPlan>> = metconDao.getAllPlans()
 
-    fun metconsForDay(day: Int): Flow<List<MetconDao.SelectionWithPlanAndComponents>> =
+    fun metconsForDay(day: Int): Flow<List<SelectionWithPlanAndComponents>> =
         metconDao.getMetconsForDay(day)
 
     suspend fun addMetconToDay(
         day: Int,
         planId: Long,
         required: Boolean,
-        displayOrder: Int
+        orderInDay: Int
     ): Long = metconDao.upsertSelection(
         ProgramMetconSelection(
             dayIndex = day,
             planId = planId,
             required = required,
-            displayOrder = displayOrder
+            displayOrder = orderInDay
         )
     )
 
     suspend fun removeMetconFromDay(day: Int, planId: Long) =
         metconDao.removeSelection(day, planId)
 
-    suspend fun setMetconRequired(selectionId: Long, required: Boolean) =
-        metconDao.setRequired(selectionId, required)
+    suspend fun setMetconRequired(day: Int, planId: Long, required: Boolean) =
+        metconDao.setRequired(day, planId, required)
 
-    suspend fun setMetconOrder(selectionId: Long, order: Int) =
-        metconDao.setDisplayOrder(selectionId, order)
+    suspend fun setMetconOrder(day: Int, planId: Long, orderInDay: Int) =
+        metconDao.setDisplayOrder(day, planId, orderInDay)
 }

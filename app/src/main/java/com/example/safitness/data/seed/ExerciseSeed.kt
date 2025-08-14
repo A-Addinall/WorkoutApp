@@ -81,26 +81,6 @@ object ExerciseSeed {
             workoutType = WorkoutType.LEGS_CORE,
             primaryEquipment = Equipment.BODYWEIGHT,
             modality = Modality.STRENGTH
-        ),
-
-        // METCON (time/reps circuits)
-        Exercise(
-            name = "Burpees",
-            workoutType = WorkoutType.METCON,
-            primaryEquipment = Equipment.BODYWEIGHT,
-            modality = Modality.METCON
-        ),
-        Exercise(
-            name = "Kettlebell Swings",
-            workoutType = WorkoutType.METCON,
-            primaryEquipment = Equipment.KETTLEBELL,
-            modality = Modality.METCON
-        ),
-        Exercise(
-            name = "Row and Swing\n3 rounds for time\n* 10 cal row\n* 10 Kettlebell swings",
-            workoutType = WorkoutType.METCON,
-            primaryEquipment = Equipment.MACHINE,
-            modality = Modality.METCON
         )
     )
 
