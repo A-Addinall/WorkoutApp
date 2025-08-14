@@ -2,7 +2,11 @@ package com.example.safitness.ui
 
 import android.os.Bundle
 import android.os.CountDownTimer
-import android.widget.*
+import android.widget.Button
+import android.widget.LinearLayout
+import android.widget.RadioButton
+import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
@@ -39,15 +43,18 @@ class MetconAmrapActivity : AppCompatActivity() {
     private var durationSeconds: Int = 20 * 60
 
     private var timer: CountDownTimer? = null
-    private var isRunning = false
     private var remainingMs = 0L
 
     private var rounds = 0
     private var extraReps = 0
 
-    // NEW: beeper + guard so we don’t double-beep the same second
+    private var preTimer: CountDownTimer? = null
     private val beeper = TimerBeeper()
-    private var lastWarnSecond = -1
+    private var lastWarnSecond = -1 // main countdown 3..1
+
+    private enum class TimerPhase { IDLE, PRECOUNT, RUNNING }
+    private var phase: TimerPhase = TimerPhase.IDLE
+    private var allowReseed = true  // only reseed from LiveData when IDLE
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -65,10 +72,13 @@ class MetconAmrapActivity : AppCompatActivity() {
         vm.planWithComponents(planId).observe(this) { pwc ->
             val mins = (pwc?.plan?.durationMinutes ?: 20).coerceAtLeast(1)
             durationSeconds = mins * 60
-            remainingMs = durationSeconds * 1000L
-            updateTimer()
 
-            // (optional) bind card UI
+            if (allowReseed && phase == TimerPhase.IDLE) {
+                remainingMs = durationSeconds * 1000L
+                updateTimer()
+            }
+
+            // Plan card binding
             findViewById<TextView?>(R.id.tvPlanCardTitle)?.text = pwc?.plan?.title ?: "AMRAP"
             val comps = pwc?.components?.sortedBy { it.orderInPlan }.orEmpty()
             val cont = findViewById<LinearLayout?>(R.id.layoutPlanComponents)
@@ -83,12 +93,19 @@ class MetconAmrapActivity : AppCompatActivity() {
         }
 
         setupScoreControls()
-        btnStartStop.setOnClickListener { if (isRunning) pause() else start() }
-        btnReset.setOnClickListener { reset() }
+
+        btnStartStop.setOnClickListener {
+            when (phase) {
+                TimerPhase.PRECOUNT -> cancelPreCountdown()
+                TimerPhase.RUNNING  -> pause()
+                TimerPhase.IDLE     -> startPreCountdown()
+            }
+        }
+        btnReset.setOnClickListener { resetAll() }
         btnComplete.setOnClickListener { complete() }
     }
 
-    private fun bindViews() { /* unchanged */
+    private fun bindViews() {
         toolbar = findViewById(R.id.toolbar)
         tvTimer = findViewById(R.id.tvTimer)
         btnStartStop = findViewById(R.id.btnStartStop)
@@ -104,8 +121,11 @@ class MetconAmrapActivity : AppCompatActivity() {
         btnMinusRep = findViewById(R.id.btnMinusRep)
     }
 
-    private fun setupScoreControls() { /* unchanged */
-        fun refresh() { tvRounds.text = rounds.toString(); tvReps.text = extraReps.toString() }
+    private fun setupScoreControls() {
+        fun refresh() {
+            tvRounds.text = rounds.toString()
+            tvReps.text = extraReps.toString()
+        }
         refresh()
         btnPlusRound.setOnClickListener { rounds += 1; refresh() }
         btnMinusRound.setOnClickListener { rounds = max(0, rounds - 1); refresh() }
@@ -113,18 +133,57 @@ class MetconAmrapActivity : AppCompatActivity() {
         btnMinusRep.setOnClickListener { extraReps = max(0, extraReps - 1); refresh() }
     }
 
-    private fun start() {
-        if (isRunning || remainingMs <= 0L) return
-        isRunning = true
+    /* ---------------------------- Pre-start countdown (5s) ---------------------------- */
+
+    private fun startPreCountdown() {
+        if (phase != TimerPhase.IDLE) return
+        phase = TimerPhase.PRECOUNT
+        allowReseed = false
+        btnStartStop.text = "CANCEL"
+
+        tvTimer.text = "00:05" // stable priming
+
+        preTimer?.cancel()
+        preTimer = object : CountDownTimer(5_000, 1_000) {
+            override fun onTick(ms: Long) {
+                val secLeft = ((ms + 999) / 1000).toInt() // ceil
+                tvTimer.text = String.format("%02d:%02d", 0, secLeft)
+                beeper.countdownPip()
+            }
+            override fun onFinish() {
+                preTimer = null
+                if (phase != TimerPhase.PRECOUNT) return // activity finishing, etc.
+                beeper.finalBuzz()
+                startMainCountdown()
+            }
+        }.also { it.start() }
+    }
+
+    private fun cancelPreCountdown() {
+        preTimer?.cancel()
+        preTimer = null
+        phase = TimerPhase.IDLE
+        btnStartStop.text = "START"
+        updateTimer()
+    }
+
+    /* ---------------------------- MAIN countdown (AMRAP) ---------------------------- */
+
+    private fun startMainCountdown() {
+        if (phase != TimerPhase.PRECOUNT) return
+        phase = TimerPhase.RUNNING
         btnStartStop.text = "PAUSE"
-        timer = object : CountDownTimer(remainingMs, 1000) {
+
+        timer?.cancel()
+        timer = object : CountDownTimer(remainingMs, 1_000) {
             override fun onTick(ms: Long) {
                 remainingMs = ms
                 updateTimer()
                 maybeBeepCountdown()
             }
             override fun onFinish() {
-                isRunning = false
+                timer = null
+                phase = TimerPhase.IDLE
                 remainingMs = 0L
                 btnStartStop.text = "START"
                 updateTimer()
@@ -135,13 +194,17 @@ class MetconAmrapActivity : AppCompatActivity() {
     }
 
     private fun pause() {
-        timer?.cancel()
-        isRunning = false
+        timer?.cancel(); timer = null
+        phase = TimerPhase.IDLE
         btnStartStop.text = "START"
+        // Keep remainingMs as-is; no reseed until reset.
     }
 
-    private fun reset() {
-        pause()
+    private fun resetAll() {
+        preTimer?.cancel(); preTimer = null
+        timer?.cancel(); timer = null
+        phase = TimerPhase.IDLE
+        allowReseed = true
         lastWarnSecond = -1
         remainingMs = durationSeconds * 1000L
         updateTimer()
@@ -152,8 +215,8 @@ class MetconAmrapActivity : AppCompatActivity() {
         tvTimer.text = String.format("%02d:%02d", total / 60, total % 60)
     }
 
-    /** Beep at 3, 2, 1 seconds remaining (once per second). */
     private fun maybeBeepCountdown() {
+        if (phase != TimerPhase.RUNNING) return
         val secLeft = (remainingMs / 1000).toInt()
         if (secLeft in 1..3 && secLeft != lastWarnSecond) {
             lastWarnSecond = secLeft
@@ -162,13 +225,17 @@ class MetconAmrapActivity : AppCompatActivity() {
     }
 
     private fun complete() {
-        if (isRunning) pause()
+        if (phase == TimerPhase.PRECOUNT) {
+            cancelPreCountdown()
+            Toast.makeText(this, "Countdown cancelled.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (phase == TimerPhase.RUNNING) pause()
         val result = when {
             rbRx.isChecked -> MetconResult.RX
             rbScaled.isChecked -> MetconResult.SCALED
             else -> null
-        }
-        if (result == null) {
+        } ?: run {
             Toast.makeText(this, "Please select RX or Scaled.", Toast.LENGTH_SHORT).show()
             return
         }
@@ -181,15 +248,20 @@ class MetconAmrapActivity : AppCompatActivity() {
                 extraReps = extraReps,
                 result = result
             )
-            beeper.finalBuzz() // feedback on commit
-            Toast.makeText(this@MetconAmrapActivity, "Logged: $rounds rounds + $extraReps reps ($result).", Toast.LENGTH_LONG).show()
+            beeper.finalBuzz()
+            Toast.makeText(
+                this@MetconAmrapActivity,
+                "Logged: $rounds rounds + $extraReps reps ($result).",
+                Toast.LENGTH_LONG
+            ).show()
             finish()
         }
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        timer?.cancel()
+        preTimer?.cancel(); preTimer = null
+        timer?.cancel(); timer = null
         beeper.release()
     }
 }
