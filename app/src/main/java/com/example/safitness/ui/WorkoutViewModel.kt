@@ -41,6 +41,10 @@ class WorkoutViewModel(private val repo: WorkoutRepository) : ViewModel() {
     private val _lastMetconSeconds = MutableLiveData(0)
     val lastMetconSeconds: LiveData<Int> = _lastMetconSeconds
 
+    /** NEW (Phase 1): prefer metcon_log; fallback to legacy summary */
+    val lastMetconDisplay: LiveData<WorkoutRepository.MetconDisplay?> =
+        dayLive.switchMap { day -> repo.lastMetconDisplayForDay(day).asLiveData() }
+
     fun setDay(day: Int) {
         dayLive.value = day
         viewModelScope.launch {

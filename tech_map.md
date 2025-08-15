@@ -82,7 +82,7 @@ Only **one** Room entity should represent the `workout_session` table at a time 
 | File | Responsibility | Key API | Notes |
 |---|---|---|---|
 | `Repos.kt` | Repo factory | `workoutRepository(context)` now wires `planDao()` | — |
-| `WorkoutRepository.kt` | Orchestrates DAOs | **Library**: `getExercises`, `countExercises` • **Program**: `addToDay`, `programForDay` *(prefers Phase model via `PlanDao`, falls back to legacy)*, `setRequired`, `setTargetReps`, `removeFromDay`, `isInProgram`, `selectedTargetReps`, `requiredFor`, `daySummaryLabel` • **Sessions**: `startSession`, `logStrengthSet`, `logTimeOnlySet`, `logMetcon(...)`, `lastMetconSecondsForDay`, `lastMetconForDay` • **Metcon plans**: `metconPlans`, `metconsForDay` *(prefers Phase model)*, `planWithComponents`, `add/remove/setRequired/setOrder` • **Metcon logging**: `logMetconForTime/Amrap/Emom` (writes `MetconLog`) • **Phase helpers**: `getPlanFor`, `getNextPlannedDay`, `attachCalendar(startEpochDay)`, `currentPhaseId` resolution inside `resolveDayPlanIdOrNull(...)` | New Phase 0 bridging logic. |
+| `WorkoutRepository.kt` | Orchestrates DAOs | **Library**: `getExercises`, `countExercises` • **Program**: `addToDay`, `programForDay` *(prefers Phase model via `PlanDao`, falls back to legacy)*, `setRequired`, `setTargetReps`, `removeFromDay`, `isInProgram`, `selectedTargetReps`, `requiredFor`, `daySummaryLabel` • **Sessions**: `startSession`, `logStrengthSet`, `logTimeOnlySet`, `logMetcon(...)`, `lastMetconSecondsForDay`, `lastMetconForDay`, `lastMetconDisplayForDay` • **Metcon plans**: `metconPlans`, `metconsForDay`, `logMetconForTime`, `logMetconAmrap`, `logMetconEmom`, `lastMetconForPlan` *(prefers Phase model)*, `planWithComponents`, `add/remove/setRequired/setOrder` • **Metcon logging**: `logMetconForTime/Amrap/Emom` (writes `MetconLog`) • **Phase helpers**: `getPlanFor`, `getNextPlannedDay`, `attachCalendar(startEpochDay)`, `currentPhaseId` resolution inside `resolveDayPlanIdOrNull(...)` | New Phase 0 bridging logic. |
 
 ### 2.6 data/seed/
 | File | Responsibility | Notes |
@@ -90,7 +90,7 @@ Only **one** Room entity should represent the `workout_session` table at a time 
 | `ExerciseSeed.kt` | Insert/update default `Exercise` rows. | Called from app scope on startup. |
 | `MetconSeed.kt` | Insert/update example metcon plans/components. | Called from app scope on startup and DB `onOpen`. |
 | **`DatabaseSeeder.kt`** | Create a default Phase + Week/Day scaffold if empty. | Idempotent; 4 weeks × days 1..5. |
-| **`DevPhaseSeed_dev.kt`** | DEV‑only: create a phase/weeks; mirror legacy selections into `day_item` or create defaults. | Idempotent; used in `WorkoutApp`. |
+| **`DevPhaseSeed_dev.kt`** | DEV‑only: create a phase/weeks; mirror legacy selections into `day_item`, top-up missing with defaults, fill empty days with placeholder metcons. | Idempotent; used in `WorkoutApp`. |
 
 ### 2.7 ui/ (unchanged APIs, but data source prefers Phase model)
 | Screen | Notes |
