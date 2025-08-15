@@ -149,4 +149,8 @@ interface MetconDao {
     """)
     suspend fun deleteComponentsNotIn(planId: Long, validOrders: List<Int>)
 
+    // NEW helper at the end of MetconDao.kt
+    @Query("SELECT id FROM metcon_plan ORDER BY id ASC LIMIT 1")
+    suspend fun firstPlanId(): Long?
+
 }
