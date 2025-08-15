@@ -3,7 +3,10 @@ package com.example.safitness.data.seed
 import android.os.Build
 import android.util.Log
 import androidx.annotation.RequiresApi
-import com.example.safitness.data.dao.*
+import com.example.safitness.data.dao.LibraryDao
+import com.example.safitness.data.dao.MetconDao
+import com.example.safitness.data.dao.PlanDao
+import com.example.safitness.data.dao.ProgramDao
 import com.example.safitness.data.db.AppDatabase
 import com.example.safitness.data.entities.DayItemEntity
 import com.example.safitness.data.entities.PhaseEntity
@@ -13,15 +16,17 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
 
+
 /**
  * DEV-ONLY: Ensure a usable plan exists in the new model.
  *
  * Behavior:
- * - If no phase/plans exist → create Phase "Dev Test Phase" + Week 1..2 (days 1..5)
- * - For Week 1 Day 1..5: if there are NO items yet → mirror legacy selections
- *   - If legacy is empty too → create minimal defaults (2 exercises + 1 metcon)
+ * - If no phase/plans exist → create Phase "Dev Test Phase" + Week 1..2 (days 1..5).
+ * - For Week 1 Day 1..5:
+ *      • If NO items → mirror legacy selections; if legacy empty → add minimal defaults.
+ *      • If items EXIST → top-up metcons to a max of 3 by adding non-duplicate plans.
  *
- * Idempotent: never duplicates items; only fills when empty.
+ * Idempotent: never duplicates items; only fills gaps.
  */
 object DevPhaseSeed_dev {
 
@@ -69,82 +74,129 @@ object DevPhaseSeed_dev {
             }
         }
 
-        // 3) For Week 1 Day 1..5: if empty, populate (mirror or defaults)
+        // 3) Populate Week 1 Day 1..5
         val allExercises = libraryDao.getExercises(null, null).first() // existing flow API
         val allPlans = metconDao.getAllPlans().first()
 
         for (day in 1..5) {
             val dayPlanId = planDao.getPlanId(phaseId, 1, day) ?: continue
-            val existingCount = planDao.countItemsForDay(dayPlanId)
-            if (existingCount > 0) {
-                Log.d(TAG, "Week 1 Day $day already has $existingCount items; skipping")
-                continue
-            }
 
-            // Try to mirror legacy first
-            val legacyStrength = programDao.getProgramForDay(day).first() // List<ExerciseWithSelection>
-            val legacyMetcons = metconDao.getMetconsForDay(day).first()   // List<SelectionWithPlanAndComponents>
+            val hasAnyItems = planDao.countItemsForDay(dayPlanId) > 0
+            val toInsert = mutableListOf<DayItemEntity>()
 
-            val items = mutableListOf<DayItemEntity>()
-            if (legacyStrength.isNotEmpty() || legacyMetcons.isNotEmpty()) {
-                legacyStrength.forEachIndexed { idx, exWithSel ->
-                    items.add(
-                        DayItemEntity(
-                            dayPlanId = dayPlanId,
-                            itemType = "STRENGTH",
-                            refId = exWithSel.exercise.id,
-                            required = exWithSel.required,
-                            sortOrder = idx,
-                            targetReps = exWithSel.targetReps,
-                            prescriptionJson = null
+            if (!hasAnyItems) {
+                // Try to mirror legacy first
+                val legacyStrength = programDao.getProgramForDay(day).first() // List<ExerciseWithSelection>
+                val legacyMetcons = metconDao.getMetconsForDay(day).first()   // List<SelectionWithPlanAndComponents>
+
+                if (legacyStrength.isNotEmpty() || legacyMetcons.isNotEmpty()) {
+                    // Mirror strength
+                    legacyStrength.forEachIndexed { idx, exWithSel ->
+                        toInsert.add(
+                            DayItemEntity(
+                                dayPlanId = dayPlanId,
+                                itemType = "STRENGTH",
+                                refId = exWithSel.exercise.id,
+                                required = exWithSel.required,
+                                sortOrder = idx,
+                                targetReps = exWithSel.targetReps,
+                                prescriptionJson = null
+                            )
                         )
-                    )
-                }
-                legacyMetcons.forEachIndexed { idx, selWithPlan ->
-                    items.add(
-                        DayItemEntity(
-                            dayPlanId = dayPlanId,
-                            itemType = "METCON",
-                            refId = selWithPlan.selection.planId,
-                            required = selWithPlan.selection.required,
-                            sortOrder = 100 + idx
+                    }
+                    // Mirror metcons
+                    legacyMetcons.forEachIndexed { idx, selWithPlan ->
+                        toInsert.add(
+                            DayItemEntity(
+                                dayPlanId = dayPlanId,
+                                itemType = "METCON",
+                                refId = selWithPlan.selection.planId,
+                                required = selWithPlan.selection.required,
+                                sortOrder = 100 + idx
+                            )
                         )
-                    )
+                    }
+
+                    // Top-up metcons to max 3 (without duplicates)
+                    val usedPlanIds = legacyMetcons.map { it.selection.planId }.toSet()
+                    val extraNeeded = (3 - usedPlanIds.size).coerceAtLeast(0)
+                    if (extraNeeded > 0) {
+                        val startOrder = 100 + legacyMetcons.size
+                        val extras = allPlans.filter { it.id !in usedPlanIds }.take(extraNeeded)
+                        extras.forEachIndexed { i, p ->
+                            toInsert.add(
+                                DayItemEntity(
+                                    dayPlanId = dayPlanId,
+                                    itemType = "METCON",
+                                    refId = p.id,
+                                    required = true,
+                                    sortOrder = startOrder + i
+                                )
+                            )
+                        }
+                    }
+
+                    Log.d(TAG, "Mirrored legacy for W1D$day → +${toInsert.size} items")
+                } else {
+                    // Minimal defaults: first 2 exercises + up to 3 metcon plans
+                    val chosenExercises = allExercises.take(2)
+                    chosenExercises.forEachIndexed { idx, ex ->
+                        toInsert.add(
+                            DayItemEntity(
+                                dayPlanId = dayPlanId,
+                                itemType = "STRENGTH",
+                                refId = ex.id,
+                                required = true,
+                                sortOrder = idx,
+                                targetReps = 5,
+                                prescriptionJson = null
+                            )
+                        )
+                    }
+                    val metconCount = allPlans.size.coerceAtMost(3)
+                    allPlans.take(metconCount).forEachIndexed { i, p ->
+                        toInsert.add(
+                            DayItemEntity(
+                                dayPlanId = dayPlanId,
+                                itemType = "METCON",
+                                refId = p.id,
+                                required = true,
+                                sortOrder = 100 + i
+                            )
+                        )
+                    }
+                    Log.d(TAG, "Defaulted W1D$day → +${toInsert.size} items")
                 }
-                Log.d(TAG, "Mirrored legacy for Week 1 Day $day → ${items.size} items")
             } else {
-                // Minimal defaults: first 2 exercises + first metcon plan (if available)
-                val chosenExercises = allExercises.take(2)
-                chosenExercises.forEachIndexed { idx, ex ->
-                    items.add(
-                        DayItemEntity(
-                            dayPlanId = dayPlanId,
-                            itemType = "STRENGTH",
-                            refId = ex.id,
-                            required = true,
-                            sortOrder = idx,
-                            targetReps = 5,
-                            prescriptionJson = null
+                // Already has items → only top-up metcons to a max of 3
+                // Use existing PlanDao flow to read current metcon selections (no new DAO)
+                val existingMetcons = planDao.flowDayMetconsFor(dayPlanId).first()
+                val usedPlanIds = existingMetcons.map { it.planId }.toSet()
+                val extraNeeded = (3 - existingMetcons.size).coerceAtLeast(0)
+
+                if (extraNeeded > 0) {
+                    val startOrder = (existingMetcons.maxOfOrNull { it.sortOrder } ?: 99) + 1
+                    val extras = allPlans.filter { it.id !in usedPlanIds }.take(extraNeeded)
+                    extras.forEachIndexed { i, p ->
+                        toInsert.add(
+                            DayItemEntity(
+                                dayPlanId = dayPlanId,
+                                itemType = "METCON",
+                                refId = p.id,
+                                required = true,
+                                sortOrder = startOrder + i
+                            )
                         )
-                    )
+                    }
+                    Log.d(TAG, "Top-up W1D$day → added ${toInsert.size} metcon(s)")
+                } else {
+                    Log.d(TAG, "W1D$day already has ${existingMetcons.size} metcons; no top-up")
                 }
-                allPlans.firstOrNull()?.let { p ->
-                    items.add(
-                        DayItemEntity(
-                            dayPlanId = dayPlanId,
-                            itemType = "METCON",
-                            refId = p.id,
-                            required = true,
-                            sortOrder = 100
-                        )
-                    )
-                }
-                Log.d(TAG, "Defaulted Week 1 Day $day → ${items.size} items")
             }
 
-            if (items.isNotEmpty()) {
-                planDao.insertItems(items)
-                Log.d(TAG, "Inserted ${items.size} items for Week 1 Day $day")
+            if (toInsert.isNotEmpty()) {
+                planDao.insertItems(toInsert)
+                Log.d(TAG, "Inserted ${toInsert.size} items for W1D$day")
             }
         }
 
