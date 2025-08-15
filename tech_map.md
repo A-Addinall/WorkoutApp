@@ -48,6 +48,8 @@ com.example.safitness
 | `MetconDao.kt` | Metcon library + logs | Plans: `getAllPlans()`, `getPlanWithComponents(planId)`; Day (legacy): `getMetconsForDay(day)`; Select: `upsertSelection/removeSelection/setRequired/setDisplayOrder`; Logs: `insertLog`, `lastForPlan`, `lastForDay`; Seed helpers: `insertPlansIgnore`, `getPlanIdByTitle/key`, `updatePlanByKey`, `insertComponentsIgnore`, `updateComponentText`, `deleteAllComponentsForPlan`, `deleteComponentsNotIn`; Misc: `firstPlanId()` | DTOs: `PlanWithComponents`, `SelectionWithPlanAndComponents`. |
 | **`PlanDao.kt`** | **Phase 0 planning model** | Phase: `insertPhase`, `countPhases`, `currentPhaseId`; Week/Day plans: `insertWeekPlans`, `countPlans`, `getPlan(...)`, `getPlanId(...)`, `getPlanById`, `getPlansForPhaseOrdered`, `getNextAfter`; Day items: `insertItems`, `clearItems`, `countItemsForDay`, `flowDayStrengthFor(dayPlanId)`, `flowDayMetconsFor(dayPlanId)`; Calendar: `updatePlanDate` | New. |
 | **`WorkoutSessionDao.kt`** | Phase-aware sessions (WIP) | `insert`, `getById` | Uses `WorkoutSessionEntity` (phase/week/day indexes). |
+### MetconDao helper clarification
+*Optional:* `firstPlanId()` is **not required** for the current dev seed. The seed reads from `getAllPlans()`; include `firstPlanId()` only if you prefer a direct ID helper.
 
 ### 2.3 data/db/
 | File | Responsibility | Key Settings | Notes |
@@ -72,6 +74,9 @@ com.example.safitness
 | **`PhaseEntity.kt`** | `phase` | `id`, `name`, `startDateEpochDay`, `weeks` | New. |
 | **`WeekDayPlanEntity.kt`** | `week_day_plan` | `id`, `phaseId`, `weekIndex`, `dayIndex`, `displayName?`, `dateEpochDay?` | New; unique `(phaseId, weekIndex, dayIndex)`. |
 | **`DayItemEntity.kt`** | `day_item` | `id`, `dayPlanId(FK)`, `itemType` (`STRENGTH`/`METCON`), `refId`, `required`, `sortOrder`, `targetReps?`, `prescriptionJson?` | New; items attached to a day plan. |
+### Session entity note
+Only **one** Room entity should represent the `workout_session` table at a time to avoid duplicate table mappings. Keep the currently used session entity registered in `@Database(entities=[...])` and leave any alternative class as a plain data class (no `@Entity`) until we migrate.
+
 
 ### 2.5 data/repo/
 | File | Responsibility | Key API | Notes |
@@ -149,19 +154,3 @@ On cold start (`WorkoutApp`), seeds exercise/metcon; dev-only seed mirrors legac
 3) Write non-destructive migrations for v6 before release.
 
 ---
-
-## Doc Addendum — 2025-08-15 (Phase 0 alignment)
-
-### Session entity note
-Only **one** Room entity should represent the `workout_session` table at a time to avoid duplicate table mappings. Keep the currently used session entity registered in `@Database(entities=[...])` and leave any alternative class as a plain data class (no `@Entity`) until we migrate.
-
-### MetconDao helper clarification
-*Optional:* `firstPlanId()` is **not required** for the current dev seed. The seed reads from `getAllPlans()`; include `firstPlanId()` only if you prefer a direct ID helper.
-
-### Startup seeding (dev)
-`WorkoutApp.kt` triggers the idempotent dev seed on startup (API 26+):
-- `ExerciseSeed.seedOrUpdate(db)`
-- `MetconSeed.seedOrUpdate(db)`
-- **`DevPhaseSeed_dev.seedFromLegacy(db)`** *(dev-only)*
-
-This ensures a usable Phase → Week/Day → Items scaffold in dev and mirrors legacy Day 1–5 when available, otherwise inserts minimal defaults.
