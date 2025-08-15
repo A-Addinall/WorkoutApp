@@ -147,3 +147,21 @@ On cold start (`WorkoutApp`), seeds exercise/metcon; dev-only seed mirrors legac
 1) Decide sunset path for legacy day model (auto-migrate legacy selections into `day_item`).
 2) Expose phase-aware day labels in `MainActivity` (optional).
 3) Write non-destructive migrations for v6 before release.
+
+---
+
+## Doc Addendum — 2025-08-15 (Phase 0 alignment)
+
+### Session entity note
+Only **one** Room entity should represent the `workout_session` table at a time to avoid duplicate table mappings. Keep the currently used session entity registered in `@Database(entities=[...])` and leave any alternative class as a plain data class (no `@Entity`) until we migrate.
+
+### MetconDao helper clarification
+*Optional:* `firstPlanId()` is **not required** for the current dev seed. The seed reads from `getAllPlans()`; include `firstPlanId()` only if you prefer a direct ID helper.
+
+### Startup seeding (dev)
+`WorkoutApp.kt` triggers the idempotent dev seed on startup (API 26+):
+- `ExerciseSeed.seedOrUpdate(db)`
+- `MetconSeed.seedOrUpdate(db)`
+- **`DevPhaseSeed_dev.seedFromLegacy(db)`** *(dev-only)*
+
+This ensures a usable Phase → Week/Day → Items scaffold in dev and mirrors legacy Day 1–5 when available, otherwise inserts minimal defaults.

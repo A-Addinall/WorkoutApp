@@ -88,3 +88,9 @@ Placeholder; no changes.
 - `WorkoutViewModel`: screens unchanged; repo under the hood may source from Phase model via `PlanDao` or fallback.
 - `WorkoutRepository`: bridges **Phase 0** (`PlanDao`) with legacy (`ProgramDao`).
 
+---
+
+## Contract Addendum — 2025-08-15
+
+### WorkoutActivity (data source bridge)
+The ViewModel/Repo **prefers** the Phase model (Phase → Week/Day → `day_item`) via `PlanDao` **when items exist** and **falls back** to legacy (`program_selection` + `program_metcon_selection`) otherwise. No UI changes required; adapters are in the repository layer.
