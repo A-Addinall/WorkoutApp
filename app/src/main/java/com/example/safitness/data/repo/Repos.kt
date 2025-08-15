@@ -10,7 +10,8 @@ object Repos {
             programDao = programDao(),
             sessionDao = sessionDao(),
             prDao = personalRecordDao(),
-            metconDao = metconDao() // NEW
+            metconDao = metconDao(),
+            planDao = planDao() // NEW
         )
     }
 }
