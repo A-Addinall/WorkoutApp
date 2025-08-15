@@ -97,15 +97,11 @@ com.example.safitness
 ### 2.7 ui/
 
 | File | Responsibility | Key interactions | Notes |
+|---|---|---|---|
 | `MetconAmrapActivity.kt` | Timer UI for AMRAP with RX/Scaled selection and direct rounds/reps input; logs via `logMetconAmrap`. | Includes pre-start countdown and validation. |
 | `MetconEmomActivity.kt` | Timer UI for EMOM with RX/Scaled selection; beeps each minute; logs via `logMetconEmom`. | Includes pre-start countdown and validation. |
-
 | `MetconUiHelpers.kt` | Helper object to bind a plan card UI with title and components from VM. | Used in metcon screens. |
 | `TimerBeeper.kt` | Utility for playing pips, minute ticks, and final buzz sounds. | Used by all metcon timer UIs. |
-
-
-
-|---|---|---|---|
 | `MainActivity.kt` | App dashboard; navigation to Days 1–5, Library, PRs, Settings. | Refreshes day labels via combined strength + metcon selections. | Shows "Metcon" label if any metcon present.
 | `ExerciseLibraryActivity.kt` | Browse/filter exercises & metcons; toggle between modes; filter by type/equipment or metcon type/duration; manage membership and reps. | Uses `LibraryViewModel` + `WorkoutRepository`. | Maintains `addedState`, `currentReps` for strength; membership for metcons.
 | `WorkoutActivity.kt` | Render day: Required / Optional (strength) + Metcon plan cards. | Observes `programForDay` and `metconsForDay`; shows last results for each plan via VM. | Starts appropriate metcon activity based on plan title.
@@ -116,17 +112,17 @@ com.example.safitness
 
 ### 2.8 viewmodels/
 
-| `ui/LibraryViewModelFactory.kt` | Factory | Standard factory for `LibraryViewModel` using `WorkoutRepository`. |
-
 | File | Responsibility | Exposed LiveData | Notes |
 |---|---|---|---|
+| `ui/LibraryViewModelFactory.kt` | Factory | Standard factory for `LibraryViewModel` using `WorkoutRepository`. |
 | `viewmodel/WorkoutViewModel.kt` | Day state + logging | `programForDay`, `metconsForDay`, `lastMetconSeconds`, `lastMetconForPlan`; logging methods for strength and all metcon types (for time, amrap, emom). | Computes day summary including metcons. |
 | `ui/LibraryViewModel.kt` | Library filters & lists | `exercises: LiveData<List<Exercise>>` (filtered by type/equipment), `metconPlans: LiveData<List<MetconPlan>>` (sorted by title), `metconPlanIdsForDay: LiveData<Set<Long>>`; helpers: `addMetconToDay`, `removeMetconFromDay`, `setMetconRequired`, `setMetconOrder`, `setMetconDay(day)` | Uses repo flows; wraps writes in `viewModelScope`. |
 | `ui/WorkoutViewModelFactory.kt` | Factory | Standard factory using `Repos.workoutRepository(context)` | — |
 
 ### 2.9 res/drawable/
-
-Unchanged: `ic_arrow_back.xml`, launcher background/foreground vectors.
+| File | Responsibility | Exposed LiveData | Notes |
+|---|---|---|---|
+|Unchanged: `ic_arrow_back.xml`| launcher background/foreground vectors.|
 
 ### 2.10 res/layout/
 
