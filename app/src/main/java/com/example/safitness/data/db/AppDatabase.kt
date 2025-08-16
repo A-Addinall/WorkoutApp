@@ -15,7 +15,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 @Database(
-    version = 6,                 // bump for new tables
+    version = 7,                 // bump for new tables
     exportSchema = false,        // fine for dev; turn on for prod
     entities = [
         // legacy

@@ -1,268 +1,163 @@
-Awesome — here’s the **updated Change Plan** with the week/day/date model built in. I’ve kept it practical and sequenced so we can ship in small, testable steps and log each change against your tech\_map + screen\_contracts.
+# Change Plan — Workout App
+**Revision:** 2025-08-15
 
-# Phase 0 — Foundations (no UX change)
-
-**Goal:** Switch internal model to Week/Day/Date while keeping current UI working.
-
-1. Schema & Migrations
-
-* Add/modify tables:
-
-    * `phase` (id, name, description, cycleLengthWeeks)
-    * `week_day_plan` (id, phaseId, weekNumber, dayNumber, date nullable, isRestDay, title optional)
-    * `day_item` (id, dayPlanId, itemType {STRENGTH|METCON}, sortOrder, refId (exerciseId|metconId), prescription JSON)
-    * `workout_session` (id, dayPlanId, startedAt, completedAt, status)
-* Keep existing entities, but mark old day-1..5 references as deprecated in tech\_map.
-* Write destructive migration if safe during dev; convert to proper migrations before beta.
-
-2. Seed Data v2
-
-* Seed a **4–6 week Phase** (e.g., Base 4w) across weeks/days.
-* Convert existing “Day1–Day5” content to `(weekNumber, dayNumber)` tuples.
-* Keep “Edit Day” working: editing writes to `day_item`.
-
-3. Repository Layer
-
-* New queries:
-
-    * `getPlanFor(phaseId, weekNumber, dayNumber)`
-    * `getNextPlannedDay(after dayId)` (skips rest days)
-    * `attachCalendar(planStartDate)` to backfill `date` values
-* Back-compat adapters so current screens still read from the new repo.
-
-✅ **Acceptance:** App boots, current screens load content via new repo; seeds exist for at least Week1–Week2.
+This plan is status-first. Every bullet is a checkbox with a status indicator:
+- ✅ = Done · 🔄 = In Progress · x = Not Started
 
 ---
 
-# Phase 1 — Start/Edit Flow (UX tidy with new model)
+## 0) Snapshot
 
-**Goal:** Wire Start Workout and Edit Day to the same source of truth.
-
-1. Start Workout
-
-* “Start” consumes `week_day_plan` → spawns `workout_session`.
-* On completion, calls `getNextPlannedDay` and suggests next day.
-
-2. Edit Day
-
-* Open library from the selected `(week, day)`.
-* Writes to `day_item` (not filtered by “Day1..5” anymore).
-
-3. Screen Contracts
-
-* Update contracts to pass `(phaseId, weekNumber, dayNumber, dayPlanId)` everywhere.
-
-✅ **Acceptance:** Start and Edit both operate on the same dayPlanId; completing a workout advances by plan order.
+- ✅  **Phase 0 — Foundations** (new Phase/Week/Day model preferred; legacy fallback)
+- ✅  **Phase 1 — Metcon unification & edits** (reads, logs, and edits aligned; legacy fallback intact)
+- [ ] **Phase 2 — Strength: 1RM engine + rest timer + PR celebration** (next up)
 
 ---
 
-# Phase 2 — Strength: 1RM engine + rest timer
+## 1) Definition of Done per phase
 
-**Goal:** Intelligent suggestions and better set pacing.
+### Phase 0 — Foundations — **✅ Done**
+- ✅ Repo **prefers** Phase model (`day_item`) for reads and **falls back** to legacy when empty.
+- ✅  DB includes `PhaseEntity`, `WeekDayPlanEntity`, `DayItemEntity` and `planDao()`.
+- ✅  Dev seed creates Week 1 Day 1–5 if empty; idempotent; top-ups ensure metcon variety.
+- ✅ App builds & runs from fresh install with pre-populated days.
 
-1. Estimated 1RM Engine
+### Phase 1 — Metcon unification & edits — **✅ Done**
+- ✅  **Display**: `lastMetconDisplay` prefers `metcon_log`; legacy summary is fallback.
+- ✅  **Logging**: plan-scoped `FOR_TIME`, `AMRAP`, `EMOM` stored in `metcon_log` (RX/Scaled kept).
+- ✅  **Editing**: add/remove/reorder/toggle metcons write to **`day_item`** when a plan exists; legacy when not.
+- ✅  **Verification**: all three metcon types tested; edits reflect immediately; persistence verified.
 
-* Add table `strength_result` (exerciseId, sessionId, setIndex, reps, weight, isSuccess).
-* Implement E1RM with **Epley** for ≥3 reps and **Brzycki** for low reps; keep best of recent N (e.g., 6 sessions) per exercise:
-
-    * Epley: `1RM = w * (1 + reps/30)`
-    * Brzycki: `1RM = w * 36 / (37 - reps)`
-* Persist rolling best E1RM with decay (last 90 days weighted).
-
-2. Prescriptions & Suggestions
-
-* For a set target like “5 reps @ 75%”, compute `suggestedWeight = roundToPlate( E1RM * 0.75 )`.
-* If no history, default % from bodyweight/equipment or seed baseline.
-
-3. Rest Timer
-
-* Add **in-set rest** UI: countdown with 3 preset options (e.g., 60/90/120s) + custom.
-* Auto-start timer on set complete; vibrate at 0; “start next set” CTA.
-
-✅ **Acceptance:**
-
-* Logging sets updates E1RM; next sets get updated suggested weight.
-* Rest timer works per set with resume on app background/foreground.
+### Phase 2 — Strength: 1RM engine + rest timer + PR celebration — **⏳ Not Started**
+- [ ] **1RM engine** (estimate from recent successful sets; show suggested loads).
+- [ ] **Rest timer** (auto-start after strength set; survives navigation/background).
+- [ ] **PR celebration** (hard rep-max PRs and soft e1RM PRs; banner + confetti; one-shot event).
 
 ---
 
-# Phase 3 — Metcon logging & “for time/AMRAP/EMOM” parity
+## 2) What shipped (by component)
 
-**Goal:** Add missing log screens so all metcon types are first-class.
-
-1. Types supported
-
-* FOR\_TIME (time capture + split laps)
-* AMRAP (total reps + per-round detail optional)
-* EMOM/INTERVAL (per-interval reps, failure flag)
-* CHIPPER (ordered list progression, partial completion)
-
-2. Data
-
-* `metcon_result` (sessionId, metconId, type, payload JSON for flexible capture)
-* Benchmarks flagged (`isBenchmark`) to appear in Performance.
-
-✅ **Acceptance:** You can start any metcon, log it with the appropriate UI, and see the result in history.
+- ✅  **DB/Schema**: Registered Phase tables; version bumped; destructive migration (dev only).
+- ✅  **DAOs**: `PlanDao` reads/writes + metcon edit helpers; legacy DAOs unchanged.
+- ✅  **Repository**:
+- ✅  Read adapters for strength/metcon (prefer new model; fallback legacy).
+- ✅  Unified `lastMetconDisplay` (new first; legacy fallback).
+- ✅  **Dual-path metcon edits** (day_item when plan exists; legacy otherwise).
+- ✅  **ViewModel**: `lastMetconDisplay` exposed; legacy fields retained.
+- ✅  **Dev Seed**: Creates phase/plans; mirrors legacy or defaults; tops up metcon variety.
 
 ---
 
-# Phase 4 — Performance (Key lifts & Benchmarks)
+## 3) Test evidence (executed)
 
-**Goal:** Focused progress view.
-
-1. Strength Progress
-
-* Key exercises list (e.g., Back Squat, Bench, Deadlift, Press, Clean).
-* Show latest E1RM, best E1RM (30/90D), and simple trend (↑/↓/→).
-
-2. Benchmark Metcons
-
-* Best time/score with date, last 3 attempts.
-* Quick “Retest” entry point that jumps to the benchmark’s day or creates an ad‑hoc session.
-
-✅ **Acceptance:** Performance shows at-a-glance trends and benchmark history.
+- ✅ Fresh install shows Week 1 Day 1–5 with items; no duplication on relaunch.
+- ✅  Logging: FOR-TIME (mm:ss), AMRAP (rounds + reps), EMOM (intervals) with RX/Scaled.
+- ✅ Preference rule: metcon_log result **overrides** legacy when both exist.
+- ✅  Editing metcons: add/remove/reorder/toggle reflected immediately; data persists.
+- ✅  Legacy flows (strength logs, suggestions) unaffected.
 
 ---
 
-# Phase 5 — Scheduling (date mode under the hood)
+## 4) Phase 2 scope — *detailed tracker*
 
-**Goal:** Keep UI as Week/Day; let users set a start date and we compute actual dates.
+### 4.1 1RM engine (add-only) — **⏳**
+- [ ] Implement e1RM estimate (default Epley; cap reps used at ≤12).
+- [ ] Expose `estimateOneRepMax(weight, reps)` in repo (pure function).
+- [ ] Expose `suggestNextLoad(exerciseId, equipment, reps)` — prefer 1RM; fallback to last-success.
+- [ ] Show e1RM & suggested weight in the strength detail UI.
 
-1. Attach Calendar
+### 4.2 Rest timer (add-only) — **⏳**
+- [ ] Start timer automatically after `logStrengthSet` (configurable default, e.g., 120s).
+- [ ] Timer chip: countdown, pause/resume, “+30s” nudge.
+- [ ] Persist timer across background/process death (saved-state + local notification).
 
-* “Start Phase” → choose a start date; compute dates across all `week_day_plan` (skip rest).
-* Show “today’s workout” chip if today matches a dated day.
+### 4.3 PR celebration (concept locked) — **⏳**
+- [ ] **What to count as a PR**
+- [ ] **Hard PR — Rep-Max PR**: more **weight at the same reps** than ever for that exercise + equipment.
+- [ ] **Soft PR — Estimated-1RM PR**: today’s e1RM > best historical e1RM.
 
-2. Missed/Shift logic (light)
+**Priority (avoid double count)**
+- [ ] If both trigger, **fire Hard PR only**; include e1RM in the banner body.
 
-* If a dated day passes incomplete, offer “shift remaining forward” or “keep dates”.
+**Guardrails**
+- [ ] Only on `success == true` sets.
+- [ ] Per **equipment** (barbell/dumbbell/kettlebell tracked separately).
+- [ ] e1RM uses reps ≤ 12.
+- [ ] Thresholds: Hard PR ≥ equipment plate step (e.g., barbell +2.5 kg); Soft PR ≥ max(1%, 1.0 kg).
+- [ ] One PR per set; optional RPE ≥ 6 if/when RPE is logged.
 
-✅ **Acceptance:** Users can start a 4–6 week cycle with a real start date; app still shows Week X Day Y.
+**UI celebration**
+- [ ] **Hard PR banner** (bigger confetti): “New **5RM**: **102.5 kg** 🎉 (prev 100.0) — e1RM 117.1 kg”
+- [ ] **Soft PR banner** (subtle confetti): “New **e1RM**: **117.1 kg** ▲ +1.8 kg”
+- [ ] Add PR badge on the set row; emit as one-shot VM event.
+- [ ] **Earned rest**: when PR fires, auto-extend rest +30s.
+
+**Storage plan (compatible with current schema)**
+_Current table: `personal_record(exerciseId, recordType, value, date, notes)` — no `equipment` or `reps` fields yet._
+- [ ] **Option A — No schema change (fastest)**: encode type in `recordType` (e.g., `E1RM_KG`, `RM_5_KG`); optionally encode equipment in `notes` (e.g., `equipment=BARBELL`). *Limitation:* not query-friendly for equipment.
+- [ ] **Option B — Tiny migration (preferred)**: extend PR storage to capture both dimensions cleanly:
+- [ ] Add columns `equipment TEXT` and `reps INTEGER?` (null for E1RM). Key by `(exerciseId, equipment, recordType, reps)`.
+- [ ] Add DAOs: `bestEstimated1RM(...)`, `bestWeightAtReps(...)`, `upsertEstimated1RM(...)`, `upsertRepMax(...)`.
+
+---
+### Phase 3 — Engine (Run/Row/Bike) & Skills — **⏳ Not Started**
+**Decision: where to log cardio & skills**  
+**Recommendation:** keep them as **separate item types** (`ENGINE`, `SKILL`) with their **own logs**, while still allowing them to be **components inside Metcons**. This keeps standalone sessions clean, preserves analytics/PRs, and avoids overloading `metcon_log`. Scaled variants live on the plan component (e.g., “DU → SU”; “MU → banded MU”).
+
+- [ ] Add new day item types: `ENGINE`, `SKILL` (no removal of existing types).
+- [ ] Allow ENGINE/SKILL to appear as components inside metcons (for mixed workouts).
+- [ ] Add `engine_log` (cardio) and `skill_log` (skills) tables *(or a unified `performance_log` with a `category` field)*.
+
+**ENGINE (Cardio) — v1 scope**
+- [ ] Modes: `RUN`, `ROW`, `BIKE`.
+- [ ] Intents: `FOR_TIME` (fixed distance), `FOR_DISTANCE` (fixed time), `FOR_CALORIES` (fixed time).
+- [ ] Program fields (per item): `distanceMeters?` / `durationSeconds?` / `targetCalories?` *(exactly one)*.
+- [ ] Result fields (per log): `timeSeconds` / `distanceMeters` / `calories` + optional `pace`.
+- [ ] Scaling: choose different distance/duration/calories; record `result` tag as `RX` or `Scaled`.
+- [ ] PRs: best 2k row time, best 5k run, most calories in 10 min, most meters in 10 min (per mode).
+
+**SKILL — v1 scope**
+- [ ] Skills: `DOUBLE_UNDERS`, `HANDSTAND_HOLD`, `MUSCLE_UP` *(extensible)*.
+- [ ] Test types: `MAX_REPS_UNBROKEN`, `FOR_TIME_REPS`, `MAX_HOLD_SECONDS`, `ATTEMPTS`.
+- [ ] Program fields: `targetReps?` / `targetDuration?` / `progressionLevel?` / `scaledVariant?`.
+- [ ] Result fields: `reps` / `timeSeconds` / `maxHoldSeconds` / `attempts`, plus `RX`|`Scaled`.
+- [ ] PRs: max unbroken DUs, longest handstand hold, time-to-30 DUs, “first MU” milestone.
+
+**UI**
+- [ ] ENGINE card: show programmed target + pace/result line; simple logging picker.
+- [ ] SKILL card: show target + scaled variant picker; log unbroken reps/hold time.
+- [ ] Both also render inside metcon details (no extra UI beyond component display).
+
+**Storage notes (align with current `PersonalRecord`)**
+_Current table: `personal_record(exerciseId, recordType, value, date, notes)`._
+- [ ] **Option A — No migration**: encode PR type in `recordType` (`RUN_5K_TIME`, `ROW_2K_TIME`, `DU_MAX_REPS`); encode mode/scale in `notes` (e.g., `mode=ROW;scaled=true`). *Fast, but less queryable.*
+- [ ] **Option B — Tiny migration (preferred)**: add `mode/equipment` and (for skills) `reps`/`durationType` columns so queries are first-class. Key on `(exerciseId, mode/equipment, recordType, reps?)`.
+
+**Acceptance**
+- [ ] Users can log standalone engine or skill sessions and see them in history.
+- [ ] PRs computed correctly per mode/skill; banners fire with clear labels.
+- [ ] Engine/Skill components inside metcons continue to work unchanged.
 
 ---
 
-# Phase 6 — Plan Builder (Generate vs Choose)
+## 6) Backlog (kept; not removed)
 
-**Goal:** Add automatic plan option without removing manual selection.
-
-1. Plan Templates
-
-* Phase templates: Base/Build/Peak with strength % progressions + metcon slots.
-* Generator fills weeks/days using user profile (experience, equipment).
-
-2. Manual Override
-
-* Library still edits a day; generator writes initial content only.
-
-✅ **Acceptance:** “Build plan for me” creates a full 4–6 week calendar; user can edit any day.
+- [ ] Plan Editor UI (day-level add/remove/reorder for strength & metcons)
+- [ ] Calendar Attach (map Week/Day to dates; simple “today” picker)
+- [ ] Strength edits parity (dual-path writes for strength items)
+- [ ] Debug actions (Reseed / Top-up metcons)
+- [ ] Unit tests (read preference, dual-path edits, lastMetconDisplay preference)
+- [ ] Pre-release prep (disable dev seed; add Room migrations; enable schema export)
 
 ---
 
-# Cross-cutting tasks
+## 7) Notes on dev posture
 
-* Update **tech\_map.md** and **screen\_contracts.md** after each merged change (you own updates; I’ll provide clear diffs per step).
-* Add **feature\_log.md** once we leave dev.
-* Add unit tests for: 1RM engine, next-day progression, date attachment, and metcon serializers.
-* Accessibility: larger tap targets, timer voice/vibration cues, color contrast.
-* Telemetry (local only in dev): time per screen, DNF sessions (to find UX friction).
+- [ ] 🔄 Keep **destructive migration** and **dev seed** enabled while in active development.
+- [ ] When preparing for release, flip posture: disable dev seed, add Room migrations, enable schema export.
 
 ---
 
-## Rollout Order (small PRs)
+## 8) Changelog
 
-1. Phase 0 (schema + seed + repo)
-2. Phase 1 (start/edit unified)
-3. Phase 2 (1RM + rest timer)
-4. Phase 3 (metcon UIs)
-5. Phase 4 (performance)
-6. Phase 5 (date scheduling)
-7. Phase 6 (plan builder)
-
----
-
-## Minimal acceptance checklist per PR
-
-* Migrations apply cleanly on a fresh install.
-* Updated contracts + notes in tech\_map.
-* Feature toggled to avoid breaking current flows.
-* Basic instrumentation log verifying critical path (start→log→complete).
-
----
-
-Remove _Dev files -
-Here’s a copy‑paste prompt you can give me later to prep the app for production.
-
----
-
-# Release‑Prep Prompt (Phase 0 → Production)
-
-You are working on **Workout App**. We are moving from **Phase 0 (Foundations)** to **production**. Perform the following, generating exact diffs/patches where applicable:
-
-## 1) Remove dev seeding
-
-* Ensure **no dev seed code ships**.
-* If `DevPhaseSeed_dev.kt` exists, **assume it lives under `app/src/debug/...`** and confirm there is **no call** in `AppDatabase.onCreate` unless guarded by:
-
-  ```kotlin
-  if (BuildConfig.DEBUG && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-      DevPhaseSeed_dev.seedFromLegacy(db)
-  }
-  ```
-* If any call remains in `main`, remove it. Do **not** add any new dev seed.
-
-## 2) Migrations (no destructive)
-
-* In `AppDatabase.get(...)`, **remove** `fallbackToDestructiveMigration()` for release.
-* Add Room **MIGRATION(s)** covering our current version bump that introduced:
-
-  * `phase`
-  * `week_day_plan ( + dateEpochDay )`
-  * `day_item ( + prescriptionJson )`
-* Provide a ready‑to‑paste `addMigrations(MIGRATION_X_Y, …)` snippet and SQL for each missing migration.
-
-## 3) Room schema export (prod hygiene)
-
-* In `build.gradle` (app), apply:
-
-  * `id "androidx.room"`
-  * `room { schemaDirectory "$projectDir/schemas" }`
-* In `AppDatabase.kt`, set `exportSchema = true`.
-* Confirm schemas generate on a clean build.
-
-## 4) Keep legacy compatibility (no UI breakage)
-
-* Verify repo methods that the current UI calls are **unchanged**:
-
-  * `programForDay(day: Int)`
-  * `metconsForDay(day: Int)`
-  * `startSession(day: Int)`
-* Ensure Phase‑0 additions are **additive**:
-
-  * `getPlanFor(phaseId, week, day)`
-  * `getNextPlannedDay(afterDayPlanId)`
-  * `attachCalendar(phaseId, startEpochDay)`
-
-## 5) Prod data integrity
-
-* Confirm no dev data remains (e.g., “Dev Test Phase”).
-
-  * Provide a one‑time cleanup snippet (guarded with `!BuildConfig.DEBUG`) to delete it if present.
-
-## 6) Acceptance checklist (generate a test plan)
-
-* Fresh install (release build): app boots, no dev seed runs, DB migrations apply cleanly.
-* Upgrade path: from previous DB version → current version; data preserved; new tables exist.
-* Week/Day plan APIs callable; legacy screens still show content.
-* No crashes on `WorkoutActivity`, Library, Metcon screens.
-* Logs/telemetry unaffected.
-
-## 7) Output format
-
-* Provide:
-
-  1. **Patch‑style diffs** for each file changed (minimal, focused).
-  2. Any **new code blocks** ready to paste (migrations, guards).
-  3. A short **runbook** of manual steps (e.g., move `DevPhaseSeed_dev.kt` to `src/debug`).
-  4. A **verification script/checklist** I can follow in 5–10 minutes.
-
-Use file paths from our repo structure and keep everything strictly backward‑compatible.
+- **2025-08-15** — Added **PR celebration** to Phase 2 tracker with hard/soft PR definitions, guardrails, UI plan, and storage options.

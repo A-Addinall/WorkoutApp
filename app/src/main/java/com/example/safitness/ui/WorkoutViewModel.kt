@@ -14,8 +14,11 @@ import com.example.safitness.data.dao.PlanWithComponents
 import com.example.safitness.data.dao.SelectionWithPlanAndComponents
 import com.example.safitness.data.entities.MetconLog
 import com.example.safitness.data.repo.WorkoutRepository
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
+import com.example.safitness.core.PrCelebrationEvent
 
 class WorkoutViewModel(private val repo: WorkoutRepository) : ViewModel() {
 
@@ -45,6 +48,11 @@ class WorkoutViewModel(private val repo: WorkoutRepository) : ViewModel() {
     val lastMetconDisplay: LiveData<WorkoutRepository.MetconDisplay?> =
         dayLive.switchMap { day -> repo.lastMetconDisplayForDay(day).asLiveData() }
 
+    // --- PR celebration one-shot events ---
+// --- PR celebration one-shot events ---
+    private val _prEvents = MutableSharedFlow<PrCelebrationEvent>(replay = 0, extraBufferCapacity = 1)
+    val prEvents: SharedFlow<PrCelebrationEvent> = _prEvents
+
     fun setDay(day: Int) {
         dayLive.value = day
         viewModelScope.launch {
@@ -53,6 +61,13 @@ class WorkoutViewModel(private val repo: WorkoutRepository) : ViewModel() {
             _lastMetconSeconds.value = repo.lastMetconSecondsForDay(day)
         }
     }
+
+    suspend fun previewPrEvent(
+        exerciseId: Long,
+        equipment: Equipment,
+        reps: Int,
+        weight: Double
+    ) = repo.previewPrEvent(exerciseId, equipment, reps, weight)
 
     /* ----------------------------- Strength logging ----------------------------- */
 
@@ -78,6 +93,20 @@ class WorkoutViewModel(private val repo: WorkoutRepository) : ViewModel() {
             success = success,
             notes = notes
         )
+
+        // PR pipeline
+        runCatching {
+            repo.evaluateAndRecordPrIfAny(
+                exerciseId = exerciseId,
+                equipment = equipment,
+                reps = reps,
+                weightKg = weight,
+                success = success
+            )
+        }.getOrNull()?.let { pr ->
+            _prEvents.emit(pr)
+            // (Optional) hook rest-timer auto-extend here later.
+        }
     }
 
     /* ----------------------------- Legacy metcon (day-scoped) ----------------------------- */
@@ -170,6 +199,6 @@ class WorkoutViewModel(private val repo: WorkoutRepository) : ViewModel() {
     suspend fun getLastSuccessfulWeight(exerciseId: Long, equipment: Equipment, reps: Int?) =
         repo.getLastSuccessfulWeight(exerciseId, equipment, reps)
 
-    suspend fun getSuggestedWeight(exerciseId: Long, equipment: Equipment, reps: Int?) =
-        repo.getSuggestedWeight(exerciseId, equipment, reps)
+    suspend fun suggestNextLoadKg(exerciseId: Long, equipment: Equipment, reps: Int): Double? =
+        repo.suggestNextLoadKg(exerciseId, equipment, reps)
 }

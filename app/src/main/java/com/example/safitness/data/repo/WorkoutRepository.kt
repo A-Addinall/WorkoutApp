@@ -1,7 +1,13 @@
+@file:OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+
 package com.example.safitness.data.repo
 
+import android.util.Log
 import com.example.safitness.core.Equipment
 import com.example.safitness.core.MetconResult
+import com.example.safitness.core.PrCelebrationEvent
+import com.example.safitness.core.estimateOneRepMax
+import com.example.safitness.core.repsToPercentage
 import com.example.safitness.data.dao.*
 import com.example.safitness.data.entities.*
 import kotlinx.coroutines.flow.Flow
@@ -120,13 +126,13 @@ class WorkoutRepository(
         )
     )
 
-    suspend fun logMetcon(day: Int, seconds: Int, resultType: MetconResult) {
+    suspend fun logMetcon(day: Int, seconds: Int, result: MetconResult) {
         val sessionId = startSession(day)
         sessionDao.insertSet(
             SetLog(
                 sessionId = sessionId, exerciseId = 0L, equipment = Equipment.BODYWEIGHT,
                 setNumber = 1, reps = 0, weight = null, timeSeconds = seconds,
-                rpe = null, success = null, notes = null, metconResult = resultType
+                rpe = null, success = null, notes = null, metconResult = result
             )
         )
     }
@@ -135,13 +141,102 @@ class WorkoutRepository(
     suspend fun lastMetconForDay(day: Int): MetconSummary? = sessionDao.lastMetconForDay(day)
 
     /* ---------- PR / suggestions ---------- */
-    suspend fun bestPR(exerciseId: Long) = prDao.bestForExercise(exerciseId)
+    suspend fun bestE1RM(exerciseId: Long, equipment: Equipment): Double? {
+        return prDao.bestEstimated1RM(exerciseId, equipment)
+    }
+
+    suspend fun bestRMAtReps(exerciseId: Long, equipment: Equipment, reps: Int): Double? {
+        return prDao.bestWeightAtReps(exerciseId, equipment, reps)
+    }
+
     suspend fun getLastSuccessfulWeight(exerciseId: Long, equipment: Equipment, reps: Int?): Double? {
         val recent = sessionDao.lastSets(exerciseId, equipment, 20, reps)
         return recent.firstOrNull { it.success == true && it.weight != null }?.weight
     }
-    suspend fun getSuggestedWeight(exerciseId: Long, equipment: Equipment, reps: Int?): Double? =
-        getLastSuccessfulWeight(exerciseId, equipment, reps)?.let { it * 1.02 }
+
+    /**
+     * Suggest a next load for a planned set of `reps`.
+     * Prefers historical E1RM; if none, returns null (UI can hide suggestion).
+     */
+    suspend fun suggestNextLoadKg(
+        exerciseId: Long,
+        equipment: Equipment,
+        reps: Int
+    ): Double? {
+        val e1rm = bestE1RM(exerciseId, equipment) ?: return null
+        val pct = repsToPercentage(reps)
+        return e1rm * pct
+    }
+
+    /** Evaluate PRs, persist records, and return a unified celebration event (or null). */
+    suspend fun evaluateAndRecordPrIfAny(
+        exerciseId: Long,
+        equipment: Equipment,
+        reps: Int,
+        weightKg: Double,
+        success: Boolean
+    ): PrCelebrationEvent? {
+        if (!success) {
+            Log.d("PR", "No PR: success=false")
+            return null
+        }
+        if (reps <= 0 || reps > 12) {
+            Log.d("PR", "No PR: reps out of range ($reps)")
+            return null
+        }
+
+        val date = todayEpochDayUtc()
+
+        // Previous bests
+        val prevHardKg = prDao.bestWeightAtReps(exerciseId, equipment, reps)
+        val prevSoftE1rm = prDao.bestEstimated1RM(exerciseId, equipment)
+
+        // Candidates
+        val hardCandidateKg = weightKg
+        val softCandidateE1rm = estimateOneRepMax(weightKg, reps)
+        if (softCandidateE1rm == null) {
+            Log.d("PR", "No PR: softCandidateE1rm=null")
+            return null
+        }
+
+        // Thresholds
+        val hardStep = equipmentMinIncrementKg(equipment)
+        val hardImproved = (prevHardKg == null) || ((hardCandidateKg - prevHardKg) >= hardStep)
+        val softImproved = (prevSoftE1rm == null) ||
+                ((softCandidateE1rm - prevSoftE1rm) >= kotlin.math.max(1.0, prevSoftE1rm * 0.01))
+
+        Log.d(
+            "PR",
+            "prevHard=$prevHardKg, newHard=$hardCandidateKg, hardStep=$hardStep, hardImproved=$hardImproved | " +
+                    "prevE1rm=$prevSoftE1rm, newE1rm=$softCandidateE1rm, softImproved=$softImproved"
+        )
+
+        if (!hardImproved && !softImproved) return null
+
+        // Persist both improvements if applicable
+        if (softImproved) {
+            prDao.upsertEstimated1RM(exerciseId, equipment, softCandidateE1rm, date)
+            Log.d("PR", "Upserted E1RM=$softCandidateE1rm")
+        }
+        if (hardImproved) {
+            prDao.upsertRepMax(exerciseId, equipment, reps, hardCandidateKg, date)
+            Log.d("PR", "Upserted RM[$reps]=$hardCandidateKg")
+        }
+
+        val celebrateHard = hardImproved
+        val event = PrCelebrationEvent(
+            exerciseId = exerciseId,
+            equipment = equipment,
+            isHardPr = celebrateHard,
+            reps = if (celebrateHard) reps else null,
+            newWeightKg = if (celebrateHard) hardCandidateKg else null,
+            prevWeightKg = if (celebrateHard) prevHardKg else null,
+            newE1rmKg = softCandidateE1rm,
+            prevE1rmKg = prevSoftE1rm
+        )
+        Log.d("PR", "Emitting PR event: $event")
+        return event
+    }
 
     /* ---------- Metcon library (plans) ---------- */
     fun metconPlans(): Flow<List<MetconPlan>> = metconDao.getAllPlans()
@@ -236,7 +331,7 @@ class WorkoutRepository(
         }
     }
 
-    /* ---------- Plan-scoped logs (already Phase 1) ---------- */
+    /* ---------- Plan-scoped logs ---------- */
 
     fun lastMetconForPlan(planId: Long): Flow<MetconLog?> = metconDao.lastForPlan(planId)
 
@@ -288,7 +383,7 @@ class WorkoutRepository(
                     )
                 )
             } else {
-                flow<MetconDisplay?> {
+                flow {
                     val legacy = sessionDao.lastMetconForDay(day)
                     emit(
                         legacy?.let {
@@ -299,7 +394,7 @@ class WorkoutRepository(
                                 extraReps = null,
                                 intervals = null,
                                 result = null,
-                                createdAt = 0L // legacy has no timestamp
+                                createdAt = 0L
                             )
                         }
                     )
@@ -322,6 +417,46 @@ class WorkoutRepository(
         var cursor = startEpochDay
         plans.forEach { plan -> planDao.updatePlanDate(plan.id, cursor); cursor += 1 }
     }
+    /**
+     * Preview whether logging this successful set WOULD produce a PR (no DB writes).
+     * - Uses the same thresholds/guardrails as evaluateAndRecordPrIfAny(...)
+     * - Returns a PrCelebrationEvent if it would be a PR, else null.
+     */
+    suspend fun previewPrEvent(
+        exerciseId: Long,
+        equipment: Equipment,
+        reps: Int,
+        weightKg: Double
+    ): PrCelebrationEvent? {
+        // Guardrails (as if success == true)
+        if (reps <= 0 || reps > 12) return null
+
+        val prevHardKg = prDao.bestWeightAtReps(exerciseId, equipment, reps)
+        val prevSoftE1rm = prDao.bestEstimated1RM(exerciseId, equipment)
+
+        val hardCandidateKg = weightKg
+        val softCandidateE1rm = estimateOneRepMax(weightKg, reps) ?: return null
+
+        val hardStep = equipmentMinIncrementKg(equipment)
+        val hardImproved = (prevHardKg == null) || ((hardCandidateKg - prevHardKg) >= hardStep)
+        val softImproved = (prevSoftE1rm == null) ||
+                ((softCandidateE1rm - prevSoftE1rm) >= kotlin.math.max(1.0, prevSoftE1rm * 0.01))
+
+        if (!hardImproved && !softImproved) return null
+
+        val celebrateHard = hardImproved
+        return PrCelebrationEvent(
+            exerciseId = exerciseId,
+            equipment = equipment,
+            isHardPr = celebrateHard,
+            reps = if (celebrateHard) reps else null,
+            newWeightKg = if (celebrateHard) hardCandidateKg else null,
+            prevWeightKg = if (celebrateHard) prevHardKg else null,
+            newE1rmKg = softCandidateE1rm,
+            prevE1rmKg = prevSoftE1rm
+        )
+    }
+
 
     /* ---------- Internal ---------- */
 
@@ -330,8 +465,25 @@ class WorkoutRepository(
         return planDao.getPlanId(phaseId, week, day)
     }
 
-    private fun resolveDayPlanIdOrNull(week: Int, day: Int): Flow<Long?> = flowOf(Unit).map {
-        val phaseId = planDao.currentPhaseId() ?: return@map null
-        planDao.getPlanId(phaseId, week, day)
+    private fun resolveDayPlanIdOrNull(week: Int, day: Int): Flow<Long?> = flow {
+        val phaseId = planDao.currentPhaseId()
+        if (phaseId == null) {
+            emit(null)
+        } else {
+            emit(planDao.getPlanId(phaseId, week, day))
+        }
     }
 }
+
+/* ---------- Private utils ---------- */
+
+private fun equipmentMinIncrementKg(equipment: Equipment): Double = when (equipment) {
+    Equipment.BARBELL -> 2.5
+    Equipment.DUMBBELL -> 1.0
+    Equipment.KETTLEBELL -> 2.0
+    else -> 1.0
+}
+
+private fun todayEpochDayUtc(): Long =
+    java.time.LocalDate.now(java.time.ZoneOffset.UTC).toEpochDay()
+

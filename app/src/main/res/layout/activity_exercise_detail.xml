@@ -67,8 +67,16 @@
                 android:textSize="16sp"
                 android:textStyle="bold"
                 android:textColor="@color/purple_700"
-                android:layout_marginBottom="16dp" />
+                android:layout_marginBottom="4dp" />
 
+            <TextView
+                android:id="@+id/tvE1rm"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="e1RM: -- kg"
+                android:textSize="16sp"
+                android:textColor="@color/black"
+                android:layout_marginBottom="4dp" />
             <!-- Sets Container -->
             <LinearLayout
                 android:id="@+id/layoutSets"
