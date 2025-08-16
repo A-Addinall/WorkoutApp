@@ -21,4 +21,11 @@
     <string name="decrement_rounds">Decrease rounds</string>
     <string name="increment_rounds">Increase rounds</string>
 
+    <string name="pr_title_hard">New %1$s 🎉</string>
+    <string name="pr_title_soft">New e1RM 🎉</string>
+    <string name="pr_msg_hard">%1$s (prev %2$s)\nNew e1RM: %3$s</string>
+    <string name="pr_msg_soft">New e1RM: %1$s\nChange: %2$s</string>
+    <string name="pr_ok">Nice!</string>
+
+
 </resources>

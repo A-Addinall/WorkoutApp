@@ -27,7 +27,7 @@ Companion to `tech_map.md`. Contracts list **Inputs**, **Observed State**, **Act
 
 ## WorkoutActivity
 **Inputs:** `DAY_INDEX:Int` (1..5), `WORKOUT_NAME:String?`.  
-**Observes:** `programForDay`, `metconsForDay` (repo prefers Phase model if available).  
+**Observes:** `programForDay`, `metconsForDay`, `lastMetconDisplayForDay` (repo prefers Phase model if available).  
 **Actions/Calls:** `startSession(day)`; open `ExerciseDetailActivity` or `Metcon*` screens.  
 **Side‑effects:** Creates `WorkoutSession`.  
 **Navigation:** Back to Main.  
