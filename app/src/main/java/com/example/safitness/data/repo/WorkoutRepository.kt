@@ -16,6 +16,10 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlin.math.max
 
 class WorkoutRepository(
     private val libraryDao: LibraryDao,
@@ -473,6 +477,51 @@ class WorkoutRepository(
             emit(planDao.getPlanId(phaseId, week, day))
         }
     }
+    // ===== Rest Timer (in-memory, additive) =====
+    private val repoScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    data class RestState(
+        val sessionId: Long,
+        val exerciseId: Long,
+        val durationMs: Long,
+        val remainingMs: Long,
+        val isRunning: Boolean
+    )
+
+    private val _restState = MutableStateFlow<RestState?>(null)
+    val restTimerState: StateFlow<RestState?> = _restState
+    private var ticker: Job? = null
+
+    fun startRestTimer(sessionId: Long, exerciseId: Long, baseDurationMs: Long) {
+        _restState.value = RestState(sessionId, exerciseId, baseDurationMs, baseDurationMs, true)
+        restartTicker()
+    }
+    fun addFailBonusRest(ms: Long = 30_000L) {
+        _restState.value = _restState.value?.let { it.copy(remainingMs = it.remainingMs + ms) }
+    }
+    fun pauseRestTimer() { _restState.value = _restState.value?.copy(isRunning = false); ticker?.cancel() }
+    fun resumeRestTimer() { _restState.value = _restState.value?.copy(isRunning = true); restartTicker() }
+    fun clearRestTimer() { ticker?.cancel(); _restState.value = null }
+
+    private fun restartTicker() {
+        ticker?.cancel()
+        val s = _restState.value ?: return
+        if (!s.isRunning) return
+        ticker = repoScope.launch {
+            while (isActive) {
+                delay(1000L)
+                val cur = _restState.value ?: return@launch
+                if (!cur.isRunning) return@launch
+                val next = max(0L, cur.remainingMs - 1000L)
+                _restState.value = cur.copy(remainingMs = next)
+                if (next == 0L) {
+                    pauseRestTimer()
+                    return@launch
+                }
+            }
+        }
+    }
+
 }
 
 /* ---------- Private utils ---------- */

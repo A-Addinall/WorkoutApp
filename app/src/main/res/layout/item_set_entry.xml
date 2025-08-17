@@ -12,73 +12,86 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="16dp">
+        android:padding="12dp">
 
+        <!-- Line 1 -->
         <TextView
             android:id="@+id/tvSetNumber"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Set 1:"
-            android:textSize="16sp"
+            android:textSize="15sp"
             android:textStyle="bold"
             android:textColor="?attr/colorOnSurface"
-            android:layout_marginBottom="8dp" />
+            android:layout_marginBottom="6dp" />
 
+        <!-- Line 2 -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical">
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Weight:"
+                android:textColor="?attr/colorOnSurface"
+                android:layout_marginEnd="4dp" />
 
             <EditText
                 android:id="@+id/etWeight"
-                android:layout_width="0dp"
-                android:layout_height="48dp"
-                android:layout_weight="1"
-                android:hint="Weight (kg)"
+                android:layout_width="60dp"
+                android:layout_height="40dp"
+                android:hint="kg"
                 android:inputType="numberDecimal"
+                android:maxLength="4"
+                android:gravity="center"
                 android:importantForAutofill="no"
                 android:autofillHints=""
                 android:textColor="?attr/colorOnSurface"
-                android:layout_marginEnd="8dp" />
+                android:layout_marginEnd="12dp" />
 
-            <!-- Reps come from the programme selection; read-only here -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Reps:"
+                android:textColor="?attr/colorOnSurface"
+                android:layout_marginEnd="4dp" />
+
             <EditText
                 android:id="@+id/etReps"
-                android:layout_width="0dp"
-                android:layout_height="48dp"
-                android:layout_weight="1"
-                android:hint="Reps"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:hint="--"
                 android:inputType="number"
+                android:maxLength="2"
                 android:enabled="false"
                 android:focusable="false"
                 android:clickable="false"
+                android:gravity="center"
                 android:textColor="?attr/colorOnSurface"
-                android:layout_marginStart="8dp" />
+                android:layout_marginEnd="8dp" />
+
+            <RadioGroup
+                android:id="@+id/rgStrengthResult"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <RadioButton
+                    android:id="@+id/rbSuccess"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="✓" />
+
+                <RadioButton
+                    android:id="@+id/rbFail"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="✗"
+                    android:layout_marginStart="8dp" />
+            </RadioGroup>
         </LinearLayout>
-
-        <!-- Success / Fail single-choice toggle, centred like Metcon -->
-        <RadioGroup
-            android:id="@+id/rgStrengthResult"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginTop="12dp"
-            android:gravity="center_horizontal">
-
-            <RadioButton
-                android:id="@+id/rbSuccess"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Success" />
-
-            <RadioButton
-                android:id="@+id/rbFail"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Fail"
-                android:layout_marginStart="16dp" />
-        </RadioGroup>
-
     </LinearLayout>
 </androidx.cardview.widget.CardView>

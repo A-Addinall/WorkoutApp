@@ -1,12 +1,15 @@
 package com.example.safitness.ui
 
 import android.annotation.SuppressLint
+import android.content.Context
 import android.os.Bundle
 import android.view.Gravity
+import android.view.View
 import android.widget.*
 import androidx.activity.viewModels
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.constraintlayout.widget.ConstraintLayout
+import androidx.constraintlayout.widget.ConstraintSet
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.example.safitness.R
@@ -14,6 +17,7 @@ import com.example.safitness.core.Equipment
 import com.example.safitness.core.PrCelebrationEvent
 import com.example.safitness.data.repo.Repos
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Locale
@@ -23,6 +27,7 @@ class ExerciseDetailActivity : AppCompatActivity() {
     private val vm: WorkoutViewModel by viewModels {
         WorkoutViewModelFactory(Repos.workoutRepository(this))
     }
+    private val repo by lazy { Repos.workoutRepository(this) }
 
     private lateinit var tvExerciseName: TextView
     private lateinit var tvLastSuccessful: TextView
@@ -40,7 +45,7 @@ class ExerciseDetailActivity : AppCompatActivity() {
     private var targetReps: Int? = null
 
     private data class SetRow(
-        val container: android.view.View,
+        val container: View,
         val etWeight: EditText,
         val etReps: EditText,
         val rgResult: RadioGroup
@@ -49,6 +54,9 @@ class ExerciseDetailActivity : AppCompatActivity() {
 
     private companion object {
         private const val DEFAULT_SUGGESTED_REPS = 5
+        private const val PREFS_NAME = "user_settings"
+        private const val KEY_REST_SECONDS = "rest_time_seconds"
+        private const val DEFAULT_REST_SECONDS = 120
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -68,11 +76,18 @@ class ExerciseDetailActivity : AppCompatActivity() {
         tvE1rm = findViewById(R.id.tvE1rm)
         refreshHeader()
 
-        // Start with one set row
-        addNewSet()
+        // Ensure banner exists (if XML include removed by mistake, we add it once)
+        ensureBannerInflated()
+        findViewById<View>(R.id.restTimerContainer)?.bringToFront()
 
+        addNewSet()
         btnAddSet.setOnClickListener { addNewSet() }
         btnCompleteExercise.setOnClickListener { onCompleteExercise() }
+
+        bindRestTimerBanner()
+
+        // If a timer is already running, surface it instantly
+        repo.restTimerState.value?.let { forceShowBanner(it.remainingMs, it.durationMs, it.isRunning) }
     }
 
     private fun bindViews() {
@@ -83,6 +98,12 @@ class ExerciseDetailActivity : AppCompatActivity() {
         btnAddSet = findViewById(R.id.btnAddSet)
         btnCompleteExercise = findViewById(R.id.btnCompleteExercise)
         etNotes = findViewById(R.id.etNotes)
+    }
+
+    private fun getBaseRestMs(context: Context = this): Long {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val sec = prefs.getInt(KEY_REST_SECONDS, DEFAULT_REST_SECONDS)
+        return (sec.coerceAtLeast(10)) * 1000L
     }
 
     private fun addNewSet() {
@@ -97,9 +118,33 @@ class ExerciseDetailActivity : AppCompatActivity() {
         tvSetNumber.text = "Set $setNumber:"
         etReps.setText(targetReps?.toString() ?: "")
         etReps.isEnabled = false
-
-        // Subtle hint colour for weight input
         etWeight.setHintTextColor(ContextCompat.getColor(this, android.R.color.darker_gray))
+
+        rgResult.setOnCheckedChangeListener { _, checkedId ->
+            val weightVal = etWeight.text.toString().toDoubleOrNull()
+            val repsVal = targetReps ?: etReps.text.toString().toIntOrNull()
+            if (weightVal == null || repsVal == null || repsVal <= 0) return@setOnCheckedChangeListener
+
+            val baseMs = getBaseRestMs()
+            when (checkedId) {
+                R.id.rbSuccess -> {
+                    repo.startRestTimer(sessionId, exerciseId, baseMs)
+                    forceShowBanner(baseMs, baseMs, isRunning = true)
+                }
+                R.id.rbFail -> {
+                    val state = repo.restTimerState.value
+                    if (state == null) {
+                        val dur = baseMs + 30_000L
+                        repo.startRestTimer(sessionId, exerciseId, dur)
+                        forceShowBanner(dur, dur, isRunning = true)
+                    } else {
+                        repo.addFailBonusRest(30_000L)
+                        forceShowBanner(state.remainingMs + 30_000L, state.durationMs + 30_000L, state.isRunning)
+                    }
+                    Toast.makeText(this, getString(R.string.rest_timer_bonus_toast), Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
 
         val row = SetRow(v, etWeight, etReps, rgResult)
         setRows += row
@@ -112,11 +157,8 @@ class ExerciseDetailActivity : AppCompatActivity() {
             Toast.makeText(this, "Please add at least one set.", Toast.LENGTH_SHORT).show()
             return
         }
+        val equipment = runCatching { Equipment.valueOf(equipmentName) }.getOrElse { Equipment.BARBELL }
 
-        val equipment = runCatching { Equipment.valueOf(equipmentName) }
-            .getOrElse { Equipment.BARBELL }
-
-        // Validate inputs before logging
         for ((index, row) in setRows.withIndex()) {
             if (row.rgResult.checkedRadioButtonId == -1) {
                 Toast.makeText(this, "Select Success/Fail for set ${index + 1}.", Toast.LENGTH_SHORT).show()
@@ -145,51 +187,26 @@ class ExerciseDetailActivity : AppCompatActivity() {
                 val repsVal = targetReps ?: row.etReps.text.toString().toIntOrNull() ?: 0
 
                 if (success && repsVal > 0 && weightVal > 0.0) {
-                    // 1) PREVIEW (no DB writes)
-                    val preview = vm.previewPrEvent(
-                        exerciseId = exerciseId,
-                        equipment = equipment,
-                        reps = repsVal,
-                        weight = weightVal
-                    )
-
-                    // store first PR to show as modal after the loop
+                    val preview = vm.previewPrEvent(exerciseId, equipment, repsVal, weightVal)
                     if (firstPr == null && preview != null) firstPr = preview
-
-                    // 2) LOG (DB write)
                     vm.logStrengthSet(
-                        sessionId = sessionId,
-                        exerciseId = exerciseId,
-                        equipment = equipment,
-                        setNumber = index + 1,
-                        reps = repsVal,
-                        weight = weightVal,
-                        rpe = 6.0,
-                        success = true,
-                        notes = etNotes.text?.toString()?.ifBlank { null }
+                        sessionId, exerciseId, equipment,
+                        index + 1, repsVal, weightVal, 6.0, true,
+                        etNotes.text?.toString()?.ifBlank { null }
                     )
                 } else {
-                    // Log failure
                     vm.logStrengthSet(
-                        sessionId = sessionId,
-                        exerciseId = exerciseId,
-                        equipment = equipment,
-                        setNumber = index + 1,
-                        reps = repsVal,
-                        weight = weightVal,
-                        rpe = 9.0,
-                        success = false,
-                        notes = etNotes.text?.toString()?.ifBlank { null }
+                        sessionId, exerciseId, equipment,
+                        index + 1, repsVal, weightVal, 9.0, false,
+                        etNotes.text?.toString()?.ifBlank { null }
                     )
                 }
-
                 logged++
             }
 
             withContext(Dispatchers.Main) {
                 if (firstPr != null) {
                     showPrDialog(firstPr!!)
-                    // finish is called after dialog dismiss
                 } else {
                     showCenteredToast("✅ Exercise completed! $logged sets logged.")
                     finish()
@@ -200,15 +217,13 @@ class ExerciseDetailActivity : AppCompatActivity() {
 
     @SuppressLint("SetTextI18n")
     private fun refreshHeader() {
-        val equipment = runCatching { Equipment.valueOf(equipmentName) }
-            .getOrElse { Equipment.BARBELL }
+        val equipment = runCatching { Equipment.valueOf(equipmentName) }.getOrElse { Equipment.BARBELL }
 
         lifecycleScope.launch(Dispatchers.IO) {
             val last = vm.getLastSuccessfulWeight(exerciseId, equipment, targetReps)
             val reps = targetReps ?: DEFAULT_SUGGESTED_REPS
             val suggested = vm.suggestNextLoadKg(exerciseId, equipment, reps)
 
-            // calculate e1RM if we have a last successful set
             val e1rm = if (last != null && targetReps != null) {
                 com.example.safitness.core.estimateOneRepMax(last, targetReps!!)
             } else null
@@ -225,28 +240,19 @@ class ExerciseDetailActivity : AppCompatActivity() {
         }
     }
 
-    // ======== Feedback helpers ========
-
     private fun showCenteredToast(msg: String) {
         val t = Toast.makeText(this, msg, Toast.LENGTH_SHORT)
         t.setGravity(Gravity.CENTER, 0, 0)
         t.show()
     }
 
-    /** Simple centered modal; user taps OK to dismiss, then we close the screen. */
     private fun showPrDialog(e: com.example.safitness.core.PrCelebrationEvent) {
         val view = layoutInflater.inflate(R.layout.dialog_pr, null)
         val titleTv = view.findViewById<TextView>(R.id.tvPrTitle)
         val bodyTv = view.findViewById<TextView>(R.id.tvPrBody)
         val btnNice = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnNice)
 
-        val title = if (e.isHardPr) {
-            val repsLabel = "${e.reps ?: 1}RM"
-            "New $repsLabel 🎉"
-        } else {
-            "New e1RM 🎉"
-        }
-
+        val title = if (e.isHardPr) "${e.reps ?: 1}RM 🎉" else "New e1RM 🎉"
         val body = if (e.isHardPr) {
             val newW = e.newWeightKg?.let { fmtKg(it) } ?: "—"
             val prevW = e.prevWeightKg?.let { fmtKg(it) } ?: "—"
@@ -269,10 +275,7 @@ class ExerciseDetailActivity : AppCompatActivity() {
 
         dialog.setOnShowListener {
             btnNice.isAllCaps = false
-            btnNice.setOnClickListener {
-                dialog.dismiss()
-                finish()
-            }
+            btnNice.setOnClickListener { dialog.dismiss(); finish() }
         }
 
         dialog.show()
@@ -280,4 +283,94 @@ class ExerciseDetailActivity : AppCompatActivity() {
 
     private fun fmtKg(value: Double): String =
         String.format(Locale.UK, "%.1f kg", value)
+
+    // ------------------ Rest Timer banner (de-duplicated) ------------------
+
+    /**
+     * If the banner isn't present in XML, inflate it once and place it
+     * between the header and the scroll.
+     */
+    private fun ensureBannerInflated() {
+        if (findViewById<View>(R.id.restTimerContainer) != null) return
+
+        val root = findViewById<ConstraintLayout>(R.id.root) ?: return
+        val header = findViewById<View>(R.id.layoutHeader) ?: return
+        val scroll = findViewById<View>(R.id.scrollContent)
+
+        val banner = layoutInflater.inflate(R.layout.include_rest_timer_banner, root, false)
+        banner.id = R.id.restTimerContainer
+        root.addView(banner)
+
+        val set = ConstraintSet().apply { clone(root) }
+        set.connect(banner.id, ConstraintSet.TOP, header.id, ConstraintSet.BOTTOM)
+        set.connect(banner.id, ConstraintSet.START, ConstraintSet.PARENT_ID, ConstraintSet.START)
+        set.connect(banner.id, ConstraintSet.END, ConstraintSet.PARENT_ID, ConstraintSet.END)
+        set.constrainWidth(banner.id, ConstraintSet.MATCH_CONSTRAINT)
+        set.constrainHeight(banner.id, ConstraintSet.WRAP_CONTENT)
+
+        if (scroll != null) {
+            set.clear(scroll.id, ConstraintSet.TOP)
+            set.connect(scroll.id, ConstraintSet.TOP, banner.id, ConstraintSet.BOTTOM)
+        }
+        set.applyTo(root)
+    }
+
+    /** Subscribe to repo state and update UI. */
+    private fun bindRestTimerBanner() {
+        val container = findViewById<View>(R.id.restTimerContainer) ?: return
+        val value = container.findViewById<TextView>(R.id.restTimerValue)
+        val toggle = container.findViewById<ImageButton>(R.id.restTimerToggle)
+        val clear = container.findViewById<ImageButton>(R.id.restTimerClear)
+        val progress = container.findViewById<ProgressBar>(R.id.restTimerProgress)
+
+        lifecycleScope.launch {
+            repo.restTimerState.collectLatest { state ->
+                if (state == null) {
+                    container.visibility = View.GONE
+                } else {
+                    container.visibility = View.VISIBLE
+                    value.text = formatMs(state.remainingMs)
+                    toggle.setImageResource(
+                        if (state.isRunning) R.drawable.ic_pause_24 else R.drawable.ic_play_24
+                    )
+                    val p = if (state.durationMs > 0)
+                        (state.remainingMs * 1000L / state.durationMs).toInt().coerceIn(0, 1000)
+                    else 0
+                    progress.max = 1000
+                    progress.progress = p
+                }
+            }
+        }
+
+        toggle.setOnClickListener {
+            val state = repo.restTimerState.value
+            if (state?.isRunning == true) repo.pauseRestTimer() else repo.resumeRestTimer()
+        }
+        clear.setOnClickListener { repo.clearRestTimer() }
+    }
+
+    /** Show immediately without waiting for Flow. */
+    private fun forceShowBanner(remainingMs: Long, durationMs: Long, isRunning: Boolean) {
+        val container = findViewById<View>(R.id.restTimerContainer) ?: return
+        val value = container.findViewById<TextView>(R.id.restTimerValue)
+        val toggle = container.findViewById<ImageButton>(R.id.restTimerToggle)
+        val progress = container.findViewById<ProgressBar>(R.id.restTimerProgress)
+
+        container.visibility = View.VISIBLE
+        value.text = formatMs(remainingMs)
+        toggle.setImageResource(if (isRunning) R.drawable.ic_pause_24 else R.drawable.ic_play_24)
+        progress.max = 1000
+        val p = if (durationMs > 0)
+            (remainingMs * 1000L / durationMs).toInt().coerceIn(0, 1000)
+        else 0
+        progress.progress = p
+        container.bringToFront()
+    }
+
+    private fun formatMs(ms: Long): String {
+        val totalSec = ms / 1000
+        val m = totalSec / 60
+        val s = totalSec % 60
+        return String.format("%02d:%02d", m, s)
+    }
 }
