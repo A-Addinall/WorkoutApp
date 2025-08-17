@@ -46,21 +46,86 @@ class WorkoutRepository(
     suspend fun countExercises() = libraryDao.countExercises()
 
     /* ---------- Program (strength) ---------- */
+    /* ---------- Program (strength) ---------- */
     suspend fun addToDay(
         day: Int,
         exercise: Exercise,
         required: Boolean,
         preferred: com.example.safitness.core.Equipment?,
         targetReps: Int?
-    ) = programDao.upsert(
-        ProgramSelection(
-            dayIndex = day,
-            exerciseId = exercise.id,
-            required = required,
-            preferredEquipment = preferred,
-            targetReps = targetReps
-        )
-    )
+    ) {
+        val dayPlanId = currentDayPlanIdOrNull(week = 1, day = day)
+        if (dayPlanId == null) {
+            // legacy
+            programDao.upsert(
+                ProgramSelection(
+                    dayIndex = day,
+                    exerciseId = exercise.id,
+                    required = required,
+                    preferredEquipment = preferred,
+                    targetReps = targetReps
+                )
+            )
+        } else {
+            // Phase/new model
+            if (planDao.strengthItemCount(dayPlanId, exercise.id) == 0) {
+                val order = planDao.nextStrengthSortOrder(dayPlanId)
+                planDao.insertItems(
+                    listOf(
+                        DayItemEntity(
+                            dayPlanId = dayPlanId,
+                            itemType = "STRENGTH",
+                            refId = exercise.id,
+                            required = required,
+                            sortOrder = order,
+                            targetReps = targetReps
+                        )
+                    )
+                )
+            } else {
+                // If already present, just update optional fields
+                planDao.updateStrengthRequired(dayPlanId, exercise.id, required)
+                planDao.updateStrengthTargetReps(dayPlanId, exercise.id, targetReps)
+            }
+        }
+    }
+
+    suspend fun setRequired(day: Int, exerciseId: Long, required: Boolean) {
+        val dayPlanId = currentDayPlanIdOrNull(week = 1, day = day)
+        if (dayPlanId == null) programDao.setRequired(day, exerciseId, required)
+        else planDao.updateStrengthRequired(dayPlanId, exerciseId, required)
+    }
+
+    suspend fun setTargetReps(day: Int, exerciseId: Long, reps: Int?) {
+        val dayPlanId = currentDayPlanIdOrNull(week = 1, day = day)
+        if (dayPlanId == null) programDao.setTargetReps(day, exerciseId, reps)
+        else planDao.updateStrengthTargetReps(dayPlanId, exerciseId, reps)
+    }
+
+    suspend fun removeFromDay(day: Int, exerciseId: Long) {
+        val dayPlanId = currentDayPlanIdOrNull(week = 1, day = day)
+        if (dayPlanId == null) programDao.remove(day, exerciseId)
+        else planDao.deleteStrengthItem(dayPlanId, exerciseId)
+    }
+
+    suspend fun isInProgram(day: Int, exerciseId: Long): Boolean {
+        val dayPlanId = currentDayPlanIdOrNull(week = 1, day = day)
+        return if (dayPlanId == null) programDao.exists(day, exerciseId) > 0
+        else planDao.existsStrength(dayPlanId, exerciseId) > 0
+    }
+
+    suspend fun selectedTargetReps(day: Int, exerciseId: Long): Int? {
+        val dayPlanId = currentDayPlanIdOrNull(week = 1, day = day)
+        return if (dayPlanId == null) programDao.getTargetReps(day, exerciseId)
+        else planDao.getStrengthTargetReps(dayPlanId, exerciseId)
+    }
+
+    suspend fun requiredFor(day: Int, exerciseId: Long): Boolean {
+        val dayPlanId = currentDayPlanIdOrNull(week = 1, day = day)
+        return if (dayPlanId == null) programDao.getRequired(day, exerciseId) ?: false
+        else planDao.getStrengthRequired(dayPlanId, exerciseId) ?: false
+    }
+
 
     /** Prefer Week/Day model if populated; else legacy. */
     fun programForDay(day: Int): Flow<List<ExerciseWithSelection>> =
@@ -82,18 +147,6 @@ class WorkoutRepository(
             }
         }
 
-    suspend fun setRequired(day: Int, exerciseId: Long, required: Boolean) =
-        programDao.setRequired(day, exerciseId, required)
-    suspend fun setTargetReps(day: Int, exerciseId: Long, reps: Int?) =
-        programDao.setTargetReps(day, exerciseId, reps)
-    suspend fun removeFromDay(day: Int, exerciseId: Long) =
-        programDao.remove(day, exerciseId)
-    suspend fun isInProgram(day: Int, exerciseId: Long) =
-        programDao.exists(day, exerciseId) > 0
-    suspend fun selectedTargetReps(day: Int, exerciseId: Long) =
-        programDao.getTargetReps(day, exerciseId)
-    suspend fun requiredFor(day: Int, exerciseId: Long) =
-        programDao.getRequired(day, exerciseId) ?: false
     suspend fun daySummaryLabel(day: Int): String {
         val types = programDao.distinctTypesForDay(day)
         return when {

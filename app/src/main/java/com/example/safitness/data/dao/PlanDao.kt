@@ -129,4 +129,58 @@ interface PlanDao {
         WHERE dayPlanId = :dayPlanId AND itemType = 'METCON' AND refId = :planId
     """)
     suspend fun updateMetconOrder(dayPlanId: Long, planId: Long, sortOrder: Int)
+
+    /* ---------- NEW: edit helpers for STRENGTH day_items ---------- */
+
+    @Query("""
+    SELECT COALESCE(MAX(sortOrder), -1) + 1
+    FROM day_item
+    WHERE dayPlanId = :dayPlanId AND itemType = 'STRENGTH'
+""")
+    suspend fun nextStrengthSortOrder(dayPlanId: Long): Int
+
+    @Query("""
+    SELECT COUNT(*) FROM day_item
+    WHERE dayPlanId = :dayPlanId AND itemType = 'STRENGTH' AND refId = :exerciseId
+""")
+    suspend fun strengthItemCount(dayPlanId: Long, exerciseId: Long): Int
+
+    @Query("""
+    DELETE FROM day_item
+    WHERE dayPlanId = :dayPlanId AND itemType = 'STRENGTH' AND refId = :exerciseId
+""")
+    suspend fun deleteStrengthItem(dayPlanId: Long, exerciseId: Long)
+
+    @Query("""
+    UPDATE day_item SET required = :required
+    WHERE dayPlanId = :dayPlanId AND itemType = 'STRENGTH' AND refId = :exerciseId
+""")
+    suspend fun updateStrengthRequired(dayPlanId: Long, exerciseId: Long, required: Boolean)
+
+    @Query("""
+    UPDATE day_item SET targetReps = :reps
+    WHERE dayPlanId = :dayPlanId AND itemType = 'STRENGTH' AND refId = :exerciseId
+""")
+    suspend fun updateStrengthTargetReps(dayPlanId: Long, exerciseId: Long, reps: Int?)
+
+    @Query("""
+    SELECT COUNT(*) FROM day_item
+    WHERE dayPlanId = :dayPlanId AND itemType = 'STRENGTH' AND refId = :exerciseId
+""")
+    suspend fun existsStrength(dayPlanId: Long, exerciseId: Long): Int
+
+    @Query("""
+    SELECT targetReps FROM day_item
+    WHERE dayPlanId = :dayPlanId AND itemType = 'STRENGTH' AND refId = :exerciseId
+    LIMIT 1
+""")
+    suspend fun getStrengthTargetReps(dayPlanId: Long, exerciseId: Long): Int?
+
+    @Query("""
+    SELECT required FROM day_item
+    WHERE dayPlanId = :dayPlanId AND itemType = 'STRENGTH' AND refId = :exerciseId
+    LIMIT 1
+""")
+    suspend fun getStrengthRequired(dayPlanId: Long, exerciseId: Long): Boolean?
+
 }
