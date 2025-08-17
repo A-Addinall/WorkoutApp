@@ -53,6 +53,9 @@ class WorkoutViewModel(private val repo: WorkoutRepository) : ViewModel() {
     private val _prEvents = MutableSharedFlow<PrCelebrationEvent>(replay = 0, extraBufferCapacity = 1)
     val prEvents: SharedFlow<PrCelebrationEvent> = _prEvents
 
+    suspend fun bestE1RM(exerciseId: Long, equipment: Equipment): Double? {
+        return repo.bestE1RM(exerciseId, equipment)
+    }
     fun setDay(day: Int) {
         dayLive.value = day
         viewModelScope.launch {
