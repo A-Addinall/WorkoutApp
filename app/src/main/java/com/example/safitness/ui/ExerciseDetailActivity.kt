@@ -29,6 +29,11 @@ class ExerciseDetailActivity : AppCompatActivity() {
     }
     private val repo by lazy { Repos.workoutRepository(this) }
 
+    // ---- SOUND: beeper for countdown + finish
+    private val beeper by lazy { TimerBeeper() }
+    private var lastPippedSecond: Long = -1L
+    private var lastRemainingMs: Long? = null
+
     private lateinit var tvExerciseName: TextView
     private lateinit var tvLastSuccessful: TextView
     private lateinit var tvSuggestedWeight: TextView
@@ -90,6 +95,11 @@ class ExerciseDetailActivity : AppCompatActivity() {
         repo.restTimerState.value?.let { forceShowBanner(it.remainingMs, it.durationMs, it.isRunning) }
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        beeper.release()
+    }
+
     private fun bindViews() {
         tvExerciseName = findViewById(R.id.tvExerciseName)
         tvLastSuccessful = findViewById(R.id.tvLastSuccessful)
@@ -129,6 +139,7 @@ class ExerciseDetailActivity : AppCompatActivity() {
             when (checkedId) {
                 R.id.rbSuccess -> {
                     repo.startRestTimer(sessionId, exerciseId, baseMs)
+                    resetBeepTracking()
                     forceShowBanner(baseMs, baseMs, isRunning = true)
                 }
                 R.id.rbFail -> {
@@ -136,9 +147,11 @@ class ExerciseDetailActivity : AppCompatActivity() {
                     if (state == null) {
                         val dur = baseMs + 30_000L
                         repo.startRestTimer(sessionId, exerciseId, dur)
+                        resetBeepTracking()
                         forceShowBanner(dur, dur, isRunning = true)
                     } else {
                         repo.addFailBonusRest(30_000L)
+                        // keep tracking; no reset so we don't double-pip the same second
                         forceShowBanner(state.remainingMs + 30_000L, state.durationMs + 30_000L, state.isRunning)
                     }
                     Toast.makeText(this, getString(R.string.rest_timer_bonus_toast), Toast.LENGTH_SHORT).show()
@@ -284,12 +297,9 @@ class ExerciseDetailActivity : AppCompatActivity() {
     private fun fmtKg(value: Double): String =
         String.format(Locale.UK, "%.1f kg", value)
 
-    // ------------------ Rest Timer banner (de-duplicated) ------------------
+    // ------------------ Rest Timer banner ------------------
 
-    /**
-     * If the banner isn't present in XML, inflate it once and place it
-     * between the header and the scroll.
-     */
+    /** If the banner isn't present in XML, inflate it once and place it between the header and the scroll. */
     private fun ensureBannerInflated() {
         if (findViewById<View>(R.id.restTimerContainer) != null) return
 
@@ -315,7 +325,9 @@ class ExerciseDetailActivity : AppCompatActivity() {
         set.applyTo(root)
     }
 
-    /** Subscribe to repo state and update UI. */
+    /** Subscribe to repo state and update UI + SOUND. */
+    // inside ExerciseDetailActivity
+
     private fun bindRestTimerBanner() {
         val container = findViewById<View>(R.id.restTimerContainer) ?: return
         val value = container.findViewById<TextView>(R.id.restTimerValue)
@@ -325,29 +337,41 @@ class ExerciseDetailActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             repo.restTimerState.collectLatest { state ->
+                // ---- SOUND (foreground) ----
+                handleBeep(state?.remainingMs)
+
+                // ---- UI ----
                 if (state == null) {
                     container.visibility = View.GONE
                 } else {
                     container.visibility = View.VISIBLE
                     value.text = formatMs(state.remainingMs)
-                    toggle.setImageResource(
-                        if (state.isRunning) R.drawable.ic_pause_24 else R.drawable.ic_play_24
-                    )
+                    toggle.setImageResource(if (state.isRunning) R.drawable.ic_pause_24 else R.drawable.ic_play_24)
                     val p = if (state.durationMs > 0)
-                        (state.remainingMs * 1000L / state.durationMs).toInt().coerceIn(0, 1000)
-                    else 0
+                        (state.remainingMs * 1000L / state.durationMs).toInt().coerceIn(0, 1000) else 0
                     progress.max = 1000
                     progress.progress = p
+                }
+
+                // ---- Foreground service: start while a timer exists; stop when it doesn't ----
+                if (state != null) {
+                    com.example.safitness.service.RestTimerService.startOrUpdate(this@ExerciseDetailActivity)
+                } else {
+                    com.example.safitness.service.RestTimerService.clear(this@ExerciseDetailActivity)
                 }
             }
         }
 
         toggle.setOnClickListener {
-            val state = repo.restTimerState.value
-            if (state?.isRunning == true) repo.pauseRestTimer() else repo.resumeRestTimer()
+            val st = repo.restTimerState.value
+            if (st?.isRunning == true) repo.pauseRestTimer() else repo.resumeRestTimer()
         }
-        clear.setOnClickListener { repo.clearRestTimer() }
+        clear.setOnClickListener {
+            resetBeepTracking()
+            repo.clearRestTimer()
+        }
     }
+
 
     /** Show immediately without waiting for Flow. */
     private fun forceShowBanner(remainingMs: Long, durationMs: Long, isRunning: Boolean) {
@@ -365,6 +389,37 @@ class ExerciseDetailActivity : AppCompatActivity() {
         else 0
         progress.progress = p
         container.bringToFront()
+    }
+
+    // ---------- SOUND helpers ----------
+    private fun handleBeep(currentRemainingMs: Long?) {
+        val prev = lastRemainingMs
+        lastRemainingMs = currentRemainingMs
+
+        // Null means no timer (either cleared or finished)
+        if (currentRemainingMs == null) {
+            // If we previously had <= 0, we already buzzed; otherwise do nothing on manual clear.
+            return
+        }
+
+        val sec = (currentRemainingMs / 1000L)
+        // Final 5..1 pips (only once per second)
+        if (sec in 1..5 && sec != lastPippedSecond) {
+            beeper.countdownPip()
+            lastPippedSecond = sec
+        }
+
+        // Detect finish: transition from >0 to 0
+        val prevSec = prev?.let { it / 1000L } ?: -1L
+        if (prevSec > 0 && sec <= 0) {
+            beeper.finalBuzz()
+            resetBeepTracking()
+        }
+    }
+
+    private fun resetBeepTracking() {
+        lastPippedSecond = -1L
+        lastRemainingMs = null
     }
 
     private fun formatMs(ms: Long): String {

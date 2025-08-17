@@ -32,5 +32,11 @@
     <string name="rest_timer_clear">Clear rest timer</string>
     <string name="rest_timer_bonus_toast">+30s added for recovery</string>
     <string name="rest_timer_done">Rest complete</string>
+    <string name="rest_timer_running">Rest: %1$s remaining</string>
+    <string name="rest_timer_paused">Rest paused: %1$s</string>
+    <string name="pause">Pause</string>
+    <string name="resume">Resume</string>
+    <string name="clear">Clear</string>
+
 
 </resources>
