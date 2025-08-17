@@ -1,15 +1,22 @@
 package com.example.safitness.ui
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.cardview.widget.CardView
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import com.example.safitness.R
 import com.example.safitness.core.Modality
 import com.example.safitness.core.WorkoutType
 import com.example.safitness.data.repo.Repos
-import com.google.android.material.button.MaterialButton
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.first
 import java.util.LinkedHashSet
@@ -17,9 +24,16 @@ import java.util.LinkedHashSet
 class MainActivity : AppCompatActivity() {
     private val scope = MainScope()
 
+    companion object {
+        private const val REQ_CODE_POST_NOTIFICATIONS = 1001
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+
+        // Ask for notifications permission (Android 13+)
+        requestNotificationPermission()
 
         // Bind all five day cards with Start/Edit actions
         bindDayCard(1, R.id.cardDay1)
@@ -42,19 +56,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun bindDayCard(day: Int, cardId: Int) {
-        val card = findViewById<androidx.cardview.widget.CardView>(cardId)
+        val card = findViewById<CardView>(cardId)
 
-        // Start = opens the workout for this day (keep as you have)
         card.findViewById<com.google.android.material.button.MaterialButton?>(R.id.btnStartDay)
             ?.setOnClickListener { openDay(day) }
 
-        // EDIT = open the library for THIS day (keep DAY_INDEX!)
         card.findViewById<com.google.android.material.button.MaterialButton?>(R.id.btnEditDay)
             ?.setOnClickListener {
                 startActivity(Intent(this, ExerciseLibraryActivity::class.java).apply {
-                    putExtra("DAY_INDEX", day)  // this does NOT filter the catalogue
+                    putExtra("DAY_INDEX", day)
                 })
-        }
+            }
     }
 
     private fun refreshDayLabels() {
@@ -62,17 +74,14 @@ class MainActivity : AppCompatActivity() {
             val repo = Repos.workoutRepository(this@MainActivity)
 
             for (day in 1..5) {
-                // 1) Strength program for the day (exclude metcon modality)
                 val program = repo.programForDay(day).first()
                 val strengthItems = program.filter { it.exercise.modality != Modality.METCON }
 
-                // Preserve first-seen order and avoid duplicates
                 val labels = LinkedHashSet<String>()
                 strengthItems.forEach { item ->
                     labels += mapWorkoutTypeToLabel(item.exercise.workoutType)
                 }
 
-                // 2) Metcon selections for the day (if any, append "Metcon")
                 val metcons = repo.metconsForDay(day).first()
                 if (metcons.isNotEmpty()) labels += "Metcon"
 
@@ -100,6 +109,76 @@ class MainActivity : AppCompatActivity() {
             putExtra("DAY_INDEX", day)
             putExtra("WORKOUT_NAME", "Day $day")
         })
+    }
+
+    // -------- Notifications permission (Android 13+) --------
+
+    private fun requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val granted = ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+
+            if (!granted) {
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                    REQ_CODE_POST_NOTIFICATIONS
+                )
+            }
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+
+        if (requestCode == REQ_CODE_POST_NOTIFICATIONS && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val granted = grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED
+            if (!granted) {
+                val showRationale = ActivityCompat.shouldShowRequestPermissionRationale(
+                    this,
+                    Manifest.permission.POST_NOTIFICATIONS
+                )
+                if (showRationale) {
+                    // Soft deny: explain why it matters
+                    Toast.makeText(
+                        this,
+                        "Enable notifications to hear rest-timer beeps in the background.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                } else {
+                    // “Don’t ask again” or policy deny: point to Settings
+                    Toast.makeText(
+                        this,
+                        "Notifications are disabled. Enable them in Settings to hear the rest timer.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    // (Optional) Offer to open settings automatically:
+                    // openAppNotificationSettings()
+                }
+            }
+        }
+    }
+
+    // Open app-specific notification settings (only used if you decide to trigger it)
+    @Suppress("unused")
+    private fun openAppNotificationSettings() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+            }
+            startActivity(intent)
+        } else {
+            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = Uri.fromParts("package", packageName, null)
+            }
+            startActivity(intent)
+        }
     }
 
     override fun onDestroy() {
