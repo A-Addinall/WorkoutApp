@@ -27,5 +27,10 @@
     <string name="pr_msg_soft">New e1RM: %1$s\nChange: %2$s</string>
     <string name="pr_ok">Nice!</string>
 
+    <string name="rest_timer_label">Rest</string>
+    <string name="rest_timer_toggle">Pause/Resume rest timer</string>
+    <string name="rest_timer_clear">Clear rest timer</string>
+    <string name="rest_timer_bonus_toast">+30s added for recovery</string>
+    <string name="rest_timer_done">Rest complete</string>
 
 </resources>

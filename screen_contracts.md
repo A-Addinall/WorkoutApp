@@ -33,7 +33,6 @@ Companion to `tech_map.md`. Contracts list **Inputs**, **Observed State**, **Act
 **Navigation:** Back to Main.  
 **UI Notes:** `activity_workout.xml`; uses metcon plan cards.
 
-
 ### WorkoutActivity (data source bridge)
 The ViewModel/Repo **prefers** the Phase model (Phase → Week/Day → `day_item`) via `PlanDao` **when items exist** and **falls back** to legacy (`program_selection` + `program_metcon_selection`) otherwise. No UI changes required; adapters are in the repository layer.
 
@@ -41,10 +40,11 @@ The ViewModel/Repo **prefers** the Phase model (Phase → Week/Day → `day_item
 
 ## ExerciseDetailActivity
 **Inputs:** `SESSION_ID:Long`, `EXERCISE_ID:Long`, `EXERCISE_NAME:String`, `EQUIPMENT:String`, `TARGET_REPS:Int?`.  
-**Observes:** last/suggested weight via repo queries.  
-**Actions/Calls:** `logStrengthSet(...)` per set.  
-**Side‑effects:** Writes `SetLog`.  
-**UI Notes:** `activity_exercise_detail.xml` + `item_set_entry.xml`.
+**Observes:** last/suggested weight via repo queries; **e1RM (estimated 1RM)**; **`prEvent: LiveData<PrCelebrationEvent?>`**.  
+**Actions/Calls:** `previewPrEvent(...)` (pre‑confirm PR check), `logStrengthSet(...)` (persists set and PR evaluation).  
+**Side‑effects:** Writes `SetLog`; may upsert `PersonalRecord` (estimated 1RM or rep‑max); may trigger PR modal.  
+**Navigation:** Back to WorkoutActivity.  
+**UI Notes:** `activity_exercise_detail.xml` updated with e1RM/PR hints; PR dialog: `dialog_pr.xml` (strings include `pr_title_hard`, etc.).
 
 ---
 
@@ -84,12 +84,16 @@ The ViewModel/Repo **prefers** the Phase model (Phase → Week/Day → `day_item
 ---
 
 ## PersonalRecordsActivity
-Placeholder; no changes.
+**Inputs:** —  
+**Observes:** Best e1RM and rep‑max per exercise/equipment as available via repo.  
+**Actions/Calls:** (Placeholder) future: filter by exercise, export PRs.  
+**Side‑effects:** —  
+**UI Notes:** Placeholder list UI.
 
 ---
 
 ### Common VM/Repo Touchpoints
 - `WorkoutViewModel`: screens unchanged; repo under the hood may source from Phase model via `PlanDao` or fallback.
-- `WorkoutRepository`: bridges **Phase 0** (`PlanDao`) with legacy (`ProgramDao`).
+- `WorkoutRepository`: bridges **Phase 0** (`PlanDao`) with legacy (`ProgramDao`); handles PR preview/eval notifications.
 
 ---
