@@ -29,7 +29,6 @@ class ExerciseDetailActivity : AppCompatActivity() {
     }
     private val repo by lazy { Repos.workoutRepository(this) }
 
-    // ---- SOUND: beeper for countdown + finish
     private val beeper by lazy { TimerBeeper() }
     private var lastPippedSecond: Long = -1L
     private var lastRemainingMs: Long? = null
@@ -37,11 +36,13 @@ class ExerciseDetailActivity : AppCompatActivity() {
     private lateinit var tvExerciseName: TextView
     private lateinit var tvLastSuccessful: TextView
     private lateinit var tvSuggestedWeight: TextView
+    private lateinit var tvE1rm: TextView
+    private var tvBestAtReps: TextView? = null
+
     private lateinit var layoutSets: LinearLayout
     private lateinit var btnAddSet: Button
     private lateinit var btnCompleteExercise: Button
     private lateinit var etNotes: EditText
-    private lateinit var tvE1rm: TextView
 
     private var sessionId: Long = 0L
     private var exerciseId: Long = 0L
@@ -76,12 +77,11 @@ class ExerciseDetailActivity : AppCompatActivity() {
             intent.getIntExtra("TARGET_REPS", 0).takeIf { it > 0 } else null
 
         bindViews()
+
         tvExerciseName.text = exerciseName
         findViewById<ImageView>(R.id.ivBack).setOnClickListener { finish() }
-        tvE1rm = findViewById(R.id.tvE1rm)
         refreshHeader()
 
-        // Ensure banner exists (if XML include removed by mistake, we add it once)
         ensureBannerInflated()
         findViewById<View>(R.id.restTimerContainer)?.bringToFront()
 
@@ -90,8 +90,6 @@ class ExerciseDetailActivity : AppCompatActivity() {
         btnCompleteExercise.setOnClickListener { onCompleteExercise() }
 
         bindRestTimerBanner()
-
-        // If a timer is already running, surface it instantly
         repo.restTimerState.value?.let { forceShowBanner(it.remainingMs, it.durationMs, it.isRunning) }
     }
 
@@ -104,6 +102,9 @@ class ExerciseDetailActivity : AppCompatActivity() {
         tvExerciseName = findViewById(R.id.tvExerciseName)
         tvLastSuccessful = findViewById(R.id.tvLastSuccessful)
         tvSuggestedWeight = findViewById(R.id.tvSuggestedWeight)
+        tvE1rm = findViewById(R.id.tvE1rm)
+        tvBestAtReps = findViewById(R.id.tvBestAtReps) // NEW: bind from XML
+
         layoutSets = findViewById(R.id.layoutSets)
         btnAddSet = findViewById(R.id.btnAddSet)
         btnCompleteExercise = findViewById(R.id.btnCompleteExercise)
@@ -151,7 +152,6 @@ class ExerciseDetailActivity : AppCompatActivity() {
                         forceShowBanner(dur, dur, isRunning = true)
                     } else {
                         repo.addFailBonusRest(30_000L)
-                        // keep tracking; no reset so we don't double-pip the same second
                         forceShowBanner(state.remainingMs + 30_000L, state.durationMs + 30_000L, state.isRunning)
                     }
                     Toast.makeText(this, getString(R.string.rest_timer_bonus_toast), Toast.LENGTH_SHORT).show()
@@ -202,17 +202,11 @@ class ExerciseDetailActivity : AppCompatActivity() {
                 if (success && repsVal > 0 && weightVal > 0.0) {
                     val preview = vm.previewPrEvent(exerciseId, equipment, repsVal, weightVal)
                     if (firstPr == null && preview != null) firstPr = preview
-                    vm.logStrengthSet(
-                        sessionId, exerciseId, equipment,
-                        index + 1, repsVal, weightVal, 6.0, true,
-                        etNotes.text?.toString()?.ifBlank { null }
-                    )
+                    vm.logStrengthSet(sessionId, exerciseId, equipment, index + 1, repsVal, weightVal, 6.0, true,
+                        etNotes.text?.toString()?.ifBlank { null })
                 } else {
-                    vm.logStrengthSet(
-                        sessionId, exerciseId, equipment,
-                        index + 1, repsVal, weightVal, 9.0, false,
-                        etNotes.text?.toString()?.ifBlank { null }
-                    )
+                    vm.logStrengthSet(sessionId, exerciseId, equipment, index + 1, repsVal, weightVal, 9.0, false,
+                        etNotes.text?.toString()?.ifBlank { null })
                 }
                 logged++
             }
@@ -236,19 +230,19 @@ class ExerciseDetailActivity : AppCompatActivity() {
             val last = vm.getLastSuccessfulWeight(exerciseId, equipment, targetReps)
             val reps = targetReps ?: DEFAULT_SUGGESTED_REPS
             val suggested = vm.suggestNextLoadKg(exerciseId, equipment, reps)
-
-            val e1rm = if (last != null && targetReps != null) {
-                com.example.safitness.core.estimateOneRepMax(last, targetReps!!)
-            } else null
+            val bestAtReps = repo.bestRMAtReps(exerciseId, equipment, reps)
+            val bestE1rm = vm.bestE1RM(exerciseId, equipment)
 
             val lastText = last?.let { String.format(Locale.UK, "%.1f kg", it) } ?: "-- kg"
-            val e1rmText = e1rm?.let { String.format(Locale.UK, "%.1f kg", it) } ?: "-- kg"
+            val bestAtRepsText = bestAtReps?.let { String.format(Locale.UK, "%.1f kg", it) } ?: "-- kg"
+            val e1rmText = bestE1rm?.let { String.format(Locale.UK, "%.1f kg", it) } ?: "-- kg"
             val suggestedText = suggested?.let { String.format(Locale.UK, "%.1f kg", it) } ?: "-- kg"
 
             withContext(Dispatchers.Main) {
-                tvLastSuccessful.text = "Last successful lift: $lastText"
-                tvE1rm.text = "e1RM: $e1rmText"
+                tvLastSuccessful.text = "Last: $lastText"
+                tvBestAtReps?.text = "Best @$reps reps: $bestAtRepsText"
                 tvSuggestedWeight.text = "Suggested: $suggestedText"
+                tvE1rm.text = "Best e1RM: $e1rmText"
             }
         }
     }
@@ -297,9 +291,7 @@ class ExerciseDetailActivity : AppCompatActivity() {
     private fun fmtKg(value: Double): String =
         String.format(Locale.UK, "%.1f kg", value)
 
-    // ------------------ Rest Timer banner ------------------
-
-    /** If the banner isn't present in XML, inflate it once and place it between the header and the scroll. */
+    // Rest timer banner + sound (unchanged)
     private fun ensureBannerInflated() {
         if (findViewById<View>(R.id.restTimerContainer) != null) return
 
@@ -325,9 +317,6 @@ class ExerciseDetailActivity : AppCompatActivity() {
         set.applyTo(root)
     }
 
-    /** Subscribe to repo state and update UI + SOUND. */
-    // inside ExerciseDetailActivity
-
     private fun bindRestTimerBanner() {
         val container = findViewById<View>(R.id.restTimerContainer) ?: return
         val value = container.findViewById<TextView>(R.id.restTimerValue)
@@ -337,10 +326,7 @@ class ExerciseDetailActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             repo.restTimerState.collectLatest { state ->
-                // ---- SOUND (foreground) ----
                 handleBeep(state?.remainingMs)
-
-                // ---- UI ----
                 if (state == null) {
                     container.visibility = View.GONE
                 } else {
@@ -353,7 +339,6 @@ class ExerciseDetailActivity : AppCompatActivity() {
                     progress.progress = p
                 }
 
-                // ---- Foreground service: start while a timer exists; stop when it doesn't ----
                 if (state != null) {
                     com.example.safitness.service.RestTimerService.startOrUpdate(this@ExerciseDetailActivity)
                 } else {
@@ -372,8 +357,6 @@ class ExerciseDetailActivity : AppCompatActivity() {
         }
     }
 
-
-    /** Show immediately without waiting for Flow. */
     private fun forceShowBanner(remainingMs: Long, durationMs: Long, isRunning: Boolean) {
         val container = findViewById<View>(R.id.restTimerContainer) ?: return
         val value = container.findViewById<TextView>(R.id.restTimerValue)
@@ -391,25 +374,17 @@ class ExerciseDetailActivity : AppCompatActivity() {
         container.bringToFront()
     }
 
-    // ---------- SOUND helpers ----------
     private fun handleBeep(currentRemainingMs: Long?) {
         val prev = lastRemainingMs
         lastRemainingMs = currentRemainingMs
-
-        // Null means no timer (either cleared or finished)
-        if (currentRemainingMs == null) {
-            // If we previously had <= 0, we already buzzed; otherwise do nothing on manual clear.
-            return
-        }
+        if (currentRemainingMs == null) return
 
         val sec = (currentRemainingMs / 1000L)
-        // Final 5..1 pips (only once per second)
         if (sec in 1..5 && sec != lastPippedSecond) {
             beeper.countdownPip()
             lastPippedSecond = sec
         }
 
-        // Detect finish: transition from >0 to 0
         val prevSec = prev?.let { it / 1000L } ?: -1L
         if (prevSec > 0 && sec <= 0) {
             beeper.finalBuzz()

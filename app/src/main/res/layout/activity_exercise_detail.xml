@@ -7,7 +7,7 @@
     android:layout_height="match_parent"
     android:background="@color/white">
 
-    <!-- Header -->
+    <!-- Header bar (title + back) -->
     <LinearLayout
         android:id="@+id/layoutHeader"
         android:layout_width="match_parent"
@@ -42,7 +42,6 @@
     </LinearLayout>
 
     <!-- Rest timer banner -->
-    <!-- IMPORTANT: Use the SAME id as inside the included layout -->
     <include
         android:id="@+id/restTimerContainer"
         layout="@layout/include_rest_timer_banner"
@@ -52,7 +51,7 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
-    <!-- Main content scrolls BELOW the banner -->
+    <!-- Main content -->
     <ScrollView
         android:id="@+id/scrollContent"
         android:layout_width="0dp"
@@ -68,34 +67,60 @@
             android:orientation="vertical"
             android:padding="16dp">
 
-            <TextView
-                android:id="@+id/tvLastSuccessful"
+            <!-- 2 x 2 compact stat cards -->
+            <GridLayout
+                android:id="@+id/statsGrid"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Last: No data"
-                android:textSize="16sp"
-                android:textColor="@color/black"
-                android:layout_marginBottom="4dp" />
+                android:columnCount="2"
+                android:rowCount="2"
+                android:layout_marginTop="12dp"
+                android:layout_marginBottom="12dp">
 
-            <TextView
-                android:id="@+id/tvSuggestedWeight"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Suggested: -- kg"
-                android:textSize="16sp"
-                android:textStyle="bold"
-                android:textColor="@color/purple_700"
-                android:layout_marginBottom="4dp" />
+                <TextView
+                    android:id="@+id/tvLastSuccessful"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_columnWeight="1"
+                    android:layout_margin="8dp"
+                    android:text="Last: -- kg"
+                    android:textSize="14sp"
+                    android:textColor="?attr/colorOnSurface" />
 
-            <TextView
-                android:id="@+id/tvE1rm"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="e1RM: -- kg"
-                android:textSize="16sp"
-                android:textColor="@color/black"
-                android:layout_marginBottom="4dp" />
+                <TextView
+                    android:id="@+id/tvBestAtReps"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_columnWeight="1"
+                    android:layout_margin="8dp"
+                    android:text="Best @Reps: -- kg"
+                    android:textSize="14sp"
+                    android:textColor="?attr/colorOnSurface" />
 
+                <TextView
+                    android:id="@+id/tvSuggestedWeight"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_columnWeight="1"
+                    android:layout_margin="8dp"
+                    android:text="Suggested: -- kg"
+                    android:textSize="14sp"
+                    android:textColor="@color/purple_700"
+                    android:textStyle="bold"/>
+
+                <TextView
+                    android:id="@+id/tvE1rm"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_columnWeight="1"
+                    android:layout_margin="8dp"
+                    android:textColor="?attr/colorOnSurface"
+                    android:text="Best e1RM: -- kg"
+                    android:textSize="14sp"/>
+
+
+            </GridLayout>
+            <!-- Sets -->
             <LinearLayout
                 android:id="@+id/layoutSets"
                 android:layout_width="match_parent"
