@@ -26,7 +26,6 @@
         <activity android:name=".ui.MetconAmrapActivity" android:exported="false" />
         <activity android:name=".ui.MetconEmomActivity" android:exported="false" />
 
-
         <activity
             android:name=".ui.MainActivity"
             android:exported="true">
@@ -35,16 +34,6 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
-
-        <activity
-            android:name=".ui.dev.Phase3DevActivity"
-            android:label="Phase 3 Dev"
-            android:exported="true" />
-
-        <activity
-            android:name=".ui.engine.EngineSkillsActivity"
-            android:exported="false"
-            android:label="Engine &amp; Skills" />
 
         <!-- ✅ Declare the service -->
         <service
