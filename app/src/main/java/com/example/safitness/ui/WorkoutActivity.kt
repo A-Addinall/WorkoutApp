@@ -1,5 +1,6 @@
 package com.example.safitness.ui
 
+import android.content.Context
 import android.content.Intent
 import android.graphics.Typeface
 import android.os.Bundle
@@ -45,8 +46,6 @@ class WorkoutActivity : AppCompatActivity() {
 
     private var lastProgramItems: List<ExerciseWithSelection> = emptyList()
     private var lastMetconSelections: List<SelectionWithPlanAndComponents> = emptyList()
-
-    // Engine & Skill plans for the day
     private var lastEnginePlans: List<EnginePlanEntity> = emptyList()
     private var lastSkillPlans: List<SkillPlanEntity> = emptyList()
 
@@ -69,14 +68,12 @@ class WorkoutActivity : AppCompatActivity() {
 
         findViewById<ImageView?>(R.id.ivBack)?.setOnClickListener { finish() }
 
-        // Ensure a session exists (kept from your original)
         lifecycleScope.launch(Dispatchers.IO) {
             if (sessionId == 0L) {
                 sessionId = Repos.workoutRepository(this@WorkoutActivity).startSession(dayIndex)
             }
         }
 
-        // Strength + Metcon (existing)
         vm.programForDay.observe(this) { items ->
             lastProgramItems = items ?: emptyList()
             rebuildWorkoutUi()
@@ -86,7 +83,6 @@ class WorkoutActivity : AppCompatActivity() {
             rebuildWorkoutUi()
         }
 
-        // Engine / Skill ids → entities → render
         Repos.workoutRepository(this).enginePlanIdsForDay(dayIndex).asLiveData()
             .observe(this) { ids ->
                 lifecycleScope.launch {
@@ -94,6 +90,7 @@ class WorkoutActivity : AppCompatActivity() {
                     rebuildWorkoutUi()
                 }
             }
+
         Repos.workoutRepository(this).skillPlanIdsForDay(dayIndex).asLiveData()
             .observe(this) { ids ->
                 lifecycleScope.launch {
@@ -105,97 +102,81 @@ class WorkoutActivity : AppCompatActivity() {
         vm.setDay(dayIndex)
     }
 
+    /** Rebuild the whole list with collapsible sections. */
     private fun rebuildWorkoutUi() {
         layoutExercises.removeAllViews()
 
-        // ===== Strength =====
+        // --- Strength ---
         addSectionHeader("Strength", collapseStrength) {
             collapseStrength = !collapseStrength
             rebuildWorkoutUi()
         }
         if (!collapseStrength) {
             val strength = lastProgramItems.filter { it.exercise.modality != Modality.METCON }
-            if (strength.isNotEmpty()) {
-                strength.forEach { addStrengthCard(it) }
-            } else addEmptyLine("No strength programmed.")
+            strength.forEach { addStrengthCard(it) }
+            if (strength.isEmpty()) addEmptyLine("No strength programmed.")
         }
 
-        // ===== Metcon =====
+        // --- Metcon ---
         addSectionHeader("Metcon", collapseMetcon) {
             collapseMetcon = !collapseMetcon
             rebuildWorkoutUi()
         }
         if (!collapseMetcon) {
-            if (lastMetconSelections.isNotEmpty()) {
-                addMetconPlanCards(lastMetconSelections) // your proven-good block
-            } else addEmptyLine("No metcon programmed.")
+            if (lastMetconSelections.isNotEmpty()) addMetconPlanCards(lastMetconSelections)
+            else addEmptyLine("No metcon programmed.")
         }
 
-        // ===== Engine =====
+        // --- Engine ---
         addSectionHeader("Engine", collapseEngine) {
             collapseEngine = !collapseEngine
             rebuildWorkoutUi()
         }
         if (!collapseEngine) {
-            if (lastEnginePlans.isNotEmpty()) {
-                lastEnginePlans.forEach { addEngineWorkoutCard(it) }
-            } else addEmptyLine("No engine programmed.")
+            if (lastEnginePlans.isNotEmpty()) lastEnginePlans.forEach { addEngineWorkoutCard(it) }
+            else addEmptyLine("No engine work programmed.")
         }
 
-        // ===== Skills =====
+        // --- Skills ---
         addSectionHeader("Skills", collapseSkills) {
             collapseSkills = !collapseSkills
             rebuildWorkoutUi()
         }
         if (!collapseSkills) {
-            if (lastSkillPlans.isNotEmpty()) {
-                lastSkillPlans.forEach { addSkillWorkoutCard(it) }
-            } else addEmptyLine("No skills programmed.")
-        }
-
-        // Empty state
-        val strengthEmpty = lastProgramItems.none { it.exercise.modality != Modality.METCON }
-        if (strengthEmpty && lastMetconSelections.isEmpty() && lastEnginePlans.isEmpty() && lastSkillPlans.isEmpty()) {
-            val tv = TextView(this).apply {
-                text = "No programmed work for today."
-                textSize = 16f
-                setPadding(24)
-            }
-            layoutExercises.addView(tv)
+            if (lastSkillPlans.isNotEmpty()) lastSkillPlans.forEach { addSkillWorkoutCard(it) }
+            else addEmptyLine("No skills programmed.")
         }
     }
 
-    // Collapsible header row with chevron
+    /** Section header with chevron and tap-to-toggle. */
     private fun addSectionHeader(title: String, collapsed: Boolean, onToggle: () -> Unit) {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             setPadding(12)
             val tv = TextView(context).apply {
                 text = title
-                textSize = 18f
                 setTypeface(typeface, Typeface.BOLD)
+                textSize = 18f
                 layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
             }
-            val chevron = ImageView(context).apply {
+            val iv = ImageView(context).apply {
                 setImageResource(if (collapsed) R.drawable.ic_chevron_down else R.drawable.ic_chevron_up)
             }
-            addView(tv); addView(chevron)
+            addView(tv); addView(iv)
             setOnClickListener { onToggle() }
         }
         layoutExercises.addView(row)
     }
 
-    private fun addEmptyLine(msg: String) {
+    private fun addEmptyLine(message: String) {
         val tv = TextView(this).apply {
-            text = msg
-            setPadding(12)
+            text = message
+            setPadding(16)
         }
         layoutExercises.addView(tv)
     }
 
-    // ---------------- YOUR PROVEN-GOOD BLOCKS (unchanged) ----------------
-
-    /** Strength card styled like metcon, with 20sp title and reps-only meta. */
+    /** ---- Strength (your proven-good UI) ---- */
     private fun addStrengthCard(item: ExerciseWithSelection) {
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -241,7 +222,7 @@ class WorkoutActivity : AppCompatActivity() {
         )
     }
 
-    /** One pretty card per selected Metcon plan (plan-based). */
+    /** ---- Metcon (your proven-good block) ---- */
     private fun addMetconPlanCards(
         selections: List<SelectionWithPlanAndComponents>
     ) {
@@ -266,7 +247,6 @@ class WorkoutActivity : AppCompatActivity() {
                 })
             }
 
-            // plan-scoped last label varies by metcon type (best-effort by title)
             vm.lastMetconForPlan(plan.id).observe(this) { last ->
                 tvLast.text = when (last?.type) {
                     "FOR_TIME" -> {
@@ -308,18 +288,19 @@ class WorkoutActivity : AppCompatActivity() {
         }
     }
 
-    // ---------------- Engine & Skill workout cards (NO CTA; show components + click to screens) ----------------
+    // ---------------- Engine & Skill workout cards (now with "last" via SharedPreferences) ----------------
 
     private fun addEngineWorkoutCard(plan: EnginePlanEntity) {
         val card = layoutInflater.inflate(R.layout.item_engine_workout_card, layoutExercises, false)
         val tvTitle = card.findViewById<TextView>(R.id.tvPlanCardTitle)
         val tvMeta  = card.findViewById<TextView>(R.id.tvPlanMeta)
         val comps   = card.findViewById<LinearLayout>(R.id.layoutPlanComponents)
+        val tvLast  = card.findViewById<TextView>(R.id.tvPlanLastTime)
 
         tvTitle.text = plan.title
         tvMeta.text = buildEngineMeta(plan)
+        tvLast.text = loadLastEngineLabel(this, plan)
 
-        // Render engine components using title/description
         lifecycleScope.launch {
             val rows = withContext(Dispatchers.IO) {
                 AppDatabase.get(this@WorkoutActivity).enginePlanDao().getComponents(plan.id)
@@ -335,37 +316,26 @@ class WorkoutActivity : AppCompatActivity() {
             }
         }
 
-        // Decide which Engine screen to launch
         card.setOnClickListener {
             val titleL = plan.title.lowercase()
             val intent = when {
-                titleL.contains("emom") -> {
-                    Intent(this, EngineEmomActivity::class.java).apply {
-                        // Optional hinting
-                        putExtra("ENGINE_EMOM_UNIT",
-                            if ((plan.programTargetCalories ?: 0) > 0) "CALORIES" else "METERS")
-                        putExtra("ENGINE_EMOM_TARGET_PER_MIN",
-                            (plan.programTargetCalories ?: 0).takeIf { it > 0 } ?: 20)
-                    }
+                titleL.contains("emom") -> Intent(this, EngineEmomActivity::class.java).apply {
+                    putExtra("ENGINE_EMOM_UNIT",
+                        if ((plan.programTargetCalories ?: 0) > 0) "CALORIES" else "METERS")
                 }
-                plan.intent.equals("FOR_TIME", true) -> {
-                    Intent(this, EngineForTimeActivity::class.java).apply {
-                        putExtra("PLAN_ID", plan.id)
-                    }
-                }
-                else -> {
-                    // Accumulation card: FOR_DISTANCE (metres over duration) or FOR_CALORIES
+                plan.intent.equals("FOR_TIME", true) ->
+                    Intent(this, EngineForTimeActivity::class.java)
+                else ->
                     Intent(this, EngineAccumulationActivity::class.java).apply {
                         putExtra(
                             "ENGINE_TARGET",
                             if ((plan.programTargetCalories ?: 0) > 0) "CALORIES" else "METERS"
                         )
-                        putExtra("PLAN_ID", plan.id)
                     }
-                }
             }.apply {
                 putExtra("DAY_INDEX", dayIndex)
                 putExtra("WORKOUT_NAME", workoutName)
+                putExtra("PLAN_ID", plan.id)
                 putExtra("DURATION_SECONDS", plan.programDurationSeconds ?: 0)
                 putExtra("TARGET_METERS", plan.programDistanceMeters ?: 0)
                 putExtra("TARGET_CALORIES", plan.programTargetCalories ?: 0)
@@ -383,6 +353,7 @@ class WorkoutActivity : AppCompatActivity() {
         val tvTitle = card.findViewById<TextView>(R.id.tvPlanCardTitle)
         val tvMeta  = card.findViewById<TextView>(R.id.tvPlanMeta)
         val comps   = card.findViewById<LinearLayout>(R.id.layoutPlanComponents)
+        val tvLast  = card.findViewById<TextView>(R.id.tvPlanLastTime)
 
         tvTitle.text = plan.title
         tvMeta.text = when (plan.defaultTestType?.uppercase()) {
@@ -393,6 +364,7 @@ class WorkoutActivity : AppCompatActivity() {
             "ATTEMPTS"          -> "Attempts"
             else                -> plan.description ?: ""
         }
+        tvLast.text = loadLastSkillLabel(this, plan)
 
         lifecycleScope.launch {
             val rows = withContext(Dispatchers.IO) {
@@ -409,7 +381,6 @@ class WorkoutActivity : AppCompatActivity() {
             }
         }
 
-        // Decide which Skill screen to launch
         card.setOnClickListener {
             val testType = plan.defaultTestType?.uppercase() ?: ""
             val titleL = plan.title.lowercase()
@@ -421,14 +392,12 @@ class WorkoutActivity : AppCompatActivity() {
                 testType.contains("FOR_TIME") || testType.contains("FOR_TIME_REPS") || titleL.contains("for time") ->
                     Intent(this, SkillForTimeActivity::class.java)
                 else ->
-                    // Sensible default: attempts-type logic fits the AMRAP screen best (count successes/fails)
                     Intent(this, SkillAmrapActivity::class.java)
             }.apply {
                 putExtra("DAY_INDEX", dayIndex)
                 putExtra("WORKOUT_NAME", workoutName)
                 putExtra("PLAN_ID", plan.id)
                 putExtra("DURATION_SECONDS", plan.targetDurationSeconds ?: 0)
-                // If you later surface per-component targets, thread them via extras here.
             }
             startActivity(intent)
         }
@@ -443,19 +412,11 @@ class WorkoutActivity : AppCompatActivity() {
         val bits = mutableListOf<String>()
         bits += pretty(p.mode)
         when (p.intent) {
-            "FOR_TIME" -> {
-                val m = p.programDistanceMeters ?: 0
-                if (m > 0) bits += "$m m"
-            }
-            "FOR_DISTANCE" -> {
-                val sec = p.programDurationSeconds ?: 0
-                if (sec > 0) bits += "${sec / 60} min"
-            }
+            "FOR_TIME" -> { val m = p.programDistanceMeters ?: 0; if (m > 0) bits += "$m m" }
+            "FOR_DISTANCE" -> { val sec = p.programDurationSeconds ?: 0; if (sec > 0) bits += "${sec / 60} min" }
             "FOR_CALORIES" -> {
-                val c = p.programTargetCalories ?: 0
-                if (c > 0) bits += "$c cal"
-                val sec = p.programDurationSeconds ?: 0
-                if (sec > 0) bits += "${sec / 60} min"
+                val c = p.programTargetCalories ?: 0; if (c > 0) bits += "$c cal"
+                val sec = p.programDurationSeconds ?: 0; if (sec > 0) bits += "${sec / 60} min"
             }
         }
         bits += pretty(p.intent)
@@ -475,6 +436,56 @@ class WorkoutActivity : AppCompatActivity() {
         val db = AppDatabase.get(this)
         return withContext(Dispatchers.IO) {
             db.skillPlanDao().getPlans().filter { it.id in ids }.sortedBy { it.title }
+        }
+    }
+
+    // ---------------- "Last" labels via SharedPreferences ----------------
+
+    private fun prefs(): android.content.SharedPreferences =
+        getSharedPreferences("last_results", Context.MODE_PRIVATE)
+
+    private fun loadLastEngineLabel(ctx: Context, p: EnginePlanEntity): String {
+        val sp = prefs()
+        return when {
+            p.title.contains("emom", true) -> {
+                val key = "engine_emom_last_${p.id}"
+                sp.getString(key, null)?.let { "Last: $it" } ?: "No previous result"
+            }
+            p.intent.equals("FOR_TIME", true) -> {
+                val key = "engine_for_time_last_${p.id}"
+                sp.getInt(key, -1).takeIf { it > 0 }?.let {
+                    "Last: ${it / 60}m ${it % 60}s"
+                } ?: "No previous result"
+            }
+            else -> { // accumulation (meters or calories)
+                val key = "engine_acc_last_${p.id}"
+                sp.getString(key, null)?.let { "Last: $it" } ?: "No previous result"
+            }
+        }
+    }
+
+    private fun loadLastSkillLabel(ctx: Context, p: SkillPlanEntity): String {
+        val sp = prefs()
+        val tt = p.defaultTestType?.uppercase() ?: ""
+        return when {
+            tt.contains("EMOM") -> {
+                val key = "skill_emom_last_${p.id}"
+                sp.getString(key, null)?.let { "Last: $it" } ?: "No previous result"
+            }
+            tt.contains("AMRAP") -> {
+                val key = "skill_amrap_last_${p.id}"
+                sp.getString(key, null)?.let { "Last: $it" } ?: "No previous result"
+            }
+            tt.contains("FOR_TIME") || tt.contains("FOR_TIME_REPS") -> {
+                val key = "skill_for_time_last_${p.id}"
+                sp.getInt(key, -1).takeIf { it > 0 }?.let {
+                    "Last: ${it / 60}m ${it % 60}s"
+                } ?: "No previous result"
+            }
+            else -> {
+                val key = "skill_attempts_last_${p.id}"
+                sp.getString(key, null)?.let { "Last: $it" } ?: "No previous result"
+            }
         }
     }
 }

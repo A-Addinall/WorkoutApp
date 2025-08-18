@@ -15,17 +15,17 @@ import kotlin.math.floor
 
 class EngineEmomActivity : AppCompatActivity() {
 
+    // Non-null: we always bind these via findViewById
     private lateinit var tvWorkoutTitle: TextView
     private lateinit var tvTimer: TextView
     private lateinit var btnStartStop: Button
     private lateinit var btnReset: Button
+    private lateinit var etTargetPerMinute: TextInputEditText
 
-    // included card
+    // Included card parts are optional in some layouts -> keep nullable, NO lateinit
     private var cardTitle: TextView? = null
     private var cardMeta: TextView? = null
     private var cardComponents: LinearLayout? = null
-
-    private lateinit var etTargetPerMinute: TextInputEditText
 
     private var dayIndex: Int = 1
     private var planId: Long = -1L
@@ -65,7 +65,7 @@ class EngineEmomActivity : AppCompatActivity() {
             }
             val plan = pwc.first
             if (plan != null) {
-                val mins = (plan.programDurationSeconds ?: (durationSeconds)).coerceAtLeast(60) / 60
+                val mins = (plan.programDurationSeconds ?: durationSeconds).coerceAtLeast(60) / 60
                 durationSeconds = mins * 60
                 if (allowReseed && phase == Phase.IDLE) {
                     remainingMs = durationSeconds * 1000L
@@ -108,6 +108,7 @@ class EngineEmomActivity : AppCompatActivity() {
         btnReset = findViewById(R.id.btnReset)
         etTargetPerMinute = findViewById(R.id.etTargetPerMinute)
 
+        // Optional card views
         cardTitle = findViewById(R.id.tvPlanCardTitle)
         cardMeta = findViewById(R.id.tvPlanMeta)
         cardComponents = findViewById(R.id.layoutPlanComponents)

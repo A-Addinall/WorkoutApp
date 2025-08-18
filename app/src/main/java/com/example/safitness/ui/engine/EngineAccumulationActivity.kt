@@ -1,5 +1,6 @@
 package com.example.safitness.ui.engine
 
+import android.content.Context
 import android.os.Bundle
 import android.os.CountDownTimer
 import android.widget.*
@@ -23,7 +24,6 @@ class EngineAccumulationActivity : AppCompatActivity() {
     private lateinit var tvUnitLabel: TextView
     private lateinit var etValue: TextInputEditText
 
-    // Included card
     private var cardTitle: TextView? = null
     private var cardMeta: TextView? = null
     private var cardComponents: LinearLayout? = null
@@ -33,7 +33,6 @@ class EngineAccumulationActivity : AppCompatActivity() {
     private var durationSeconds: Int = 0
     private var targetUnit: String = "METERS" // or "CALORIES"
 
-    // Timer (count-down or count-up? We'll keep count-up like metcon; accumulation ends on complete)
     private var isRunning = false
     private var isCountdown = false
     private var timeElapsedMs = 0L
@@ -55,10 +54,10 @@ class EngineAccumulationActivity : AppCompatActivity() {
         tvWorkoutTitle.text = "Engine – Accumulation"
         tvTimer.text = "00:00"
         tvUnitLabel.text = if (targetUnit == "CALORIES") "Calories" else "Meters"
-
         findViewById<ImageView>(R.id.ivBack)?.setOnClickListener { finish() }
 
         populateCardFromPlan(planId)
+        tvLastTime.text = loadLastLabel()
 
         btnStartStop.setOnClickListener {
             when {
@@ -80,7 +79,6 @@ class EngineAccumulationActivity : AppCompatActivity() {
         btnComplete = findViewById(R.id.btnComplete)
         tvUnitLabel = findViewById(R.id.tvUnitLabel)
         etValue = findViewById(R.id.etValue)
-
         cardTitle = findViewById(R.id.tvPlanCardTitle)
         cardMeta = findViewById(R.id.tvPlanMeta)
         cardComponents = findViewById(R.id.layoutPlanComponents)
@@ -153,30 +151,12 @@ class EngineAccumulationActivity : AppCompatActivity() {
             return
         }
         if (isRunning) stopTimer()
-        // Optionally validate entered value
+        val v = etValue.text?.toString()?.trim().orEmpty().ifBlank { "0" }
+        val label = if (targetUnit == "CALORIES") "$v cal" else "$v m"
+        saveLast(label)
         beeper.finalBuzz()
         Toast.makeText(this, "Engine (accumulation) complete.", Toast.LENGTH_LONG).show()
         finish()
-    }
-
-    private fun buildEngineMeta(
-        intent: String?,
-        meters: Int?,
-        calories: Int?,
-        seconds: Int?
-    ): String {
-        fun pretty(s: String) = s.replace('_', ' ').lowercase().replaceFirstChar(Char::titlecase)
-        val bits = mutableListOf<String>()
-        when (intent) {
-            "FOR_TIME" -> if ((meters ?: 0) > 0) bits += "${meters} m"
-            "FOR_DISTANCE" -> if ((seconds ?: 0) > 0) bits += "${seconds!! / 60} min"
-            "FOR_CALORIES" -> {
-                if ((calories ?: 0) > 0) bits += "${calories} cal"
-                if ((seconds ?: 0) > 0) bits += "${seconds!! / 60} min"
-            }
-        }
-        if (!intent.isNullOrBlank()) bits += pretty(intent)
-        return bits.joinToString(" • ")
     }
 
     private fun populateCardFromPlan(planId: Long) {
@@ -209,6 +189,35 @@ class EngineAccumulationActivity : AppCompatActivity() {
             }
         }
     }
+
+    private fun buildEngineMeta(
+        intent: String?,
+        meters: Int?,
+        calories: Int?,
+        seconds: Int?
+    ): String {
+        fun pretty(s: String) = s.replace('_', ' ').lowercase().replaceFirstChar(Char::titlecase)
+        val bits = mutableListOf<String>()
+        when (intent) {
+            "FOR_TIME" -> if ((meters ?: 0) > 0) bits += "${meters} m"
+            "FOR_DISTANCE" -> if ((seconds ?: 0) > 0) bits += "${seconds!! / 60} min"
+            "FOR_CALORIES" -> {
+                if ((calories ?: 0) > 0) bits += "${calories} cal"
+                if ((seconds ?: 0) > 0) bits += "${seconds!! / 60} min"
+            }
+        }
+        if (!intent.isNullOrBlank()) bits += pretty(intent)
+        return bits.joinToString(" • ")
+    }
+
+    // --------- "Last result" via SharedPreferences ---------
+
+    private fun prefs() = getSharedPreferences("last_results", Context.MODE_PRIVATE)
+    private fun saveLast(label: String) {
+        prefs().edit().putString("engine_acc_last_$planId", label).apply()
+    }
+    private fun loadLastLabel(): String =
+        prefs().getString("engine_acc_last_$planId", null)?.let { "Last: $it" } ?: "No previous result"
 
     override fun onDestroy() {
         super.onDestroy()

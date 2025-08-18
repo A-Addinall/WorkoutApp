@@ -22,6 +22,9 @@ class SkillForTimeActivity : AppCompatActivity() {
     private lateinit var btnStartStop: Button
     private lateinit var btnReset: Button
 
+    // Optional previous label (present in some layouts)
+    private var tvLastTime: TextView? = null
+
     // included card
     private var cardTitle: TextView? = null
     private var cardMeta: TextView? = null
@@ -40,16 +43,18 @@ class SkillForTimeActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_skill_for_time) // includes engine_for_time layout
+        setContentView(R.layout.activity_skill_for_time)
 
         planId = intent.getLongExtra("PLAN_ID", -1L)
         dayIndex = intent.getIntExtra("DAY_INDEX", 1).coerceIn(1, 5)
 
-        // bind engine_for_time views
+        // bind views
         tvWorkoutTitle = findViewById(R.id.tvWorkoutTitle)
         tvTimer = findViewById(R.id.tvTimer)
         btnStartStop = findViewById(R.id.btnStartStop)
         btnReset = findViewById(R.id.btnReset)
+
+        tvLastTime = findViewById(R.id.tvLastTime) // may be null if not in layout
 
         cardTitle = findViewById(R.id.tvPlanCardTitle)
         cardMeta = findViewById(R.id.tvPlanMeta)
@@ -59,29 +64,8 @@ class SkillForTimeActivity : AppCompatActivity() {
         tvTimer.text = "00:00"
         findViewById<ImageView>(R.id.ivBack)?.setOnClickListener { finish() }
 
-        lifecycleScope.launch {
-            val db = AppDatabase.get(this@SkillForTimeActivity)
-            val pwc = withContext(Dispatchers.IO) {
-                val p = db.skillPlanDao().getPlans().firstOrNull { it.id == planId }
-                val comps = p?.let { db.skillPlanDao().getComponents(it.id) }.orEmpty()
-                Pair(p, comps.sortedBy { it.orderIndex })
-            }
-            val plan = pwc.first
-            if (plan != null) {
-                tvWorkoutTitle.text = "Skill – ${plan.title}"
-                cardTitle?.text = plan.title
-                cardMeta?.text = (plan.description ?: "").ifBlank { plan.defaultTestType ?: "" }
-                cardComponents?.removeAllViews()
-                pwc.second.forEach { c ->
-                    val line = c.title.ifBlank { c.description ?: "" }
-                    cardComponents?.addView(TextView(this@SkillForTimeActivity).apply {
-                        text = "• $line"
-                        textSize = 16f
-                        setPadding(0, 4, 0, 4)
-                    })
-                }
-            }
-        }
+        // populate card from DB
+        populateCardFromPlan(planId)
 
         btnStartStop.setOnClickListener {
             when {
@@ -91,6 +75,37 @@ class SkillForTimeActivity : AppCompatActivity() {
             }
         }
         btnReset.setOnClickListener { resetAll() }
+    }
+
+    private fun populateCardFromPlan(planId: Long) {
+        if (planId <= 0L) return
+        lifecycleScope.launch {
+            val db = AppDatabase.get(this@SkillForTimeActivity)
+            val (plan, comps) = withContext(Dispatchers.IO) {
+                val p = db.skillPlanDao().getPlans().firstOrNull { it.id == planId }
+                val c = p?.let { db.skillPlanDao().getComponents(it.id) }.orEmpty()
+                Pair(p, c.sortedBy { it.orderIndex })
+            }
+
+            plan ?: return@launch
+
+            tvWorkoutTitle.text = "Skill – ${plan.title}"
+            cardTitle?.text = plan.title
+            cardMeta?.text = (plan.description ?: "").ifBlank { plan.defaultTestType ?: "" }
+
+            cardComponents?.removeAllViews()
+            comps.forEach { c ->
+                val line = c.title.ifBlank { c.description ?: "" }
+                cardComponents?.addView(TextView(this@SkillForTimeActivity).apply {
+                    text = "• $line"
+                    textSize = 16f
+                    setPadding(0, 4, 0, 4)
+                })
+            }
+
+            // Previous result label (placeholder until wired to real log)
+            tvLastTime?.text = "No previous result"
+        }
     }
 
     private fun startPreCountdown() {
@@ -111,20 +126,46 @@ class SkillForTimeActivity : AppCompatActivity() {
         }.also { it.start() }
     }
 
-    private fun cancelPreCountdown() { preTimer?.cancel(); isCountdown = false; btnStartStop.text = "START"; updateTimerDisplay() }
+    private fun cancelPreCountdown() {
+        preTimer?.cancel()
+        isCountdown = false
+        btnStartStop.text = "START"
+        updateTimerDisplay()
+    }
+
     private fun startTimer() {
         if (isRunning) return
         startTime = System.currentTimeMillis() - timeElapsedMs
         isRunning = true
         btnStartStop.text = "PAUSE"
         timer = object : CountDownTimer(Long.MAX_VALUE, 1000) {
-            override fun onTick(ms: Long) { timeElapsedMs = System.currentTimeMillis() - startTime; updateTimerDisplay() }
+            override fun onTick(ms: Long) {
+                timeElapsedMs = System.currentTimeMillis() - startTime
+                updateTimerDisplay()
+            }
             override fun onFinish() {}
         }.also { it.start() }
     }
-    private fun stopTimer() { timer?.cancel(); isRunning = false; btnStartStop.text = "START" }
-    private fun resetAll() { preTimer?.cancel(); isCountdown = false; timer?.cancel(); isRunning = false; timeElapsedMs = 0L; startTime = 0L; btnStartStop.text = "START"; tvTimer.text = "00:00" }
-    private fun updateTimerDisplay() { val s = (timeElapsedMs / 1000).toInt(); tvTimer.text = String.format("%02d:%02d", s / 60, s % 60) }
+
+    private fun stopTimer() {
+        if (!isRunning) return
+        timer?.cancel()
+        isRunning = false
+        btnStartStop.text = "START"
+    }
+
+    private fun resetAll() {
+        preTimer?.cancel(); isCountdown = false
+        timer?.cancel(); isRunning = false
+        timeElapsedMs = 0L; startTime = 0L
+        btnStartStop.text = "START"
+        tvTimer.text = "00:00"
+    }
+
+    private fun updateTimerDisplay() {
+        val totalSeconds = (timeElapsedMs / 1000).toInt()
+        tvTimer.text = String.format("%02d:%02d", totalSeconds / 60, totalSeconds % 60)
+    }
 
     override fun onDestroy() {
         super.onDestroy()

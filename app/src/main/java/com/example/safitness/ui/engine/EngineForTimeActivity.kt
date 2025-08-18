@@ -1,5 +1,6 @@
 package com.example.safitness.ui.engine
 
+import android.content.Context
 import android.os.Bundle
 import android.os.CountDownTimer
 import android.widget.Button
@@ -12,8 +13,8 @@ import androidx.lifecycle.lifecycleScope
 import com.example.safitness.R
 import com.example.safitness.data.db.AppDatabase
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class EngineForTimeActivity : AppCompatActivity() {
 
@@ -24,7 +25,6 @@ class EngineForTimeActivity : AppCompatActivity() {
     private lateinit var btnComplete: Button
     private lateinit var tvLastTime: TextView
 
-    // Included card views (from item_engine_workout_card)
     private var cardTitle: TextView? = null
     private var cardMeta: TextView? = null
     private var cardComponents: LinearLayout? = null
@@ -33,7 +33,6 @@ class EngineForTimeActivity : AppCompatActivity() {
     private var planId: Long = -1L
     private var durationSeconds: Int = 0
 
-    // Count-up timer with 5s pre-countdown (like Metcon)
     private var isRunning = false
     private var isCountdown = false
     private var timeElapsedMs = 0L
@@ -56,6 +55,9 @@ class EngineForTimeActivity : AppCompatActivity() {
         findViewById<ImageView>(R.id.ivBack)?.setOnClickListener { finish() }
 
         populateCardFromPlan(planId)
+
+        // show last
+        tvLastTime.text = loadLastLabel()
 
         btnStartStop.setOnClickListener {
             when {
@@ -151,29 +153,11 @@ class EngineForTimeActivity : AppCompatActivity() {
             return
         }
         if (isRunning) stopTimer()
+        val totalSeconds = (timeElapsedMs / 1000).toInt()
+        saveLast(totalSeconds)
         beeper.finalBuzz()
         Toast.makeText(this, "Engine (for time) complete.", Toast.LENGTH_LONG).show()
         finish()
-    }
-
-    private fun buildEngineMeta(
-        intent: String?,
-        meters: Int?,
-        calories: Int?,
-        seconds: Int?
-    ): String {
-        fun pretty(s: String) = s.replace('_', ' ').lowercase().replaceFirstChar(Char::titlecase)
-        val bits = mutableListOf<String>()
-        when (intent) {
-            "FOR_TIME" -> if ((meters ?: 0) > 0) bits += "${meters} m"
-            "FOR_DISTANCE" -> if ((seconds ?: 0) > 0) bits += "${seconds!! / 60} min"
-            "FOR_CALORIES" -> {
-                if ((calories ?: 0) > 0) bits += "${calories} cal"
-                if ((seconds ?: 0) > 0) bits += "${seconds!! / 60} min"
-            }
-        }
-        if (!intent.isNullOrBlank()) bits += pretty(intent)
-        return bits.joinToString(" • ")
     }
 
     private fun populateCardFromPlan(planId: Long) {
@@ -205,6 +189,37 @@ class EngineForTimeActivity : AppCompatActivity() {
                 })
             }
         }
+    }
+
+    private fun buildEngineMeta(
+        intent: String?,
+        meters: Int?,
+        calories: Int?,
+        seconds: Int?
+    ): String {
+        fun pretty(s: String) = s.replace('_', ' ').lowercase().replaceFirstChar(Char::titlecase)
+        val bits = mutableListOf<String>()
+        when (intent) {
+            "FOR_TIME" -> if ((meters ?: 0) > 0) bits += "${meters} m"
+            "FOR_DISTANCE" -> if ((seconds ?: 0) > 0) bits += "${seconds!! / 60} min"
+            "FOR_CALORIES" -> {
+                if ((calories ?: 0) > 0) bits += "${calories} cal"
+                if ((seconds ?: 0) > 0) bits += "${seconds!! / 60} min"
+            }
+        }
+        if (!intent.isNullOrBlank()) bits += pretty(intent)
+        return bits.joinToString(" • ")
+    }
+
+    // --------- "Last result" via SharedPreferences ---------
+
+    private fun prefs() = getSharedPreferences("last_results", Context.MODE_PRIVATE)
+    private fun saveLast(totalSeconds: Int) {
+        prefs().edit().putInt("engine_for_time_last_$planId", totalSeconds).apply()
+    }
+    private fun loadLastLabel(): String {
+        val s = prefs().getInt("engine_for_time_last_$planId", -1)
+        return if (s > 0) "Last time: ${s / 60}m ${s % 60}s" else "No previous time"
     }
 
     override fun onDestroy() {
