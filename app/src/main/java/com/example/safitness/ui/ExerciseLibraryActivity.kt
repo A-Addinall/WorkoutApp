@@ -15,7 +15,21 @@ import com.example.safitness.data.entities.Exercise
 import com.example.safitness.data.entities.MetconPlan
 import com.example.safitness.data.repo.Repos
 import com.google.android.material.chip.ChipGroup
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+// NEW imports for Engine/Skills
+import com.example.safitness.core.EngineMode
+import com.example.safitness.core.EngineIntent
+import com.example.safitness.core.SkillType
+import com.example.safitness.core.SkillTestType
+import com.example.safitness.data.db.AppDatabase
+import com.example.safitness.data.entities.DayEngineSkillEntity
+import com.example.safitness.ui.library.EngineLibraryAdapter
+import com.example.safitness.ui.library.EngineUiItem
+import com.example.safitness.ui.library.SkillLibraryAdapter
+import com.example.safitness.ui.library.SkillUiItem
 
 class ExerciseLibraryActivity : AppCompatActivity() {
 
@@ -23,7 +37,16 @@ class ExerciseLibraryActivity : AppCompatActivity() {
         LibraryViewModelFactory(Repos.workoutRepository(this))
     }
 
-    private enum class Mode { STRENGTH, METCON }
+    // NEW adapters/state for Engine & Skills
+    private lateinit var engineAdapter: EngineLibraryAdapter
+    private lateinit var skillAdapter: SkillLibraryAdapter
+    private var selectedEngineKeys: Set<String> = emptySet()
+    private var selectedSkillKeys: Set<String> = emptySet()
+    private var engineUiCache: List<EngineUiItem> = emptyList()
+    private var skillUiCache: List<SkillUiItem> = emptyList()
+
+    // Existing
+    private enum class Mode { STRENGTH, METCON, ENGINE, SKILLS } // NEW modes
     private var mode: Mode = Mode.STRENGTH
     private var currentDay = 1  // passed from MainActivity Edit; used ONLY for membership & persistence
 
@@ -35,6 +58,8 @@ class ExerciseLibraryActivity : AppCompatActivity() {
     private lateinit var btnClearFilters: Button
     private lateinit var radioExercises: RadioButton
     private lateinit var radioMetcons: RadioButton
+    private lateinit var radioEngine: RadioButton    // NEW
+    private lateinit var radioSkills: RadioButton    // NEW
     private lateinit var rvMetconPlans: RecyclerView
     private lateinit var metconAdapter: MetconPlanAdapter
 
@@ -75,8 +100,14 @@ class ExerciseLibraryActivity : AppCompatActivity() {
         btnClearFilters = findViewById(R.id.btnClearFilters)
         radioExercises = findViewById(R.id.rbExercises)
         radioMetcons = findViewById(R.id.rbMetcons)
+        radioEngine = findViewById(R.id.rbEngine)   // NEW
+        radioSkills = findViewById(R.id.rbSkills)   // NEW
         rvMetconPlans = findViewById(R.id.rvMetconPlans)
         findViewById<ImageView>(R.id.ivBack).setOnClickListener { finish() }
+
+        // NEW: init Engine/Skill adapters
+        engineAdapter = EngineLibraryAdapter(this) { item -> toggleEngineItem(item) }
+        skillAdapter  = SkillLibraryAdapter(this)  { item -> toggleSkillItem(item) }
 
         btnClearFilters.setOnClickListener {
             when (mode) {
@@ -88,6 +119,9 @@ class ExerciseLibraryActivity : AppCompatActivity() {
                     metconTypePos = 0; metconDurPos = 0
                     configureSpinnersForMode(Mode.METCON)
                     applyMetconFiltersAndSubmit()
+                }
+                Mode.ENGINE, Mode.SKILLS -> {
+                    // No filters for these modes; nothing to clear
                 }
             }
         }
@@ -117,17 +151,80 @@ class ExerciseLibraryActivity : AppCompatActivity() {
         }
         vm.setMetconDay(currentDay) // only for membership state
 
+        // NEW: observe static Engine/Skill UI lists once
+        vm.engineItems.observe(this) { items ->
+            engineUiCache = items ?: emptyList()
+            if (mode == Mode.ENGINE) {
+                engineAdapter.submit(engineUiCache, selectedEngineKeys)
+                listLibrary.adapter = engineAdapter
+            }
+        }
+        vm.skillItems.observe(this) { items ->
+            skillUiCache = items ?: emptyList()
+            if (mode == Mode.SKILLS) {
+                skillAdapter.submit(skillUiCache, selectedSkillKeys)
+                listLibrary.adapter = skillAdapter
+            }
+        }
+
         // Mode toggle
         fun applyMode() {
-            mode = if (radioMetcons.isChecked) Mode.METCON else Mode.STRENGTH
+            mode = when {
+                radioMetcons.isChecked -> Mode.METCON
+                radioEngine.isChecked  -> Mode.ENGINE
+                radioSkills.isChecked  -> Mode.SKILLS
+                else -> Mode.STRENGTH
+            }
+
+            // Visibility
             rvMetconPlans.visibility = if (mode == Mode.METCON) View.VISIBLE else View.GONE
-            listLibrary.visibility = if (mode == Mode.STRENGTH) View.VISIBLE else View.GONE
+            listLibrary.visibility   = if (mode != Mode.METCON) View.VISIBLE else View.GONE
+
+            // Spinners: only relevant for Strength & Metcon
+            val showSpinners = (mode == Mode.STRENGTH || mode == Mode.METCON)
+            spinnerType.visibility = if (showSpinners) View.VISIBLE else View.GONE
+            spinnerEqOrDuration.visibility = if (showSpinners) View.VISIBLE else View.GONE
+            btnClearFilters.visibility = if (showSpinners) View.VISIBLE else View.GONE
+
             emptyText.visibility = View.GONE
-            configureSpinnersForMode(mode)
-            if (mode == Mode.METCON) applyMetconFiltersAndSubmit() else refreshExerciseStates()
+
+            when (mode) {
+                Mode.METCON -> {
+                    configureSpinnersForMode(Mode.METCON)
+                    applyMetconFiltersAndSubmit()
+                }
+                Mode.STRENGTH -> {
+                    configureSpinnersForMode(Mode.STRENGTH)
+                    refreshExerciseStates()
+                }
+                Mode.ENGINE -> {
+                    // Show engine list with membership ✓s
+                    engineAdapter.submit(engineUiCache, selectedEngineKeys)
+                    listLibrary.adapter = engineAdapter
+                    listLibrary.setOnItemClickListener { _, _, position, _ ->
+                        val item = engineAdapter.getItem(position) as EngineUiItem
+                        toggleEngineItem(item)
+                    }
+                    refreshEngineSkillSelections()
+                }
+                Mode.SKILLS -> {
+                    // Show skills list with membership ✓s
+                    skillAdapter.submit(skillUiCache, selectedSkillKeys)
+                    listLibrary.adapter = skillAdapter
+                    listLibrary.setOnItemClickListener { _, _, position, _ ->
+                        val item = skillAdapter.getItem(position) as SkillUiItem
+                        toggleSkillItem(item)
+                    }
+                    refreshEngineSkillSelections()
+                }
+            }
         }
+
         radioExercises.setOnCheckedChangeListener { _, _ -> applyMode() }
         radioMetcons.setOnCheckedChangeListener { _, _ -> applyMode() }
+        radioEngine.setOnCheckedChangeListener { _, _ -> applyMode() } // NEW
+        radioSkills.setOnCheckedChangeListener { _, _ -> applyMode() } // NEW
+
         radioExercises.isChecked = true
         applyMode()
     }
@@ -218,6 +315,11 @@ class ExerciseLibraryActivity : AppCompatActivity() {
                     applyMetconFiltersAndSubmit()
                 }
             }
+            Mode.ENGINE, Mode.SKILLS -> {
+                // No filters/spinners for these modes.
+                spinnerType.onItemSelectedListener = null
+                spinnerEqOrDuration.onItemSelectedListener = null
+            }
         }
     }
 
@@ -245,7 +347,68 @@ class ExerciseLibraryActivity : AppCompatActivity() {
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
 
-    /* ---------------- Strength list adapter ---------------- */
+    /* ---------------- NEW: Engine/Skill selection helpers ---------------- */
+
+    private fun refreshEngineSkillSelections() {
+        lifecycleScope.launch {
+            val items = withContext(Dispatchers.IO) {
+                AppDatabase.get(this@ExerciseLibraryActivity)
+                    .dayEngineSkillDao()
+                    .forDay(1, currentDay) // dev: week=1
+            }
+            selectedEngineKeys = items.filter { it.kind == "ENGINE" }
+                .map { "${it.engineMode}|${it.engineIntent}" }
+                .toSet()
+            selectedSkillKeys = items.filter { it.kind == "SKILL" }
+                .map { "${it.skill}|${it.skillTestType}" }
+                .toSet()
+
+            if (::engineAdapter.isInitialized) {
+                engineAdapter.submit(engineUiCache, selectedEngineKeys)
+            }
+            if (::skillAdapter.isInitialized) {
+                skillAdapter.submit(skillUiCache, selectedSkillKeys)
+            }
+        }
+    }
+
+    private fun toggleEngineItem(item: EngineUiItem) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            val dao = AppDatabase.get(this@ExerciseLibraryActivity).dayEngineSkillDao()
+            val removed = dao.deleteEngine(week = 1, day = currentDay, mode = item.mode, intent = item.intent)
+            if (removed == 0) {
+                dao.insert(
+                    DayEngineSkillEntity(
+                        weekIndex = 1, dayIndex = currentDay, orderIndex = 0,
+                        kind = "ENGINE",
+                        engineMode = item.mode,
+                        engineIntent = item.intent
+                    )
+                )
+            }
+            withContext(Dispatchers.Main) { refreshEngineSkillSelections() }
+        }
+    }
+
+    private fun toggleSkillItem(item: SkillUiItem) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            val dao = AppDatabase.get(this@ExerciseLibraryActivity).dayEngineSkillDao()
+            val removed = dao.deleteSkill(week = 1, day = currentDay, skill = item.skill, testType = item.testType)
+            if (removed == 0) {
+                dao.insert(
+                    DayEngineSkillEntity(
+                        weekIndex = 1, dayIndex = currentDay, orderIndex = 0,
+                        kind = "SKILL",
+                        skill = item.skill,
+                        skillTestType = item.testType
+                    )
+                )
+            }
+            withContext(Dispatchers.Main) { refreshEngineSkillSelections() }
+        }
+    }
+
+    /* ---------------- Strength list adapter (unchanged) ---------------- */
 
     private inner class LibraryAdapter(val items: List<Exercise>) : BaseAdapter() {
         override fun getCount() = items.size

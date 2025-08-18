@@ -8,15 +8,14 @@ import androidx.room.TypeConverters
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.example.safitness.data.dao.*
 import com.example.safitness.data.entities.*
-import com.example.safitness.data.seed.ExerciseSeed
-import com.example.safitness.data.seed.MetconSeed
+import com.example.safitness.data.seed.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 @Database(
-    version = 7,                 // bump for new tables
-    exportSchema = false,        // fine for dev; turn on for prod
+    version = 10,                 // bump for DayEngineSkillEntity (dev: destructive OK)
+    exportSchema = false,
     entities = [
         // legacy
         Exercise::class,
@@ -33,7 +32,14 @@ import kotlinx.coroutines.launch
         // Phase 0
         PhaseEntity::class,
         WeekDayPlanEntity::class,
-        DayItemEntity::class
+        DayItemEntity::class,
+
+        // Phase 3 logs
+        EngineLogEntity::class,
+        SkillLogEntity::class,
+
+        // NEW: Attach Engine/Skill items to a day
+        DayEngineSkillEntity::class
     ]
 )
 @TypeConverters(Converters::class)
@@ -44,9 +50,14 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun personalRecordDao(): PersonalRecordDao
     abstract fun exerciseDao(): ExerciseDao
     abstract fun metconDao(): MetconDao
+    abstract fun planDao(): PlanDao
+
+    // Phase 3 DAOs
+    abstract fun engineLogDao(): EngineLogDao
+    abstract fun skillLogDao(): SkillLogDao
 
     // NEW
-    abstract fun planDao(): PlanDao
+    abstract fun dayEngineSkillDao(): DayEngineSkillDao
 
     companion object {
         @Volatile private var INSTANCE: AppDatabase? = null
@@ -59,6 +70,8 @@ abstract class AppDatabase : RoomDatabase() {
                     "safitness.db"
                 )
                     .fallbackToDestructiveMigration() // dev only
+                    // sample engine/skill rows on first create
+                    .addCallback(Phase3Seeder.callback)
                     .addCallback(object : Callback() {
                         override fun onCreate(dbObj: SupportSQLiteDatabase) {
                             super.onCreate(dbObj)
