@@ -57,20 +57,6 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="Metcons" />
-        <RadioButton
-            android:id="@+id/rbEngine"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="Engine" />
-
-        <!-- NEW -->
-        <RadioButton
-            android:id="@+id/rbSkills"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="Skills" />
     </RadioGroup>
 
     <!-- Filters row (labels change meaning in code per mode) -->

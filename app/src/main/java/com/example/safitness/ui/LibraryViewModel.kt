@@ -7,12 +7,6 @@ import com.example.safitness.core.WorkoutType
 import com.example.safitness.data.entities.Exercise
 import com.example.safitness.data.entities.MetconPlan
 import com.example.safitness.data.repo.WorkoutRepository
-import com.example.safitness.core.EngineIntent
-import com.example.safitness.core.EngineMode
-import com.example.safitness.core.SkillTestType
-import com.example.safitness.core.SkillType
-import com.example.safitness.ui.library.EngineUiItem
-import com.example.safitness.ui.library.SkillUiItem
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
@@ -68,39 +62,4 @@ class LibraryViewModel(private val repo: WorkoutRepository) : ViewModel() {
 
     fun setMetconOrder(day: Int, planId: Long, order: Int) =
         viewModelScope.launch { repo.setMetconOrder(day, planId, order) }
-    private val engineSkillDay = MutableLiveData<Int>(1)
-    fun setEngineSkillDay(day: Int) { engineSkillDay.value = day }
-    fun getEngineSkillDay(): LiveData<Int> = engineSkillDay
-
-    // UI lists for Engine and Skills (static from enums)
-    val engineItems: LiveData<List<EngineUiItem>> = MutableLiveData<List<EngineUiItem>>().apply {
-        val list = mutableListOf<EngineUiItem>()
-        for (m in EngineMode.values()) {
-            for (i in EngineIntent.values()) {
-                val title = "${m.name} — ${i.name}"
-                val subtitle = when (i) {
-                    EngineIntent.FOR_TIME -> "Target distance; log a time"
-                    EngineIntent.FOR_DISTANCE -> "Target duration; log meters"
-                    EngineIntent.FOR_CALORIES -> "Target duration; log calories"
-                }
-                list += EngineUiItem(m.name, i.name, title, subtitle)
-            }
-        }
-        value = list
-    }
-
-    val skillItems: LiveData<List<SkillUiItem>> = MutableLiveData<List<SkillUiItem>>().apply {
-        val defaults = mapOf(
-            SkillType.DOUBLE_UNDERS.name to SkillTestType.MAX_REPS_UNBROKEN.name,
-            SkillType.HANDSTAND_HOLD.name to SkillTestType.MAX_HOLD_SECONDS.name,
-            SkillType.MUSCLE_UP.name to SkillTestType.ATTEMPTS.name
-        )
-        val list = mutableListOf<SkillUiItem>()
-        for ((skill, test) in defaults) {
-            val title = "$skill — $test"
-            val subtitle = "Tap to add/remove for the day"
-            list += SkillUiItem(skill, test, title, subtitle)
-        }
-        value = list
-    }
 }
