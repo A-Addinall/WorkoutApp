@@ -183,4 +183,6 @@ interface PlanDao {
 """)
     suspend fun getStrengthRequired(dayPlanId: Long, exerciseId: Long): Boolean?
 
+
+
 }

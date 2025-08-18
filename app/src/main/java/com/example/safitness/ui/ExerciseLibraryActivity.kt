@@ -9,13 +9,16 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.safitness.R
+import com.example.safitness.WorkoutApp
 import com.example.safitness.core.Equipment
 import com.example.safitness.core.WorkoutType
 import com.example.safitness.data.entities.Exercise
 import com.example.safitness.data.entities.MetconPlan
 import com.example.safitness.data.repo.Repos
 import com.google.android.material.chip.ChipGroup
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class ExerciseLibraryActivity : AppCompatActivity() {
 
@@ -23,9 +26,9 @@ class ExerciseLibraryActivity : AppCompatActivity() {
         LibraryViewModelFactory(Repos.workoutRepository(this))
     }
 
-    private enum class Mode { STRENGTH, METCON }
+    private enum class Mode { STRENGTH, METCON, ENGINE, SKILLS }
     private var mode: Mode = Mode.STRENGTH
-    private var currentDay = 1  // passed from MainActivity Edit; used ONLY for membership & persistence
+    private var currentDay = 1
 
     // UI
     private lateinit var spinnerType: Spinner
@@ -33,26 +36,38 @@ class ExerciseLibraryActivity : AppCompatActivity() {
     private lateinit var listLibrary: ListView
     private lateinit var emptyText: TextView
     private lateinit var btnClearFilters: Button
-    private lateinit var radioExercises: RadioButton
-    private lateinit var radioMetcons: RadioButton
+    private lateinit var rbExercises: RadioButton
+    private lateinit var rbMetcons: RadioButton
+    private lateinit var rbEngine: RadioButton
+    private lateinit var rbSkills: RadioButton
     private lateinit var rvMetconPlans: RecyclerView
-    private lateinit var metconAdapter: MetconPlanAdapter
 
-    // Strength membership & reps state (in-memory cache for the list)
+    // Adapters
+    private lateinit var metconAdapter: MetconPlanAdapter
+    private lateinit var engineAdapter: EnginePlanAdapter
+    private lateinit var skillAdapter: SkillPlanAdapter
+
+    // Strength state
     private val currentReps = mutableMapOf<Long, Int?>()
     private val addedState = mutableMapOf<Long, Boolean>()
 
-    // Metcon lists + membership
+    // Metcon state
     private var allMetconPlans: List<MetconPlan> = emptyList()
     private var metconAddedIds: Set<Long> = emptySet()
     private var metconTypeFilter: String? = null
     private var metconDurationFilter: IntRange? = null
 
-    // Remember spinner positions per mode
+    // Remember spinner positions
     private var strengthTypePos = 0
     private var strengthEqPos = 0
     private var metconTypePos = 0
     private var metconDurPos = 0
+
+    // Engine/Skill rows + in-memory selection (until repo wiring is added)
+    private var engineRows: List<EngineRow> = emptyList()
+    private var skillRows: List<SkillRow> = emptyList()
+    private var engineAddedIds: MutableSet<Long> = mutableSetOf()
+    private var skillAddedIds: MutableSet<Long> = mutableSetOf()
 
     // Metcon spinner options
     private val metconTypeLabels = arrayOf("All", "For time", "AMRAP", "EMOM")
@@ -64,7 +79,6 @@ class ExerciseLibraryActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_exercise_library)
 
-        // Day comes from MainActivity -> Edit (NOT a catalogue filter)
         currentDay = intent.getIntExtra("DAY_INDEX", 1).coerceIn(1, 5)
 
         // Bind
@@ -73,32 +87,28 @@ class ExerciseLibraryActivity : AppCompatActivity() {
         listLibrary = findViewById(R.id.listLibrary)
         emptyText = findViewById(R.id.tvEmpty)
         btnClearFilters = findViewById(R.id.btnClearFilters)
-        radioExercises = findViewById(R.id.rbExercises)
-        radioMetcons = findViewById(R.id.rbMetcons)
+        rbExercises = findViewById(R.id.rbExercises)
+        rbMetcons = findViewById(R.id.rbMetcons)
+        rbEngine = findViewById(R.id.rbEngine)
+        rbSkills = findViewById(R.id.rbSkills)
         rvMetconPlans = findViewById(R.id.rvMetconPlans)
         findViewById<ImageView>(R.id.ivBack).setOnClickListener { finish() }
 
         btnClearFilters.setOnClickListener {
             when (mode) {
-                Mode.STRENGTH -> {
-                    strengthTypePos = 0; strengthEqPos = 0
-                    configureSpinnersForMode(Mode.STRENGTH)
-                }
-                Mode.METCON -> {
-                    metconTypePos = 0; metconDurPos = 0
-                    configureSpinnersForMode(Mode.METCON)
-                    applyMetconFiltersAndSubmit()
-                }
+                Mode.STRENGTH -> { strengthTypePos = 0; strengthEqPos = 0; configureSpinnersForMode(Mode.STRENGTH) }
+                Mode.METCON   -> { metconTypePos = 0; metconDurPos = 0; configureSpinnersForMode(Mode.METCON); applyMetconFiltersAndSubmit() }
+                Mode.ENGINE, Mode.SKILLS -> { /* no filters yet */ }
             }
         }
 
-        // Strength catalogue (ALWAYS full list from VM)
-        vm.exercises.observe(this) { list ->
-            renderStrengthList(list)
-        }
+        /* ----- Strength ----- */
+        vm.exercises.observe(this) { list -> renderStrengthList(list) }
 
-        // Metcon catalogue (ALWAYS full list; membership only affects button text)
+        /* ----- Metcon / Engine / Skills share the same RecyclerView ----- */
         rvMetconPlans.layoutManager = LinearLayoutManager(this)
+
+        // Metcon adapter (persisted via VM/repo)
         metconAdapter = MetconPlanAdapter(
             onPrimary = { plan, isAdded ->
                 if (isAdded) vm.removeMetconFromDay(currentDay, plan.id)
@@ -115,26 +125,74 @@ class ExerciseLibraryActivity : AppCompatActivity() {
             metconAddedIds = idSet ?: emptySet()
             metconAdapter.updateMembership(metconAddedIds)
         }
-        vm.setMetconDay(currentDay) // only for membership state
+        vm.setMetconDay(currentDay)
 
-        // Mode toggle
-        fun applyMode() {
-            mode = if (radioMetcons.isChecked) Mode.METCON else Mode.STRENGTH
-            rvMetconPlans.visibility = if (mode == Mode.METCON) View.VISIBLE else View.GONE
-            listLibrary.visibility = if (mode == Mode.STRENGTH) View.VISIBLE else View.GONE
-            emptyText.visibility = View.GONE
-            configureSpinnersForMode(mode)
-            if (mode == Mode.METCON) applyMetconFiltersAndSubmit() else refreshExerciseStates()
+        // Engine adapter (in-memory add/remove for now)
+        engineAdapter = EnginePlanAdapter { row, isAdded ->
+            if (isAdded) engineAddedIds.remove(row.id) else engineAddedIds.add(row.id)
+            engineAdapter.updateMembership(engineAddedIds)
         }
-        radioExercises.setOnCheckedChangeListener { _, _ -> applyMode() }
-        radioMetcons.setOnCheckedChangeListener { _, _ -> applyMode() }
-        radioExercises.isChecked = true
+
+        // Skill adapter (in-memory add/remove for now)
+        skillAdapter = SkillPlanAdapter { row, isAdded ->
+            if (isAdded) skillAddedIds.remove(row.id) else skillAddedIds.add(row.id)
+            skillAdapter.updateMembership(skillAddedIds)
+        }
+
+        /* ----- Mode toggle ----- */
+        fun applyMode() {
+            mode = when {
+                rbMetcons.isChecked -> Mode.METCON
+                rbEngine.isChecked  -> Mode.ENGINE
+                rbSkills.isChecked  -> Mode.SKILLS
+                else                -> Mode.STRENGTH
+            }
+            when (mode) {
+                Mode.STRENGTH -> {
+                    rvMetconPlans.visibility = View.GONE
+                    listLibrary.visibility = View.VISIBLE
+                    emptyText.visibility = View.GONE
+                    configureSpinnersForMode(Mode.STRENGTH)
+                    refreshExerciseStates()
+                }
+                Mode.METCON -> {
+                    rvMetconPlans.visibility = View.VISIBLE
+                    listLibrary.visibility = View.GONE
+                    emptyText.visibility = View.GONE
+                    rvMetconPlans.adapter = metconAdapter
+                    configureSpinnersForMode(Mode.METCON)
+                    applyMetconFiltersAndSubmit()
+                }
+                Mode.ENGINE -> {
+                    rvMetconPlans.visibility = View.VISIBLE
+                    listLibrary.visibility = View.GONE
+                    emptyText.visibility = View.GONE
+                    rvMetconPlans.adapter = engineAdapter
+                    configureSpinnersForMode(Mode.ENGINE)
+                    loadEngineRows()
+                }
+                Mode.SKILLS -> {
+                    rvMetconPlans.visibility = View.VISIBLE
+                    listLibrary.visibility = View.GONE
+                    emptyText.visibility = View.GONE
+                    rvMetconPlans.adapter = skillAdapter
+                    configureSpinnersForMode(Mode.SKILLS)
+                    loadSkillRows()
+                }
+            }
+        }
+        rbExercises.setOnCheckedChangeListener { _, _ -> applyMode() }
+        rbMetcons.setOnCheckedChangeListener   { _, _ -> applyMode() }
+        rbEngine.setOnCheckedChangeListener    { _, _ -> applyMode() }
+        rbSkills.setOnCheckedChangeListener    { _, _ -> applyMode() }
+        rbExercises.isChecked = true
         applyMode()
     }
 
-    /* ---------------- Strength helpers ---------------- */
+    /* ---------------- Strength ---------------- */
 
     private fun renderStrengthList(list: List<Exercise>?) {
+        if (mode != Mode.STRENGTH) return
         if (list.isNullOrEmpty()) {
             emptyText.visibility = View.VISIBLE
             listLibrary.adapter = null
@@ -142,14 +200,12 @@ class ExerciseLibraryActivity : AppCompatActivity() {
         }
         emptyText.visibility = View.GONE
 
-        // Preload membership + reps (do NOT filter the list)
         lifecycleScope.launch {
             val repo = Repos.workoutRepository(this@ExerciseLibraryActivity)
             list.forEach { ex ->
                 addedState[ex.id] = repo.isInProgram(currentDay, ex.id)
                 currentReps[ex.id] = repo.selectedTargetReps(currentDay, ex.id)
             }
-            // sort by name for stable display
             val sorted = list.sortedBy { it.name }
             listLibrary.adapter = LibraryAdapter(sorted)
         }
@@ -166,7 +222,65 @@ class ExerciseLibraryActivity : AppCompatActivity() {
         }
     }
 
-    /* ---------------- Spinner wiring ---------------- */
+    /* ---------------- Engine ---------------- */
+
+    private fun loadEngineRows() {
+        lifecycleScope.launch {
+            val db = (application as WorkoutApp).db
+            val plans = withContext(Dispatchers.IO) {
+                try { db.enginePlanDao().getPlans() } catch (_: Throwable) { emptyList() }
+            }
+            engineRows = plans.map { p ->
+                val bits = mutableListOf<String>()
+                p.mode?.let { if (it.isNotBlank()) bits.add(it) }
+                p.intent?.let { if (it.isNotBlank()) bits.add(it.replace('_',' ').lowercase().replaceFirstChar(Char::titlecase)) }
+                val durationMin = (p.programDurationSeconds ?: 0) / 60
+                val dist = p.programDistanceMeters ?: 0
+                val cals = p.programTargetCalories ?: 0
+                when (p.intent) {
+                    "FOR_TIME"     -> if (dist > 0) bits.add("$dist m")
+                    "FOR_DISTANCE" -> if (durationMin > 0) bits.add("$durationMin min")
+                    "FOR_CALORIES" -> if (cals > 0) bits.add("$cals cal") else if (durationMin > 0) bits.add("$durationMin min")
+                }
+                EngineRow(
+                    id = p.id,
+                    title = p.title ?: "Engine",
+                    meta = bits.joinToString(" • ")
+                )
+            }.sortedBy { it.title }
+            engineAdapter.submit(engineRows, engineAddedIds)
+            emptyText.visibility = if (engineRows.isEmpty()) View.VISIBLE else View.GONE
+        }
+    }
+
+    /* ---------------- Skills ---------------- */
+
+    private fun loadSkillRows() {
+        lifecycleScope.launch {
+            val db = (application as WorkoutApp).db
+            val plans = withContext(Dispatchers.IO) {
+                try { db.skillPlanDao().getPlans() } catch (_: Throwable) { emptyList() }
+            }
+            skillRows = plans.map { p ->
+                val test = p.defaultTestType ?: "ATTEMPTS"
+                val meta = when (test) {
+                    "MAX_REPS_UNBROKEN" -> "Max reps (unbroken)"
+                    "FOR_TIME_REPS"     -> "For time (reps)"
+                    "MAX_HOLD_SECONDS"  -> "Max hold (seconds)"
+                    else                -> "Attempts"
+                }
+                SkillRow(
+                    id    = p.id,
+                    title = p.title ?: "Skill",
+                    meta  = meta
+                )
+            }.sortedBy { it.title }
+            skillAdapter.submit(skillRows, skillAddedIds)
+            emptyText.visibility = if (skillRows.isEmpty()) View.VISIBLE else View.GONE
+        }
+    }
+
+    /* ---------------- Spinners ---------------- */
 
     private fun configureSpinnersForMode(newMode: Mode) {
         when (newMode) {
@@ -184,42 +298,55 @@ class ExerciseLibraryActivity : AppCompatActivity() {
                 spinnerType.setSelection(strengthTypePos, false)
                 spinnerEqOrDuration.setSelection(strengthEqPos, false)
 
-                spinnerType.onItemSelectedListener = objSel { pos ->
+                spinnerType.onItemSelectedListener = sel { pos ->
                     strengthTypePos = pos
                     vm.setTypeFilter(if (pos == 0) null else WorkoutType.valueOf(spinnerType.selectedItem as String))
                 }
-                spinnerEqOrDuration.onItemSelectedListener = objSel { pos ->
+                spinnerEqOrDuration.onItemSelectedListener = sel { pos ->
                     strengthEqPos = pos
                     vm.setEqFilter(if (pos == 0) null else Equipment.valueOf(spinnerEqOrDuration.selectedItem as String))
                 }
+
+                spinnerType.isEnabled = true
+                spinnerEqOrDuration.isEnabled = true
             }
             Mode.METCON -> {
-                spinnerType.adapter = ArrayAdapter(
-                    this,
-                    android.R.layout.simple_spinner_dropdown_item,
-                    metconTypeLabels
-                )
-                spinnerEqOrDuration.adapter = ArrayAdapter(
-                    this,
-                    android.R.layout.simple_spinner_dropdown_item,
-                    metconDurationLabels
-                )
+                spinnerType.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, metconTypeLabels)
+                spinnerEqOrDuration.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, metconDurationLabels)
                 spinnerType.setSelection(metconTypePos, false)
                 spinnerEqOrDuration.setSelection(metconDurPos, false)
 
-                spinnerType.onItemSelectedListener = objSel { pos ->
+                spinnerType.onItemSelectedListener = sel { pos ->
                     metconTypePos = pos
                     metconTypeFilter = metconTypeMap[pos]
                     applyMetconFiltersAndSubmit()
                 }
-                spinnerEqOrDuration.onItemSelectedListener = objSel { pos ->
+                spinnerEqOrDuration.onItemSelectedListener = sel { pos ->
                     metconDurPos = pos
                     metconDurationFilter = metconDurationRanges[pos]
                     applyMetconFiltersAndSubmit()
                 }
+
+                spinnerType.isEnabled = true
+                spinnerEqOrDuration.isEnabled = true
+            }
+            Mode.ENGINE, Mode.SKILLS -> {
+                // No filters (yet) for Engine/Skills
+                spinnerType.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, arrayOf("—"))
+                spinnerEqOrDuration.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, arrayOf("—"))
+                spinnerType.onItemSelectedListener = null
+                spinnerEqOrDuration.onItemSelectedListener = null
+                spinnerType.isEnabled = false
+                spinnerEqOrDuration.isEnabled = false
             }
         }
     }
+
+    private fun sel(block: (Int) -> Unit) =
+        object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>, view: View?, position: Int, id: Long) = block(position)
+            override fun onNothingSelected(parent: AdapterView<*>) {}
+        }
 
     private fun applyMetconFiltersAndSubmit() {
         val type = metconTypeFilter
@@ -236,15 +363,6 @@ class ExerciseLibraryActivity : AppCompatActivity() {
         emptyText.visibility = if (filtered.isEmpty()) View.VISIBLE else View.GONE
     }
 
-    /* ---------------- Shared helpers ---------------- */
-
-    private fun objSel(block: (Int) -> Unit) =
-        object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) =
-                block(position)
-            override fun onNothingSelected(parent: AdapterView<*>?) {}
-        }
-
     /* ---------------- Strength list adapter ---------------- */
 
     private inner class LibraryAdapter(val items: List<Exercise>) : BaseAdapter() {
@@ -255,8 +373,7 @@ class ExerciseLibraryActivity : AppCompatActivity() {
         override fun getView(position: Int, convertView: View?, parent: ViewGroup?): View {
             val holder: VH
             val row = if (convertView == null) {
-                val v = LayoutInflater.from(parent?.context)
-                    .inflate(R.layout.item_library_row, parent, false)
+                val v = layoutInflater.inflate(R.layout.item_library_row, parent, false)
                 holder = VH(v); v.tag = holder; v
             } else {
                 (convertView.tag as VH).also { holder = it }; convertView
@@ -275,7 +392,6 @@ class ExerciseLibraryActivity : AppCompatActivity() {
                 tvTitle.text = ex.name
                 tvMeta.text = getString(R.string.reps)
 
-                // Preselect chip from saved reps (or none)
                 fun selectChipForReps(value: Int?) {
                     chipGroupReps.clearCheck()
                     when (value) {
@@ -285,13 +401,11 @@ class ExerciseLibraryActivity : AppCompatActivity() {
                         10 -> chipGroupReps.check(R.id.chipReps10)
                         12 -> chipGroupReps.check(R.id.chipReps12)
                         15 -> chipGroupReps.check(R.id.chipReps15)
-                        else -> { /* none selected = null */ }
+                        else -> { /* none */ }
                     }
                 }
-
                 selectChipForReps(currentReps[ex.id])
 
-                // Listen for user changes on chips
                 chipGroupReps.setOnCheckedStateChangeListener { _, checkedIds ->
                     val chosen: Int? = when (checkedIds.firstOrNull()) {
                         R.id.chipReps3  -> 3
@@ -329,7 +443,7 @@ class ExerciseLibraryActivity : AppCompatActivity() {
                                 exercise = ex,
                                 required = true,
                                 preferred = ex.primaryEquipment,
-                                targetReps = currentReps[ex.id]  // may be null
+                                targetReps = currentReps[ex.id]
                             )
                             addedState[ex.id] = true
                             Toast.makeText(this@ExerciseLibraryActivity, "Added ${ex.name}", Toast.LENGTH_SHORT).show()

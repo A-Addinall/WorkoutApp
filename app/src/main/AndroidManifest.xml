@@ -25,6 +25,15 @@
         <activity android:name=".ui.MetconActivity" android:exported="false" />
         <activity android:name=".ui.MetconAmrapActivity" android:exported="false" />
         <activity android:name=".ui.MetconEmomActivity" android:exported="false" />
+        <activity
+            android:name=".ui.engine.EngineForTimeActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ui.engine.EngineAccumulationActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ui.engine.SkillDriverActivity"
+            android:exported="false" />
 
         <activity
             android:name=".ui.MainActivity"

@@ -38,6 +38,7 @@
 
     <!-- Mode toggle -->
     <RadioGroup
+        android:id="@+id/rgMode"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
@@ -57,6 +58,22 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="Metcons" />
+
+        <!-- NEW -->
+        <RadioButton
+            android:id="@+id/rbEngine"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Engine" />
+
+        <!-- NEW -->
+        <RadioButton
+            android:id="@+id/rbSkills"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Skills" />
     </RadioGroup>
 
     <!-- Filters row (labels change meaning in code per mode) -->
@@ -91,6 +108,7 @@
         android:layout_weight="1"
         android:layout_marginTop="12dp">
 
+        <!-- Used for Metcon plans (and can be reused for Engine/Skills later if you prefer) -->
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/rvMetconPlans"
             android:layout_width="match_parent"
@@ -98,6 +116,7 @@
             android:nestedScrollingEnabled="true"
             android:visibility="gone" />
 
+        <!-- Used for Strength / Engine / Skills simple lists -->
         <ListView
             android:id="@+id/listLibrary"
             android:layout_width="match_parent"

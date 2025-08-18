@@ -10,12 +10,25 @@ import com.example.safitness.data.dao.*
 import com.example.safitness.data.entities.*
 import com.example.safitness.data.seed.ExerciseSeed
 import com.example.safitness.data.seed.MetconSeed
+import com.example.safitness.data.seed.SkillLibrarySeeder
+import com.example.safitness.data.seed.EngineLibrarySeeder
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import com.example.safitness.data.dao.EnginePlanDao
+import com.example.safitness.data.dao.SkillPlanDao
+import com.example.safitness.data.dao.EngineLogDao
+import com.example.safitness.data.dao.SkillLogDao
+import com.example.safitness.data.entities.EnginePlanEntity
+import com.example.safitness.data.entities.EngineComponentEntity
+import com.example.safitness.data.entities.SkillPlanEntity
+import com.example.safitness.data.entities.SkillComponentEntity
+import com.example.safitness.data.entities.EngineLogEntity
+import com.example.safitness.data.entities.SkillLogEntity
+
 
 @Database(
-    version = 7,                 // bump for new tables
+    version = 8,                 // bump for new tables
     exportSchema = false,        // fine for dev; turn on for prod
     entities = [
         // legacy
@@ -33,7 +46,16 @@ import kotlinx.coroutines.launch
         // Phase 0
         PhaseEntity::class,
         WeekDayPlanEntity::class,
-        DayItemEntity::class
+        DayItemEntity::class,
+
+        EnginePlanEntity::class,
+        EngineComponentEntity::class,
+        SkillPlanEntity::class,
+        SkillComponentEntity::class,
+
+// Engine/Skill log entities
+        EngineLogEntity::class,
+        SkillLogEntity::class,
     ]
 )
 @TypeConverters(Converters::class)
@@ -47,6 +69,13 @@ abstract class AppDatabase : RoomDatabase() {
 
     // NEW
     abstract fun planDao(): PlanDao
+    // Library DAOs
+    abstract fun enginePlanDao(): EnginePlanDao
+    abstract fun skillPlanDao(): SkillPlanDao
+
+    // Log DAOs
+    abstract fun engineLogDao(): EngineLogDao
+    abstract fun skillLogDao(): SkillLogDao
 
     companion object {
         @Volatile private var INSTANCE: AppDatabase? = null
@@ -69,6 +98,8 @@ abstract class AppDatabase : RoomDatabase() {
                                 }
                                 if (db.metconDao().countPlans() == 0) {
                                     MetconSeed.seed(db)
+                                    SkillLibrarySeeder.seedIfNeeded(db)
+                                    EngineLibrarySeeder.seedIfNeeded(db)
                                 }
                             }
                         }
@@ -78,6 +109,8 @@ abstract class AppDatabase : RoomDatabase() {
                             CoroutineScope(Dispatchers.IO).launch {
                                 val db = INSTANCE ?: return@launch
                                 MetconSeed.seedOrUpdate(db)
+                                SkillLibrarySeeder.seedIfNeeded(db)
+                                EngineLibrarySeeder.seedIfNeeded(db)
                             }
                         }
                     })
