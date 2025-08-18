@@ -1,16 +1,21 @@
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:padding="16dp">
 
+    <!-- Header -->
     <LinearLayout
         android:id="@+id/layoutHeader"
-        android:layout_width="match_parent"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        app:layout_constraintTop_toTopOf="parent">
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
 
         <ImageView
             android:id="@+id/ivBack"
@@ -23,48 +28,38 @@
             android:id="@+id/tvWorkoutTitle"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="Engine – For Time"
-            android:textSize="20sp"
-            android:textStyle="bold"
-            android:gravity="center"
             android:layout_marginStart="16dp"
-            android:layout_marginEnd="40dp" />
+            android:layout_marginEnd="40dp"
+            android:layout_weight="1"
+            android:text="Engine – EMOM"
+            android:textStyle="bold"
+            android:textSize="20sp"
+            android:gravity="center" />
     </LinearLayout>
 
+    <!-- Timer -->
     <TextView
         android:id="@+id/tvTimer"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="00:00"
-        android:textSize="48sp"
         android:textStyle="bold"
-        android:gravity="center"
+        android:textSize="48sp"
         app:layout_constraintTop_toBottomOf="@id/layoutHeader"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         android:layout_marginTop="32dp" />
 
-    <TextView
-        android:id="@+id/tvLastTime"
-        android:layout_width="wrap_content"
+    <!-- Controls -->
+    <LinearLayout
+        android:id="@+id/layoutControls"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:text="No previous time"
-        android:textSize="14sp"
-        android:textColor="#666666"
+        android:orientation="horizontal"
         android:gravity="center"
         app:layout_constraintTop_toBottomOf="@id/tvTimer"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginTop="8dp" />
-
-    <LinearLayout
-        android:id="@+id/layoutControls"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center"
-        app:layout_constraintTop_toBottomOf="@id/tvLastTime"
         android:layout_marginTop="24dp">
 
         <Button
@@ -73,8 +68,8 @@
             android:layout_height="56dp"
             android:layout_weight="1"
             android:text="START"
-            android:textSize="18sp"
             android:textStyle="bold"
+            android:textSize="18sp"
             android:layout_marginEnd="8dp" />
 
         <Button
@@ -87,26 +82,39 @@
             android:layout_marginStart="8dp" />
     </LinearLayout>
 
+    <!-- Target per minute (cal / metres) -->
+    <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/tilTargetPerMinute"
+        style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+        android:layout_width="200dp"
+        android:layout_height="wrap_content"
+        android:hint="Target per minute"
+        app:layout_constraintTop_toBottomOf="@id/layoutControls"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginTop="16dp">
+
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/etTargetPerMinute"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="number"
+            android:maxLength="4" />
+    </com.google.android.material.textfield.TextInputLayout>
+
+    <!-- Plan include (mirrors metcon card) -->
     <ScrollView
         android:id="@+id/scrollPlan"
-        android:layout_width="match_parent"
+        android:layout_width="0dp"
         android:layout_height="0dp"
-        app:layout_constraintTop_toBottomOf="@id/layoutControls"
-        app:layout_constraintBottom_toTopOf="@id/btnComplete"
+        app:layout_constraintTop_toBottomOf="@id/tilTargetPerMinute"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
         android:layout_marginTop="16dp"
         android:layout_marginBottom="16dp">
 
         <include layout="@layout/item_metcon_plan_card" />
     </ScrollView>
 
-    <Button
-        android:id="@+id/btnComplete"
-        android:layout_width="match_parent"
-        android:layout_height="56dp"
-        android:text="COMPLETE ENGINE"
-        android:textSize="18sp"
-        android:textStyle="bold"
-        app:layout_constraintBottom_toBottomOf="parent" />
-
 </androidx.constraintlayout.widget.ConstraintLayout>
-

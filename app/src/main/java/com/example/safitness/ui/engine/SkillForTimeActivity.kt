@@ -7,14 +7,14 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import com.example.safitness.R
 
-class EngineForTimeActivity : AppCompatActivity() {
+class SkillForTimeActivity : AppCompatActivity() {
 
     private var running = false
     private var seconds = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_engine_for_time)
+        setContentView(R.layout.activity_skill_for_time) // includes engine_for_time layout
 
         val tvTimer = findViewById<TextView>(R.id.tvTimer)
         val btnStartStop = findViewById<Button>(R.id.btnStartStop)

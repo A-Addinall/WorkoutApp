@@ -31,9 +31,10 @@
         <activity
             android:name=".ui.engine.EngineAccumulationActivity"
             android:exported="false" />
-        <activity
-            android:name=".ui.engine.SkillDriverActivity"
-            android:exported="false" />
+        <activity android:name=".ui.engine.EngineEmomActivity" />
+        <activity android:name=".ui.engine.SkillEmomActivity" />
+        <activity android:name=".ui.engine.SkillAmrapActivity" />
+        <activity android:name=".ui.engine.SkillForTimeActivity" />
 
         <activity
             android:name=".ui.MainActivity"

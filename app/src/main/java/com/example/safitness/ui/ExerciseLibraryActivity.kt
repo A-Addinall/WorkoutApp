@@ -5,6 +5,7 @@ import android.view.*
 import android.widget.*
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.asLiveData
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -15,6 +16,10 @@ import com.example.safitness.core.WorkoutType
 import com.example.safitness.data.entities.Exercise
 import com.example.safitness.data.entities.MetconPlan
 import com.example.safitness.data.repo.Repos
+import com.example.safitness.ui.library.EnginePlanAdapter
+import com.example.safitness.ui.library.EngineRow
+import com.example.safitness.ui.library.SkillPlanAdapter
+import com.example.safitness.ui.library.SkillRow
 import com.google.android.material.chip.ChipGroup
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -63,11 +68,11 @@ class ExerciseLibraryActivity : AppCompatActivity() {
     private var metconTypePos = 0
     private var metconDurPos = 0
 
-    // Engine/Skill rows + in-memory selection (until repo wiring is added)
+    // Engine/Skill rows + current membership sets (kept in sync via repo observers)
     private var engineRows: List<EngineRow> = emptyList()
     private var skillRows: List<SkillRow> = emptyList()
-    private var engineAddedIds: MutableSet<Long> = mutableSetOf()
-    private var skillAddedIds: MutableSet<Long> = mutableSetOf()
+    private var engineAddedIds: Set<Long> = emptySet()
+    private var skillAddedIds: Set<Long> = emptySet()
 
     // Metcon spinner options
     private val metconTypeLabels = arrayOf("All", "For time", "AMRAP", "EMOM")
@@ -127,16 +132,39 @@ class ExerciseLibraryActivity : AppCompatActivity() {
         }
         vm.setMetconDay(currentDay)
 
-        // Engine adapter (in-memory add/remove for now)
+        // Engine/Skills adapters
         engineAdapter = EnginePlanAdapter { row, isAdded ->
-            if (isAdded) engineAddedIds.remove(row.id) else engineAddedIds.add(row.id)
-            engineAdapter.updateMembership(engineAddedIds)
+            val repo = Repos.workoutRepository(this)
+            lifecycleScope.launch {
+                if (isAdded) {
+                    repo.removeEngineFromDay(currentDay, row.id)
+                } else {
+                    val order = engineAddedIds.size // use repo-observed membership size
+                    repo.addEngineToDay(currentDay, row.id, required = true, orderInDay = order)
+                }
+            }
+        }
+        skillAdapter = SkillPlanAdapter { row, isAdded ->
+            val repo = Repos.workoutRepository(this)
+            lifecycleScope.launch {
+                if (isAdded) {
+                    repo.removeSkillFromDay(currentDay, row.id)
+                } else {
+                    val order = skillAddedIds.size // use repo-observed membership size
+                    repo.addSkillToDay(currentDay, row.id, required = true, orderInDay = order)
+                }
+            }
         }
 
-        // Skill adapter (in-memory add/remove for now)
-        skillAdapter = SkillPlanAdapter { row, isAdded ->
-            if (isAdded) skillAddedIds.remove(row.id) else skillAddedIds.add(row.id)
-            skillAdapter.updateMembership(skillAddedIds)
+        // Observe Engine/Skill membership sets directly from repo
+        val repo = Repos.workoutRepository(this)
+        repo.enginePlanIdsForDay(currentDay).asLiveData().observe(this) { ids ->
+            engineAddedIds = ids ?: emptySet()
+            if (mode == Mode.ENGINE) engineAdapter.updateMembership(engineAddedIds)
+        }
+        repo.skillPlanIdsForDay(currentDay).asLiveData().observe(this) { ids ->
+            skillAddedIds = ids ?: emptySet()
+            if (mode == Mode.SKILLS) skillAdapter.updateMembership(skillAddedIds)
         }
 
         /* ----- Mode toggle ----- */
@@ -170,6 +198,7 @@ class ExerciseLibraryActivity : AppCompatActivity() {
                     rvMetconPlans.adapter = engineAdapter
                     configureSpinnersForMode(Mode.ENGINE)
                     loadEngineRows()
+                    engineAdapter.updateMembership(engineAddedIds)
                 }
                 Mode.SKILLS -> {
                     rvMetconPlans.visibility = View.VISIBLE
@@ -178,6 +207,7 @@ class ExerciseLibraryActivity : AppCompatActivity() {
                     rvMetconPlans.adapter = skillAdapter
                     configureSpinnersForMode(Mode.SKILLS)
                     loadSkillRows()
+                    skillAdapter.updateMembership(skillAddedIds)
                 }
             }
         }

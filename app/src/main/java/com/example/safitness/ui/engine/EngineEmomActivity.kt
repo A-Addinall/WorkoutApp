@@ -6,20 +6,38 @@ import android.widget.ImageView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import com.example.safitness.R
+import com.google.android.material.textfield.TextInputEditText
 
-class EngineForTimeActivity : AppCompatActivity() {
+/**
+ * Simple EMOM driver for Engine (e.g., "EMOM 20 cal").
+ * - Timer counts up in mm:ss.
+ * - You can log the target per minute (calories or metres) for reference using a text input.
+ * - Reuses the same control pattern as Metcon EMOM.
+ */
+class EngineEmomActivity : AppCompatActivity() {
 
     private var running = false
     private var seconds = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_engine_for_time)
+        setContentView(R.layout.activity_engine_emom)
 
+        val tvTitle = findViewById<TextView>(R.id.tvWorkoutTitle)
         val tvTimer = findViewById<TextView>(R.id.tvTimer)
         val btnStartStop = findViewById<Button>(R.id.btnStartStop)
         val btnReset = findViewById<Button>(R.id.btnReset)
-        findViewById<ImageView>(R.id.ivBack)?.setOnClickListener { finish() }
+        val ivBack = findViewById<ImageView>(R.id.ivBack)
+        val etTarget = findViewById<TextInputEditText>(R.id.etTargetPerMinute)
+        ivBack?.setOnClickListener { finish() }
+
+        // Optional: pass unit & target via intent extras
+        // ENGINE_EMOM_UNIT: "CALORIES" | "METERS"
+        // ENGINE_EMOM_TARGET_PER_MIN: Int
+        val unit = (intent.getStringExtra("ENGINE_EMOM_UNIT") ?: "CALORIES").uppercase()
+        val target = intent.getIntExtra("ENGINE_EMOM_TARGET_PER_MIN", 20)
+        tvTitle?.text = if (unit == "METERS") "Engine – EMOM (metres)" else "Engine – EMOM (cal)"
+        etTarget?.setText(target.toString())
 
         fun render() {
             val m = seconds / 60
