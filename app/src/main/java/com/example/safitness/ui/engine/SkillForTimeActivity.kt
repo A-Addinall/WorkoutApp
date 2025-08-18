@@ -1,49 +1,135 @@
 package com.example.safitness.ui.engine
 
 import android.os.Bundle
-import android.widget.Button
+import android.os.CountDownTimer
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Button
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import com.example.safitness.R
+import com.example.safitness.data.db.AppDatabase
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class SkillForTimeActivity : AppCompatActivity() {
 
-    private var running = false
-    private var seconds = 0
+    private lateinit var tvWorkoutTitle: TextView
+    private lateinit var tvTimer: TextView
+    private lateinit var btnStartStop: Button
+    private lateinit var btnReset: Button
+
+    // included card
+    private var cardTitle: TextView? = null
+    private var cardMeta: TextView? = null
+    private var cardComponents: LinearLayout? = null
+
+    private var planId: Long = -1
+    private var dayIndex: Int = 1
+
+    private var isRunning = false
+    private var isCountdown = false
+    private var timeElapsedMs = 0L
+    private var startTime = 0L
+    private var timer: CountDownTimer? = null
+    private var preTimer: CountDownTimer? = null
+    private val beeper = com.example.safitness.ui.TimerBeeper()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_skill_for_time) // includes engine_for_time layout
 
-        val tvTimer = findViewById<TextView>(R.id.tvTimer)
-        val btnStartStop = findViewById<Button>(R.id.btnStartStop)
-        val btnReset = findViewById<Button>(R.id.btnReset)
+        planId = intent.getLongExtra("PLAN_ID", -1L)
+        dayIndex = intent.getIntExtra("DAY_INDEX", 1).coerceIn(1, 5)
+
+        // bind engine_for_time views
+        tvWorkoutTitle = findViewById(R.id.tvWorkoutTitle)
+        tvTimer = findViewById(R.id.tvTimer)
+        btnStartStop = findViewById(R.id.btnStartStop)
+        btnReset = findViewById(R.id.btnReset)
+
+        cardTitle = findViewById(R.id.tvPlanCardTitle)
+        cardMeta = findViewById(R.id.tvPlanMeta)
+        cardComponents = findViewById(R.id.layoutPlanComponents)
+
+        tvWorkoutTitle.text = "Skill – For Time"
+        tvTimer.text = "00:00"
         findViewById<ImageView>(R.id.ivBack)?.setOnClickListener { finish() }
 
-        fun render() {
-            val m = seconds / 60
-            val s = seconds % 60
-            tvTimer.text = String.format("%02d:%02d", m, s)
+        lifecycleScope.launch {
+            val db = AppDatabase.get(this@SkillForTimeActivity)
+            val pwc = withContext(Dispatchers.IO) {
+                val p = db.skillPlanDao().getPlans().firstOrNull { it.id == planId }
+                val comps = p?.let { db.skillPlanDao().getComponents(it.id) }.orEmpty()
+                Pair(p, comps.sortedBy { it.orderIndex })
+            }
+            val plan = pwc.first
+            if (plan != null) {
+                tvWorkoutTitle.text = "Skill – ${plan.title}"
+                cardTitle?.text = plan.title
+                cardMeta?.text = (plan.description ?: "").ifBlank { plan.defaultTestType ?: "" }
+                cardComponents?.removeAllViews()
+                pwc.second.forEach { c ->
+                    val line = c.title.ifBlank { c.description ?: "" }
+                    cardComponents?.addView(TextView(this@SkillForTimeActivity).apply {
+                        text = "• $line"
+                        textSize = 16f
+                        setPadding(0, 4, 0, 4)
+                    })
+                }
+            }
         }
 
         btnStartStop.setOnClickListener {
-            running = !running
-            btnStartStop.text = if (running) "STOP" else "START"
-        }
-        btnReset.setOnClickListener {
-            seconds = 0
-            running = false
-            btnStartStop.text = "START"
-            render()
-        }
-
-        tvTimer.post(object : Runnable {
-            override fun run() {
-                if (running) seconds++
-                render()
-                tvTimer.postDelayed(this, 1000)
+            when {
+                isCountdown -> cancelPreCountdown()
+                isRunning   -> stopTimer()
+                else        -> startPreCountdown()
             }
-        })
+        }
+        btnReset.setOnClickListener { resetAll() }
+    }
+
+    private fun startPreCountdown() {
+        if (isRunning || isCountdown) return
+        isCountdown = true
+        btnStartStop.text = "CANCEL"
+        preTimer = object : CountDownTimer(5_000, 1_000) {
+            override fun onTick(ms: Long) {
+                val secLeft = (ms / 1000).toInt() + 1
+                tvTimer.text = String.format("%02d:%02d", 0, secLeft)
+                beeper.countdownPip()
+            }
+            override fun onFinish() {
+                beeper.finalBuzz()
+                isCountdown = false
+                startTimer()
+            }
+        }.also { it.start() }
+    }
+
+    private fun cancelPreCountdown() { preTimer?.cancel(); isCountdown = false; btnStartStop.text = "START"; updateTimerDisplay() }
+    private fun startTimer() {
+        if (isRunning) return
+        startTime = System.currentTimeMillis() - timeElapsedMs
+        isRunning = true
+        btnStartStop.text = "PAUSE"
+        timer = object : CountDownTimer(Long.MAX_VALUE, 1000) {
+            override fun onTick(ms: Long) { timeElapsedMs = System.currentTimeMillis() - startTime; updateTimerDisplay() }
+            override fun onFinish() {}
+        }.also { it.start() }
+    }
+    private fun stopTimer() { timer?.cancel(); isRunning = false; btnStartStop.text = "START" }
+    private fun resetAll() { preTimer?.cancel(); isCountdown = false; timer?.cancel(); isRunning = false; timeElapsedMs = 0L; startTime = 0L; btnStartStop.text = "START"; tvTimer.text = "00:00" }
+    private fun updateTimerDisplay() { val s = (timeElapsedMs / 1000).toInt(); tvTimer.text = String.format("%02d:%02d", s / 60, s % 60) }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        preTimer?.cancel(); preTimer = null
+        timer?.cancel(); timer = null
+        beeper.release()
     }
 }

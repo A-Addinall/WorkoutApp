@@ -1,5 +1,6 @@
 package com.example.safitness.ui
 
+import android.content.Intent
 import android.graphics.Typeface
 import android.os.Bundle
 import android.view.ViewGroup
@@ -19,10 +20,15 @@ import com.example.safitness.data.db.AppDatabase
 import com.example.safitness.data.entities.EnginePlanEntity
 import com.example.safitness.data.entities.SkillPlanEntity
 import com.example.safitness.data.repo.Repos
+import com.example.safitness.ui.engine.EngineAccumulationActivity
+import com.example.safitness.ui.engine.EngineEmomActivity
+import com.example.safitness.ui.engine.EngineForTimeActivity
+import com.example.safitness.ui.engine.SkillAmrapActivity
+import com.example.safitness.ui.engine.SkillEmomActivity
+import com.example.safitness.ui.engine.SkillForTimeActivity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import android.content.Intent // used only for metcon screens (existing & working)
 
 class WorkoutActivity : AppCompatActivity() {
 
@@ -40,7 +46,7 @@ class WorkoutActivity : AppCompatActivity() {
     private var lastProgramItems: List<ExerciseWithSelection> = emptyList()
     private var lastMetconSelections: List<SelectionWithPlanAndComponents> = emptyList()
 
-    // Engine & Skill plans joined from membership for the day
+    // Engine & Skill plans for the day
     private var lastEnginePlans: List<EnginePlanEntity> = emptyList()
     private var lastSkillPlans: List<SkillPlanEntity> = emptyList()
 
@@ -70,7 +76,7 @@ class WorkoutActivity : AppCompatActivity() {
             }
         }
 
-        // Strength + Metcon (existing, observed from ViewModel)
+        // Strength + Metcon (existing)
         vm.programForDay.observe(this) { items ->
             lastProgramItems = items ?: emptyList()
             rebuildWorkoutUi()
@@ -80,7 +86,7 @@ class WorkoutActivity : AppCompatActivity() {
             rebuildWorkoutUi()
         }
 
-        // Engine / Skill: observe ids -> fetch entities -> render
+        // Engine / Skill ids → entities → render
         Repos.workoutRepository(this).enginePlanIdsForDay(dayIndex).asLiveData()
             .observe(this) { ids ->
                 lifecycleScope.launch {
@@ -121,11 +127,11 @@ class WorkoutActivity : AppCompatActivity() {
         }
         if (!collapseMetcon) {
             if (lastMetconSelections.isNotEmpty()) {
-                addMetconPlanCards(lastMetconSelections) // uses your proven-good block verbatim
+                addMetconPlanCards(lastMetconSelections) // your proven-good block
             } else addEmptyLine("No metcon programmed.")
         }
 
-        // ===== Engine =====  (mirrors metcon card; no “Add to Day” button)
+        // ===== Engine =====
         addSectionHeader("Engine", collapseEngine) {
             collapseEngine = !collapseEngine
             rebuildWorkoutUi()
@@ -136,7 +142,7 @@ class WorkoutActivity : AppCompatActivity() {
             } else addEmptyLine("No engine programmed.")
         }
 
-        // ===== Skills =====  (mirrors metcon card; no “Add to Day” button)
+        // ===== Skills =====
         addSectionHeader("Skills", collapseSkills) {
             collapseSkills = !collapseSkills
             rebuildWorkoutUi()
@@ -159,7 +165,7 @@ class WorkoutActivity : AppCompatActivity() {
         }
     }
 
-    // Collapsible header row with chevron (uses ic_chevron_up/down)
+    // Collapsible header row with chevron
     private fun addSectionHeader(title: String, collapsed: Boolean, onToggle: () -> Unit) {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -173,8 +179,7 @@ class WorkoutActivity : AppCompatActivity() {
             val chevron = ImageView(context).apply {
                 setImageResource(if (collapsed) R.drawable.ic_chevron_down else R.drawable.ic_chevron_up)
             }
-            addView(tv)
-            addView(chevron)
+            addView(tv); addView(chevron)
             setOnClickListener { onToggle() }
         }
         layoutExercises.addView(row)
@@ -303,7 +308,7 @@ class WorkoutActivity : AppCompatActivity() {
         }
     }
 
-    // ---------------- Engine & Skill workout cards (NO CTA; show components) ----------------
+    // ---------------- Engine & Skill workout cards (NO CTA; show components + click to screens) ----------------
 
     private fun addEngineWorkoutCard(plan: EnginePlanEntity) {
         val card = layoutInflater.inflate(R.layout.item_engine_workout_card, layoutExercises, false)
@@ -314,7 +319,7 @@ class WorkoutActivity : AppCompatActivity() {
         tvTitle.text = plan.title
         tvMeta.text = buildEngineMeta(plan)
 
-        // Render engine components using title/description (your entity doesn’t have "text")
+        // Render engine components using title/description
         lifecycleScope.launch {
             val rows = withContext(Dispatchers.IO) {
                 AppDatabase.get(this@WorkoutActivity).enginePlanDao().getComponents(plan.id)
@@ -330,7 +335,46 @@ class WorkoutActivity : AppCompatActivity() {
             }
         }
 
-        // No click handler yet to avoid unresolved activity references.
+        // Decide which Engine screen to launch
+        card.setOnClickListener {
+            val titleL = plan.title.lowercase()
+            val intent = when {
+                titleL.contains("emom") -> {
+                    Intent(this, EngineEmomActivity::class.java).apply {
+                        // Optional hinting
+                        putExtra("ENGINE_EMOM_UNIT",
+                            if ((plan.programTargetCalories ?: 0) > 0) "CALORIES" else "METERS")
+                        putExtra("ENGINE_EMOM_TARGET_PER_MIN",
+                            (plan.programTargetCalories ?: 0).takeIf { it > 0 } ?: 20)
+                    }
+                }
+                plan.intent.equals("FOR_TIME", true) -> {
+                    Intent(this, EngineForTimeActivity::class.java).apply {
+                        putExtra("PLAN_ID", plan.id)
+                    }
+                }
+                else -> {
+                    // Accumulation card: FOR_DISTANCE (metres over duration) or FOR_CALORIES
+                    Intent(this, EngineAccumulationActivity::class.java).apply {
+                        putExtra(
+                            "ENGINE_TARGET",
+                            if ((plan.programTargetCalories ?: 0) > 0) "CALORIES" else "METERS"
+                        )
+                        putExtra("PLAN_ID", plan.id)
+                    }
+                }
+            }.apply {
+                putExtra("DAY_INDEX", dayIndex)
+                putExtra("WORKOUT_NAME", workoutName)
+                putExtra("DURATION_SECONDS", plan.programDurationSeconds ?: 0)
+                putExtra("TARGET_METERS", plan.programDistanceMeters ?: 0)
+                putExtra("TARGET_CALORIES", plan.programTargetCalories ?: 0)
+                putExtra("INTENT", plan.intent)
+                putExtra("MODE", plan.mode)
+            }
+            startActivity(intent)
+        }
+
         layoutExercises.addView(card)
     }
 
@@ -365,7 +409,30 @@ class WorkoutActivity : AppCompatActivity() {
             }
         }
 
-        // No click handler yet to avoid unresolved activity references.
+        // Decide which Skill screen to launch
+        card.setOnClickListener {
+            val testType = plan.defaultTestType?.uppercase() ?: ""
+            val titleL = plan.title.lowercase()
+            val intent = when {
+                testType.contains("EMOM") || titleL.contains("emom") ->
+                    Intent(this, SkillEmomActivity::class.java)
+                testType.contains("AMRAP") || titleL.contains("amrap") ->
+                    Intent(this, SkillAmrapActivity::class.java)
+                testType.contains("FOR_TIME") || testType.contains("FOR_TIME_REPS") || titleL.contains("for time") ->
+                    Intent(this, SkillForTimeActivity::class.java)
+                else ->
+                    // Sensible default: attempts-type logic fits the AMRAP screen best (count successes/fails)
+                    Intent(this, SkillAmrapActivity::class.java)
+            }.apply {
+                putExtra("DAY_INDEX", dayIndex)
+                putExtra("WORKOUT_NAME", workoutName)
+                putExtra("PLAN_ID", plan.id)
+                putExtra("DURATION_SECONDS", plan.targetDurationSeconds ?: 0)
+                // If you later surface per-component targets, thread them via extras here.
+            }
+            startActivity(intent)
+        }
+
         layoutExercises.addView(card)
     }
 

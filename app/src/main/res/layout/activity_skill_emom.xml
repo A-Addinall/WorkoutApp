@@ -134,7 +134,7 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/rowAttempts">
 
-        <include layout="@layout/item_metcon_plan_card" />
+        <include layout="@layout/item_skill_workout_card" />
     </ScrollView>
 
     <Button
