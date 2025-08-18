@@ -133,56 +133,139 @@ interface PlanDao {
     /* ---------- NEW: edit helpers for STRENGTH day_items ---------- */
 
     @Query("""
-    SELECT COALESCE(MAX(sortOrder), -1) + 1
-    FROM day_item
-    WHERE dayPlanId = :dayPlanId AND itemType = 'STRENGTH'
-""")
+        SELECT COALESCE(MAX(sortOrder), -1) + 1
+        FROM day_item
+        WHERE dayPlanId = :dayPlanId AND itemType = 'STRENGTH'
+    """)
     suspend fun nextStrengthSortOrder(dayPlanId: Long): Int
 
     @Query("""
-    SELECT COUNT(*) FROM day_item
-    WHERE dayPlanId = :dayPlanId AND itemType = 'STRENGTH' AND refId = :exerciseId
-""")
+        SELECT COUNT(*) FROM day_item
+        WHERE dayPlanId = :dayPlanId AND itemType = 'STRENGTH' AND refId = :exerciseId
+    """)
     suspend fun strengthItemCount(dayPlanId: Long, exerciseId: Long): Int
 
     @Query("""
-    DELETE FROM day_item
-    WHERE dayPlanId = :dayPlanId AND itemType = 'STRENGTH' AND refId = :exerciseId
-""")
+        DELETE FROM day_item
+        WHERE dayPlanId = :dayPlanId AND itemType = 'STRENGTH' AND refId = :exerciseId
+    """)
     suspend fun deleteStrengthItem(dayPlanId: Long, exerciseId: Long)
 
     @Query("""
-    UPDATE day_item SET required = :required
-    WHERE dayPlanId = :dayPlanId AND itemType = 'STRENGTH' AND refId = :exerciseId
-""")
+        UPDATE day_item SET required = :required
+        WHERE dayPlanId = :dayPlanId AND itemType = 'STRENGTH' AND refId = :exerciseId
+    """)
     suspend fun updateStrengthRequired(dayPlanId: Long, exerciseId: Long, required: Boolean)
 
     @Query("""
-    UPDATE day_item SET targetReps = :reps
-    WHERE dayPlanId = :dayPlanId AND itemType = 'STRENGTH' AND refId = :exerciseId
-""")
+        UPDATE day_item SET targetReps = :reps
+        WHERE dayPlanId = :dayPlanId AND itemType = 'STRENGTH' AND refId = :exerciseId
+    """)
     suspend fun updateStrengthTargetReps(dayPlanId: Long, exerciseId: Long, reps: Int?)
 
     @Query("""
-    SELECT COUNT(*) FROM day_item
-    WHERE dayPlanId = :dayPlanId AND itemType = 'STRENGTH' AND refId = :exerciseId
-""")
+        SELECT COUNT(*) FROM day_item
+        WHERE dayPlanId = :dayPlanId AND itemType = 'STRENGTH' AND refId = :exerciseId
+    """)
     suspend fun existsStrength(dayPlanId: Long, exerciseId: Long): Int
 
     @Query("""
-    SELECT targetReps FROM day_item
-    WHERE dayPlanId = :dayPlanId AND itemType = 'STRENGTH' AND refId = :exerciseId
-    LIMIT 1
-""")
+        SELECT targetReps FROM day_item
+        WHERE dayPlanId = :dayPlanId AND itemType = 'STRENGTH' AND refId = :exerciseId
+        LIMIT 1
+    """)
     suspend fun getStrengthTargetReps(dayPlanId: Long, exerciseId: Long): Int?
 
     @Query("""
-    SELECT required FROM day_item
-    WHERE dayPlanId = :dayPlanId AND itemType = 'STRENGTH' AND refId = :exerciseId
-    LIMIT 1
-""")
+        SELECT required FROM day_item
+        WHERE dayPlanId = :dayPlanId AND itemType = 'STRENGTH' AND refId = :exerciseId
+        LIMIT 1
+    """)
     suspend fun getStrengthRequired(dayPlanId: Long, exerciseId: Long): Boolean?
 
+    /* ---------- NEW: Engine membership (day_item) ---------- */
 
+    @Query("""
+        SELECT refId FROM day_item
+        WHERE dayPlanId = :dayPlanId AND itemType = 'ENGINE'
+        ORDER BY sortOrder ASC
+    """)
+    fun engineItemIds(dayPlanId: Long): Flow<List<Long>>
+
+    @Query("""
+        SELECT COUNT(*) FROM day_item
+        WHERE dayPlanId = :dayPlanId AND itemType = 'ENGINE' AND refId = :planId
+    """)
+    suspend fun engineItemCount(dayPlanId: Long, planId: Long): Int
+
+    @Query("""
+        DELETE FROM day_item
+        WHERE dayPlanId = :dayPlanId AND itemType = 'ENGINE' AND refId = :planId
+    """)
+    suspend fun deleteEngineItem(dayPlanId: Long, planId: Long)
+
+    @Query("""
+        UPDATE day_item SET required = :required
+        WHERE dayPlanId = :dayPlanId AND itemType = 'ENGINE' AND refId = :planId
+    """)
+    suspend fun updateEngineRequired(dayPlanId: Long, planId: Long, required: Boolean)
+
+    @Query("""
+        UPDATE day_item SET sortOrder = :orderInDay
+        WHERE dayPlanId = :dayPlanId AND itemType = 'ENGINE' AND refId = :planId
+    """)
+    suspend fun updateEngineOrder(dayPlanId: Long, planId: Long, orderInDay: Int)
+
+    /* ---------- NEW: Skill membership (day_item) ---------- */
+
+    @Query("""
+        SELECT refId FROM day_item
+        WHERE dayPlanId = :dayPlanId AND itemType = 'SKILL'
+        ORDER BY sortOrder ASC
+    """)
+    fun skillItemIds(dayPlanId: Long): Flow<List<Long>>
+
+    @Query("""
+        SELECT COUNT(*) FROM day_item
+        WHERE dayPlanId = :dayPlanId AND itemType = 'SKILL' AND refId = :planId
+    """)
+    suspend fun skillItemCount(dayPlanId: Long, planId: Long): Int
+
+    @Query("""
+        DELETE FROM day_item
+        WHERE dayPlanId = :dayPlanId AND itemType = 'SKILL' AND refId = :planId
+    """)
+    suspend fun deleteSkillItem(dayPlanId: Long, planId: Long)
+
+    @Query("""
+        UPDATE day_item SET required = :required
+        WHERE dayPlanId = :dayPlanId AND itemType = 'SKILL' AND refId = :planId
+    """)
+    suspend fun updateSkillRequired(dayPlanId: Long, planId: Long, required: Boolean)
+
+    @Query("""
+        UPDATE day_item SET sortOrder = :orderInDay
+        WHERE dayPlanId = :dayPlanId AND itemType = 'SKILL' AND refId = :planId
+    """)
+    suspend fun updateSkillOrder(dayPlanId: Long, planId: Long, orderInDay: Int)
+
+    /** Count all items already scheduled for a given day-plan. */
+
+    /** Current ENGINE plan IDs scheduled for a given day-plan. */
+
+    /** Check if a specific item (by type + refId) already exists for the day. */
+    @Query("""
+        SELECT COUNT(*) FROM day_item
+        WHERE dayPlanId = :dayPlanId AND itemType = :itemType AND refId = :refId
+    """)
+    suspend fun existsDayItem(dayPlanId: Long, itemType: String, refId: Long): Int
+
+    /** All ENGINE refIds already on the day (convenience). */
+    @Query("SELECT refId FROM day_item WHERE dayPlanId = :dayPlanId AND itemType = 'ENGINE'")
+    suspend fun engineItemIdsForDay(dayPlanId: Long): List<Long>
+
+    /** All SKILL refIds already on the day (convenience). */
+    @Query("SELECT refId FROM day_item WHERE dayPlanId = :dayPlanId AND itemType = 'SKILL'")
+    suspend fun skillItemIdsForDay(dayPlanId: Long): List<Long>
 
 }

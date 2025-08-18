@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.emitAll
 import kotlin.math.max
 
 class WorkoutRepository(
@@ -45,7 +46,6 @@ class WorkoutRepository(
         libraryDao.getExercises(type, eq)
     suspend fun countExercises() = libraryDao.countExercises()
 
-    /* ---------- Program (strength) ---------- */
     /* ---------- Program (strength) ---------- */
     suspend fun addToDay(
         day: Int,
@@ -474,6 +474,7 @@ class WorkoutRepository(
         var cursor = startEpochDay
         plans.forEach { plan -> planDao.updatePlanDate(plan.id, cursor); cursor += 1 }
     }
+
     /**
      * Preview whether logging this successful set WOULD produce a PR (no DB writes).
      * - Uses the same thresholds/guardrails as evaluateAndRecordPrIfAny(...)
@@ -530,6 +531,7 @@ class WorkoutRepository(
             emit(planDao.getPlanId(phaseId, week, day))
         }
     }
+
     // ===== Rest Timer (in-memory, additive) =====
     private val repoScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -575,6 +577,103 @@ class WorkoutRepository(
         }
     }
 
+    /* ---------- Engine (plans) ---------- */
+
+    fun enginePlanIdsForDay(day: Int): kotlinx.coroutines.flow.Flow<Set<Long>> =
+        kotlinx.coroutines.flow.flow {
+            val dayPlanId = currentDayPlanIdOrNull(week = 1, day = day)
+            if (dayPlanId == null) {
+                emit(emptySet())
+            } else {
+                emitAll(
+                    planDao.engineItemIds(dayPlanId).map { it.toSet() }
+                )
+            }
+        }
+
+    suspend fun addEngineToDay(day: Int, planId: Long, required: Boolean, orderInDay: Int) {
+        val dayPlanId = currentDayPlanIdOrNull(week = 1, day = day)
+        if (dayPlanId == null) {
+            // No legacy path for Engine; skip quietly to avoid crashing
+            // (Engine/Skill are Phase 3 entities backed by day_item only)
+            return
+        }
+        if (planDao.engineItemCount(dayPlanId, planId) == 0) {
+            planDao.insertItems(
+                listOf(
+                    DayItemEntity(
+                        dayPlanId = dayPlanId,
+                        itemType = "ENGINE",
+                        refId = planId,
+                        required = required,
+                        sortOrder = orderInDay
+                    )
+                )
+            )
+        }
+    }
+
+    suspend fun removeEngineFromDay(day: Int, planId: Long) {
+        val dayPlanId = currentDayPlanIdOrNull(week = 1, day = day)
+        if (dayPlanId != null) planDao.deleteEngineItem(dayPlanId, planId)
+    }
+
+    suspend fun setEngineRequired(day: Int, planId: Long, required: Boolean) {
+        val dayPlanId = currentDayPlanIdOrNull(week = 1, day = day)
+        if (dayPlanId != null) planDao.updateEngineRequired(dayPlanId, planId, required)
+    }
+
+    suspend fun setEngineOrder(day: Int, planId: Long, orderInDay: Int) {
+        val dayPlanId = currentDayPlanIdOrNull(week = 1, day = day)
+        if (dayPlanId != null) planDao.updateEngineOrder(dayPlanId, planId, orderInDay)
+    }
+
+    /* ---------- Skills (plans) ---------- */
+
+    fun skillPlanIdsForDay(day: Int): kotlinx.coroutines.flow.Flow<Set<Long>> =
+        kotlinx.coroutines.flow.flow {
+            val dayPlanId = currentDayPlanIdOrNull(week = 1, day = day)
+            if (dayPlanId == null) {
+                emit(emptySet())
+            } else {
+                emitAll(
+                    planDao.skillItemIds(dayPlanId).map { it.toSet() }
+                )
+            }
+        }
+
+    suspend fun addSkillToDay(day: Int, planId: Long, required: Boolean, orderInDay: Int) {
+        val dayPlanId = currentDayPlanIdOrNull(week = 1, day = day)
+        if (dayPlanId == null) return
+        if (planDao.skillItemCount(dayPlanId, planId) == 0) {
+            planDao.insertItems(
+                listOf(
+                    DayItemEntity(
+                        dayPlanId = dayPlanId,
+                        itemType = "SKILL",
+                        refId = planId,
+                        required = required,
+                        sortOrder = orderInDay
+                    )
+                )
+            )
+        }
+    }
+
+    suspend fun removeSkillFromDay(day: Int, planId: Long) {
+        val dayPlanId = currentDayPlanIdOrNull(week = 1, day = day)
+        if (dayPlanId != null) planDao.deleteSkillItem(dayPlanId, planId)
+    }
+
+    suspend fun setSkillRequired(day: Int, planId: Long, required: Boolean) {
+        val dayPlanId = currentDayPlanIdOrNull(week = 1, day = day)
+        if (dayPlanId != null) planDao.updateSkillRequired(dayPlanId, planId, required)
+    }
+
+    suspend fun setSkillOrder(day: Int, planId: Long, orderInDay: Int) {
+        val dayPlanId = currentDayPlanIdOrNull(week = 1, day = day)
+        if (dayPlanId != null) planDao.updateSkillOrder(dayPlanId, planId, orderInDay)
+    }
 }
 
 /* ---------- Private utils ---------- */
@@ -588,4 +687,3 @@ private fun equipmentMinIncrementKg(equipment: Equipment): Double = when (equipm
 
 private fun todayEpochDayUtc(): Long =
     java.time.LocalDate.now(java.time.ZoneOffset.UTC).toEpochDay()
-

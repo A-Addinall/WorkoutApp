@@ -1,90 +1,216 @@
 package com.example.safitness.ui.engine
 
 import android.os.Bundle
+import android.os.CountDownTimer
+import android.widget.Button
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import com.example.safitness.core.EngineIntent
-import com.example.safitness.core.EngineSkillKeys
+import androidx.lifecycle.lifecycleScope
+import com.example.safitness.R
 import com.example.safitness.data.db.AppDatabase
-import com.example.safitness.data.entities.EngineLogEntity
-import com.example.safitness.data.repo.EngineLogRepository
-import com.example.safitness.databinding.ActivityEngineForTimeBinding
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 
 class EngineForTimeActivity : AppCompatActivity() {
 
-    private lateinit var binding: ActivityEngineForTimeBinding
-    private val scope = CoroutineScope(Dispatchers.Main)
+    private lateinit var tvWorkoutTitle: TextView
+    private lateinit var tvTimer: TextView
+    private lateinit var btnStartStop: Button
+    private lateinit var btnReset: Button
+    private lateinit var btnComplete: Button
+    private lateinit var tvLastTime: TextView
 
-    private var timerRunning = false
-    private var elapsedSec = 0
-    private var ticker: Runnable? = null
+    // Included card views (from item_engine_workout_card)
+    private var cardTitle: TextView? = null
+    private var cardMeta: TextView? = null
+    private var cardComponents: LinearLayout? = null
+
+    private var dayIndex: Int = 1
+    private var planId: Long = -1L
+    private var durationSeconds: Int = 0
+
+    // Count-up timer with 5s pre-countdown (like Metcon)
+    private var isRunning = false
+    private var isCountdown = false
+    private var timeElapsedMs = 0L
+    private var startTime = 0L
+    private var timer: CountDownTimer? = null
+    private var preTimer: CountDownTimer? = null
+    private val beeper = com.example.safitness.ui.TimerBeeper()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        binding = ActivityEngineForTimeBinding.inflate(layoutInflater)
-        setContentView(binding.root)
+        setContentView(R.layout.activity_engine_for_time)
 
-        val title = intent.getStringExtra(EngineSkillKeys.TITLE) ?: "Engine — For Time"
-        val mode = intent.getStringExtra(EngineSkillKeys.ENGINE_MODE) ?: "ROW"
-        val distance = intent.getIntExtra(EngineSkillKeys.PROGRAM_DISTANCE_METERS, 2000)
+        dayIndex   = intent.getIntExtra("DAY_INDEX", 1).coerceIn(1, 5)
+        planId     = intent.getLongExtra("PLAN_ID", -1L)
+        durationSeconds = intent.getIntExtra("DURATION_SECONDS", 0)
 
-        binding.txtTitle.text = title
-        binding.txtProgram.text = "Target: ${distance}m"
+        bindViews()
+        tvWorkoutTitle.text = "Engine – For Time"
+        tvTimer.text = "00:00"
+        findViewById<ImageView>(R.id.ivBack)?.setOnClickListener { finish() }
 
-        binding.btnStart.setOnClickListener { startTimer() }
-        binding.btnPause.setOnClickListener { pauseTimer() }
-        binding.btnComplete.setOnClickListener {
-            saveResult(mode, distance, elapsedSec)
-            finish()
+        populateCardFromPlan(planId)
+
+        btnStartStop.setOnClickListener {
+            when {
+                isCountdown -> cancelPreCountdown()
+                isRunning   -> stopTimer()
+                else        -> startPreCountdown()
+            }
         }
+        btnReset.setOnClickListener { resetAll() }
+        btnComplete.setOnClickListener { completeEngineForTime() }
+    }
+
+    private fun bindViews() {
+        tvWorkoutTitle = findViewById(R.id.tvWorkoutTitle)
+        tvTimer = findViewById(R.id.tvTimer)
+        tvLastTime = findViewById(R.id.tvLastTime)
+        btnStartStop = findViewById(R.id.btnStartStop)
+        btnReset = findViewById(R.id.btnReset)
+        btnComplete = findViewById(R.id.btnComplete)
+
+        cardTitle = findViewById(R.id.tvPlanCardTitle)
+        cardMeta = findViewById(R.id.tvPlanMeta)
+        cardComponents = findViewById(R.id.layoutPlanComponents)
+    }
+
+    private fun startPreCountdown() {
+        if (isRunning || isCountdown) return
+        isCountdown = true
+        btnStartStop.text = "CANCEL"
+        preTimer = object : CountDownTimer(5_000, 1_000) {
+            override fun onTick(ms: Long) {
+                val secLeft = (ms / 1000).toInt() + 1
+                tvTimer.text = String.format("%02d:%02d", 0, secLeft)
+                beeper.countdownPip()
+            }
+            override fun onFinish() {
+                beeper.finalBuzz()
+                isCountdown = false
+                startTimer()
+            }
+        }.also { it.start() }
+    }
+
+    private fun cancelPreCountdown() {
+        preTimer?.cancel()
+        isCountdown = false
+        btnStartStop.text = "START"
+        updateTimerDisplay()
     }
 
     private fun startTimer() {
-        if (timerRunning) return
-        timerRunning = true
-        ticker = object : Runnable {
-            override fun run() {
-                elapsedSec += 1
-                binding.txtTimer.text = formatHMS(elapsedSec)
-                binding.txtPace.text = pacePer500(elapsedSec)
-                binding.txtTimer.postDelayed(this, 1000)
+        if (isRunning) return
+        startTime = System.currentTimeMillis() - timeElapsedMs
+        isRunning = true
+        btnStartStop.text = "PAUSE"
+        timer = object : CountDownTimer(Long.MAX_VALUE, 1000) {
+            override fun onTick(ms: Long) {
+                timeElapsedMs = System.currentTimeMillis() - startTime
+                updateTimerDisplay()
             }
-        }.also { binding.txtTimer.post(it) }
+            override fun onFinish() {}
+        }.also { it.start() }
     }
 
-    private fun pauseTimer() {
-        timerRunning = false
-        ticker?.let { binding.txtTimer.removeCallbacks(it) }
+    private fun stopTimer() {
+        if (!isRunning) return
+        timer?.cancel()
+        isRunning = false
+        btnStartStop.text = "START"
     }
 
-    private fun saveResult(mode: String, distance: Int, timeSec: Int) {
-        val db = AppDatabase.get(this)
-        CoroutineScope(Dispatchers.IO).launch {
-            EngineLogRepository(db.engineLogDao()).log(
-                EngineLogEntity(
-                    mode = mode,
-                    intent = EngineIntent.FOR_TIME.name,
-                    programDistanceMeters = distance,
-                    resultTimeSeconds = timeSec
-                )
+    private fun resetAll() {
+        preTimer?.cancel(); isCountdown = false
+        timer?.cancel(); isRunning = false
+        timeElapsedMs = 0L; startTime = 0L
+        btnStartStop.text = "START"
+        tvTimer.text = "00:00"
+    }
+
+    private fun updateTimerDisplay() {
+        val totalSeconds = (timeElapsedMs / 1000).toInt()
+        tvTimer.text = String.format("%02d:%02d", totalSeconds / 60, totalSeconds % 60)
+    }
+
+    private fun completeEngineForTime() {
+        if (isCountdown) {
+            cancelPreCountdown()
+            Toast.makeText(this, "Countdown cancelled.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (timeElapsedMs == 0L) {
+            Toast.makeText(this, "Please start the timer first!", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (isRunning) stopTimer()
+        beeper.finalBuzz()
+        Toast.makeText(this, "Engine (for time) complete.", Toast.LENGTH_LONG).show()
+        finish()
+    }
+
+    private fun buildEngineMeta(
+        intent: String?,
+        meters: Int?,
+        calories: Int?,
+        seconds: Int?
+    ): String {
+        fun pretty(s: String) = s.replace('_', ' ').lowercase().replaceFirstChar(Char::titlecase)
+        val bits = mutableListOf<String>()
+        when (intent) {
+            "FOR_TIME" -> if ((meters ?: 0) > 0) bits += "${meters} m"
+            "FOR_DISTANCE" -> if ((seconds ?: 0) > 0) bits += "${seconds!! / 60} min"
+            "FOR_CALORIES" -> {
+                if ((calories ?: 0) > 0) bits += "${calories} cal"
+                if ((seconds ?: 0) > 0) bits += "${seconds!! / 60} min"
+            }
+        }
+        if (!intent.isNullOrBlank()) bits += pretty(intent)
+        return bits.joinToString(" • ")
+    }
+
+    private fun populateCardFromPlan(planId: Long) {
+        if (planId <= 0L) return
+        lifecycleScope.launch {
+            val db = AppDatabase.get(this@EngineForTimeActivity)
+            val plan = withContext(Dispatchers.IO) {
+                db.enginePlanDao().getPlans().firstOrNull { it.id == planId }
+            } ?: return@launch
+
+            tvWorkoutTitle.text = "Engine – ${plan.title}"
+            cardTitle?.text = plan.title
+            cardMeta?.text = buildEngineMeta(
+                plan.intent,
+                plan.programDistanceMeters,
+                plan.programTargetCalories,
+                plan.programDurationSeconds
             )
+
+            val comps = withContext(Dispatchers.IO) { db.enginePlanDao().getComponents(plan.id) }
+                .sortedBy { it.orderIndex }
+            cardComponents?.removeAllViews()
+            comps.forEach { c ->
+                val line = c.title.ifBlank { c.description ?: "" }
+                cardComponents?.addView(TextView(this@EngineForTimeActivity).apply {
+                    text = "• $line"
+                    textSize = 16f
+                    setPadding(0, 4, 0, 4)
+                })
+            }
         }
     }
 
-    private fun formatHMS(s: Int): String {
-        val h = s / 3600
-        val m = (s % 3600) / 60
-        val ss = s % 60
-        return if (h > 0) "%d:%02d:%02d".format(h, m, ss) else "%02d:%02d".format(m, ss)
-    }
-
-    private fun pacePer500(timeSec: Int): String {
-        val distance = intent.getIntExtra(EngineSkillKeys.PROGRAM_DISTANCE_METERS, 2000).coerceAtLeast(1)
-        val secPer500 = (timeSec.toDouble() / distance) * 500.0
-        val mm = (secPer500 / 60.0).toInt()
-        val ss = (secPer500 % 60.0).toInt()
-        return "Pace: %d:%02d /500m".format(mm, ss)
+    override fun onDestroy() {
+        super.onDestroy()
+        preTimer?.cancel(); preTimer = null
+        timer?.cancel(); timer = null
+        beeper.release()
     }
 }

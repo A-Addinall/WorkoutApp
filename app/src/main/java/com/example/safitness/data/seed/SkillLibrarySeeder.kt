@@ -8,6 +8,16 @@ import com.example.safitness.data.repo.SkillPlanRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+/**
+ * Seeds a representative Skill library covering these types:
+ * - ATTEMPTS
+ * - MAX_HOLD_SECONDS
+ * - FOR_TIME_REPS
+ * - EMOM
+ * - AMRAP
+ *
+ * Idempotent: skips if any skill plans already exist.
+ */
 object SkillLibrarySeeder {
     private const val TAG = "SkillSeed"
 
@@ -19,8 +29,10 @@ object SkillLibrarySeeder {
         }
         Log.d(TAG, "Seeding Skill library...")
 
-        // Bar Muscle-Up
-        val barMuPlan = SkillPlanEntity(
+        // =========================
+        // ATTEMPTS — Bar Muscle-Up
+        // =========================
+        val barMu = SkillPlanEntity(
             title = "Bar Muscle-Up — Path to First Rep",
             skill = "BAR_MUSCLE_UP",
             description = "Progression from shapes to turnover.",
@@ -30,21 +42,46 @@ object SkillLibrarySeeder {
             scaledNotes = "Bands / low-bar transitions as needed."
         )
         val barMuComps = listOf(
-            SkillComponentEntity(0, 0, 1, "Hollow/Arch Holds", "20s each, 3 sets",
-                testType = "MAX_HOLD_SECONDS", targetHoldSeconds = 20),
-            SkillComponentEntity(0, 0, 2, "Beat Swings", "Crisp shapes, lat engagement",
-                testType = "FOR_TIME_REPS", targetReps = 30),
-            SkillComponentEntity(0, 0, 3, "Explosive Kip to C2B", "Powerful kip; lats + hips",
-                testType = "FOR_TIME_REPS", targetReps = 15),
-            SkillComponentEntity(0, 0, 4, "Low Bar Transition Drill", "Fast wrist turnover",
-                testType = "ATTEMPTS"),
-            SkillComponentEntity(0, 0, 5, "Banded MU Attempts", "Light band, focus timing",
-                testType = "ATTEMPTS")
+            SkillComponentEntity(
+                id = 0, planId = 0, orderIndex = 1,
+                title = "Hollow/Arch Holds",
+                description = "20s each, 3 sets",
+                testType = "MAX_HOLD_SECONDS",
+                targetHoldSeconds = 20
+            ),
+            SkillComponentEntity(
+                id = 0, planId = 0, orderIndex = 2,
+                title = "Beat Swings",
+                description = "Crisp shapes, lat engagement",
+                testType = "FOR_TIME_REPS",
+                targetReps = 30
+            ),
+            SkillComponentEntity(
+                id = 0, planId = 0, orderIndex = 3,
+                title = "Explosive Kip to C2B",
+                description = "Powerful kip; lats + hips",
+                testType = "FOR_TIME_REPS",
+                targetReps = 15
+            ),
+            SkillComponentEntity(
+                id = 0, planId = 0, orderIndex = 4,
+                title = "Low Bar Transition Drill",
+                description = "Fast wrist turnover",
+                testType = "ATTEMPTS"
+            ),
+            SkillComponentEntity(
+                id = 0, planId = 0, orderIndex = 5,
+                title = "Banded MU Attempts",
+                description = "Light band, focus timing",
+                testType = "ATTEMPTS"
+            )
         )
-        repo.upsert(barMuPlan, barMuComps)
+        repo.upsert(barMu, barMuComps)
 
-        // Handstand Push-Up
-        val hspuPlan = SkillPlanEntity(
+        // =========================
+        // ATTEMPTS — Handstand Push-Up
+        // =========================
+        val hspu = SkillPlanEntity(
             title = "Handstand Push-Up — Path to First Rep",
             skill = "HANDSTAND_PUSH_UP",
             description = "From wall walks to controlled negatives.",
@@ -54,16 +91,127 @@ object SkillLibrarySeeder {
             scaledNotes = "Reduce ROM or box pike."
         )
         val hspuComps = listOf(
-            SkillComponentEntity(0, 0, 1, "Wall Walks", "3–5 controlled reps",
-                testType = "FOR_TIME_REPS", targetReps = 5),
-            SkillComponentEntity(0, 0, 2, "Handstand Hold", "Kick-up, maintain line",
-                testType = "MAX_HOLD_SECONDS", targetHoldSeconds = 30),
-            SkillComponentEntity(0, 0, 3, "Eccentric HSPU (Negatives)", "3–5s lower",
-                testType = "FOR_TIME_REPS", targetReps = 10),
-            SkillComponentEntity(0, 0, 4, "Partial ROM / Box Pike", "Quality first",
-                testType = "ATTEMPTS")
+            SkillComponentEntity(
+                id = 0, planId = 0, orderIndex = 1,
+                title = "Wall Walks",
+                description = "3–5 controlled reps",
+                testType = "FOR_TIME_REPS",
+                targetReps = 5
+            ),
+            SkillComponentEntity(
+                id = 0, planId = 0, orderIndex = 2,
+                title = "Handstand Hold",
+                description = "Kick-up, maintain line",
+                testType = "MAX_HOLD_SECONDS",
+                targetHoldSeconds = 30
+            ),
+            SkillComponentEntity(
+                id = 0, planId = 0, orderIndex = 3,
+                title = "Eccentric HSPU (Negatives)",
+                description = "3–5s lower",
+                testType = "FOR_TIME_REPS",
+                targetReps = 10
+            ),
+            SkillComponentEntity(
+                id = 0, planId = 0, orderIndex = 4,
+                title = "Partial ROM / Box Pike",
+                description = "Quality first",
+                testType = "ATTEMPTS"
+            )
         )
-        repo.upsert(hspuPlan, hspuComps)
+        repo.upsert(hspu, hspuComps)
+
+        // =========================
+        // MAX HOLD — Handstand Hold
+        // =========================
+        val hsHold = SkillPlanEntity(
+            title = "Handstand Hold — Max Accumulated Time",
+            skill = "HANDSTAND",
+            description = "Accumulate time under a quality line.",
+            defaultTestType = "MAX_HOLD_SECONDS",
+            targetDurationSeconds = 180,
+            rxNotes = "Nose over fingertips; ribs down.",
+            scaledNotes = "Wall-facing or box pike."
+        )
+        val hsHoldComps = listOf(
+            SkillComponentEntity(
+                id = 0, planId = 0, orderIndex = 1,
+                title = "Kick-up Holds",
+                description = "Sets of 20–30s",
+                testType = "MAX_HOLD_SECONDS",
+                targetHoldSeconds = 30
+            )
+        )
+        repo.upsert(hsHold, hsHoldComps)
+
+        // =========================
+        // FOR TIME (reps) — Double-Unders
+        // =========================
+        val du100 = SkillPlanEntity(
+            title = "Double-Unders — 100 Reps For Time",
+            skill = "DOUBLE_UNDER",
+            description = "Unbroken if possible; relax shoulders.",
+            defaultTestType = "FOR_TIME_REPS",
+            targetDurationSeconds = 300,
+            rxNotes = "Soft knees; elbows tucked.",
+            scaledNotes = "Single-unders x 200."
+        )
+        val du100Comps = listOf(
+            SkillComponentEntity(
+                id = 0, planId = 0, orderIndex = 1,
+                title = "Main Set",
+                description = "100 DU for time",
+                testType = "FOR_TIME_REPS",
+                targetReps = 100
+            )
+        )
+        repo.upsert(du100, du100Comps)
+
+        // =========================
+        // EMOM — Toes-to-Bar
+        // =========================
+        val ttbEmom = SkillPlanEntity(
+            title = "Toes-to-Bar — EMOM 10:00 (6 reps)",
+            skill = "TOES_TO_BAR",
+            description = "Every minute perform 6 quality reps.",
+            defaultTestType = "EMOM",
+            targetDurationSeconds = 10 * 60,
+            rxNotes = "Lat-driven kip; stay hollow.",
+            scaledNotes = "Hanging knee raises."
+        )
+        val ttbEmomComps = listOf(
+            SkillComponentEntity(
+                id = 0, planId = 0, orderIndex = 1,
+                title = "Main Set",
+                description = "EMOM 10:00 — 6 reps",
+                testType = "FOR_TIME_REPS",
+                targetReps = 6
+            )
+        )
+        repo.upsert(ttbEmom, ttbEmomComps)
+
+        // =========================
+        // AMRAP — Chest-to-Bar
+        // =========================
+        val ctbAmrap = SkillPlanEntity(
+            title = "Chest-to-Bar — AMRAP 7:00",
+            skill = "CHEST_TO_BAR",
+            description = "As many reps as possible in 7 minutes.",
+            defaultTestType = "AMRAP",
+            targetDurationSeconds = 7 * 60,
+            rxNotes = "Kip rhythm consistent; no early arm pull.",
+            scaledNotes = "Jumping C2B or regular pull-ups."
+        )
+        val ctbAmrapComps = listOf(
+            SkillComponentEntity(
+                id = 0, planId = 0, orderIndex = 1,
+                title = "Main Set",
+                description = "AMRAP 7:00 — C2B reps",
+                testType = "FOR_TIME_REPS",
+                targetReps = 0 // free volume
+            )
+        )
+        repo.upsert(ctbAmrap, ctbAmrapComps)
 
         Log.d(TAG, "Skill seed complete.")
     }

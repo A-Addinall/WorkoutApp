@@ -49,8 +49,6 @@ class LibraryViewModel(private val repo: WorkoutRepository) : ViewModel() {
                 .map { list -> list.map { it.selection.planId }.toSet() }
                 .asLiveData()
         }
-
-    // Actions for plans (wrapped in viewModelScope; no removal of existing APIs)
     fun addMetconToDay(day: Int, planId: Long, required: Boolean, order: Int) =
         viewModelScope.launch { repo.addMetconToDay(day, planId, required, order) }
 
@@ -62,4 +60,11 @@ class LibraryViewModel(private val repo: WorkoutRepository) : ViewModel() {
 
     fun setMetconOrder(day: Int, planId: Long, order: Int) =
         viewModelScope.launch { repo.setMetconOrder(day, planId, order) }
+
+    val enginePlanIdsForDay: LiveData<Set<Long>> =
+        metconDay.switchMap { day ->
+            repo.metconsForDay(day)
+                .map { list -> list.map { it.selection.planId }.toSet() }
+                .asLiveData()
+        }
 }
