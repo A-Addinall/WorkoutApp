@@ -2,7 +2,6 @@ package com.example.safitness.ui
 
 import android.content.Intent
 import android.graphics.Typeface
-import android.os.Parcelable
 import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
@@ -13,6 +12,7 @@ import android.widget.TextView
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.view.isVisible
 import androidx.core.view.setPadding
 import androidx.lifecycle.lifecycleScope
 import com.example.safitness.R
@@ -34,7 +34,26 @@ class WorkoutActivity : AppCompatActivity(), AddEngineSkillDialog.OnAdded {
     }
 
     private lateinit var tvWorkoutTitle: TextView
-    private lateinit var layoutExercises: LinearLayout
+    private lateinit var containerStrength: LinearLayout
+    private lateinit var containerMetcon: LinearLayout
+    private lateinit var containerEngineSkills: LinearLayout
+    private lateinit var sectionStrength: View
+    private lateinit var sectionMetcon: View
+    private lateinit var sectionEngineSkills: View
+    private lateinit var tvEmptyToday: TextView
+
+    // New header rows + arrow glyphs
+    private lateinit var headerStrengthRow: View
+    private lateinit var headerMetconRow: View
+    private lateinit var headerEngineSkillsRow: View
+    private lateinit var tvArrowStrength: TextView
+    private lateinit var tvArrowMetcon: TextView
+    private lateinit var tvArrowEngineSkills: TextView
+
+    // Persist section expanded state across redraws
+    private var strengthExpanded = true
+    private var metconExpanded = true
+    private var engineExpanded = true
 
     private var dayIndex: Int = 1
     private var workoutName: String = ""
@@ -54,9 +73,30 @@ class WorkoutActivity : AppCompatActivity(), AddEngineSkillDialog.OnAdded {
 
         // Bind header
         tvWorkoutTitle = findViewById(R.id.tvWorkoutTitle)
-        layoutExercises = findViewById(R.id.layoutExercises)
-        tvWorkoutTitle.text = workoutName
         findViewById<ImageView?>(R.id.ivBack)?.setOnClickListener { finish() }
+        tvWorkoutTitle.text = workoutName
+
+        // Bind sections
+        sectionStrength = findViewById(R.id.sectionStrength)
+        sectionMetcon = findViewById(R.id.sectionMetcon)
+        sectionEngineSkills = findViewById(R.id.sectionEngineSkills)
+        containerStrength = findViewById(R.id.containerStrength)
+        containerMetcon = findViewById(R.id.containerMetcon)
+        containerEngineSkills = findViewById(R.id.containerEngineSkills)
+        tvEmptyToday = findViewById(R.id.tvEmptyToday)
+
+        // Header rows + arrows
+        headerStrengthRow = findViewById(R.id.headerStrengthRow)
+        headerMetconRow = findViewById(R.id.headerMetconRow)
+        headerEngineSkillsRow = findViewById(R.id.headerEngineSkillsRow)
+        tvArrowStrength = findViewById(R.id.tvArrowStrength)
+        tvArrowMetcon = findViewById(R.id.tvArrowMetcon)
+        tvArrowEngineSkills = findViewById(R.id.tvArrowEngineSkills)
+
+        // Wire collapsible behavior
+        setupCollapsible(headerStrengthRow, tvArrowStrength, containerStrength) { strengthExpanded = it }
+        setupCollapsible(headerMetconRow, tvArrowMetcon, containerMetcon) { metconExpanded = it }
+        setupCollapsible(headerEngineSkillsRow, tvArrowEngineSkills, containerEngineSkills) { engineExpanded = it }
 
         // Ensure a session exists (dev)
         lifecycleScope.launch(Dispatchers.IO) {
@@ -80,7 +120,26 @@ class WorkoutActivity : AppCompatActivity(), AddEngineSkillDialog.OnAdded {
         loadEngineSkillItems()
     }
 
-    /* ---------------- Menu (Engine & Skills entry + Add-to-day) ---------------- */
+    /* ---------------- Collapsible helper ---------------- */
+
+    private fun setupCollapsible(
+        headerRow: View,
+        arrowView: TextView,
+        container: LinearLayout,
+        onExpandedChanged: (Boolean) -> Unit
+    ) {
+        // initial glyph (expanded)
+        arrowView.text = if (container.isVisible) "▾" else "▸"
+
+        headerRow.setOnClickListener {
+            val expanded = !container.isVisible
+            container.isVisible = expanded
+            arrowView.text = if (expanded) "▾" else "▸"
+            onExpandedChanged(expanded)
+        }
+    }
+
+    /* ---------------- Menu ---------------- */
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menuInflater.inflate(R.menu.menu_workout, menu)
@@ -129,45 +188,48 @@ class WorkoutActivity : AppCompatActivity(), AddEngineSkillDialog.OnAdded {
     /* ---------------- Build the screen ---------------- */
 
     private fun rebuildWorkoutUi() {
-        layoutExercises.removeAllViews()
+        // Clear containers
+        containerStrength.removeAllViews()
+        containerMetcon.removeAllViews()
+        containerEngineSkills.removeAllViews()
+
+        var any = false
 
         // Strength (non-METCON program items)
         val strength = lastProgramItems.filter { it.exercise.modality != Modality.METCON }
         if (strength.isNotEmpty()) {
-            addSectionHeader("Strength")
+            sectionStrength.visibility = View.VISIBLE
+            containerStrength.isVisible = strengthExpanded
+            tvArrowStrength.text = if (strengthExpanded) "▾" else "▸"
             strength.forEach { addStrengthCard(it) }
+            any = true
+        } else {
+            sectionStrength.visibility = View.GONE
         }
 
         // Metcons (selected metcon plans for the day)
         if (lastMetconSelections.isNotEmpty()) {
-            addSectionHeader("Metcon")
+            sectionMetcon.visibility = View.VISIBLE
+            containerMetcon.isVisible = metconExpanded
+            tvArrowMetcon.text = if (metconExpanded) "▾" else "▸"
             addMetconPlanCards(lastMetconSelections)
+            any = true
+        } else {
+            sectionMetcon.visibility = View.GONE
         }
 
-        // Engine & Skills (from day_engine_skill)
+        // Engine & Skills
         if (lastDayEngineSkills.isNotEmpty()) {
-            addSectionHeader("Engine & Skills")
+            sectionEngineSkills.visibility = View.VISIBLE
+            containerEngineSkills.isVisible = engineExpanded
+            tvArrowEngineSkills.text = if (engineExpanded) "▾" else "▸"
             lastDayEngineSkills.forEach { addEngineSkillCard(it) }
+            any = true
+        } else {
+            sectionEngineSkills.visibility = View.GONE
         }
 
-        if (strength.isEmpty() && lastMetconSelections.isEmpty() && lastDayEngineSkills.isEmpty()) {
-            val emptyView = TextView(this).apply {
-                text = "No programmed work for today."
-                textSize = 16f
-                setPadding(24)
-            }
-            layoutExercises.addView(emptyView)
-        }
-    }
-
-    private fun addSectionHeader(title: String) {
-        val tv = TextView(this).apply {
-            text = title
-            textSize = 18f
-            setTypeface(typeface, Typeface.BOLD)
-            setPadding(8, 16, 8, 8)
-        }
-        layoutExercises.addView(tv)
+        tvEmptyToday.visibility = if (any) View.GONE else View.VISIBLE
     }
 
     /* ---------------- Strength cards ---------------- */
@@ -212,7 +274,7 @@ class WorkoutActivity : AppCompatActivity(), AddEngineSkillDialog.OnAdded {
             })
         }
 
-        layoutExercises.addView(
+        containerStrength.addView(
             card,
             LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
@@ -228,7 +290,7 @@ class WorkoutActivity : AppCompatActivity(), AddEngineSkillDialog.OnAdded {
         selections: List<SelectionWithPlanAndComponents>
     ) {
         selections.sortedBy { it.selection.displayOrder }.forEach { sel ->
-            val card = layoutInflater.inflate(R.layout.item_metcon_plan_card, layoutExercises, false)
+            val card = layoutInflater.inflate(R.layout.item_metcon_plan_card, containerMetcon, false)
 
             val tvTitle = card.findViewById<TextView>(R.id.tvPlanCardTitle)
             val compsContainer = card.findViewById<LinearLayout>(R.id.layoutPlanComponents)
@@ -248,7 +310,6 @@ class WorkoutActivity : AppCompatActivity(), AddEngineSkillDialog.OnAdded {
                 })
             }
 
-            // If you have a VM method for "last result", leave as-is; otherwise it will just show empty or your layout's default.
             vm.lastMetconForPlan(plan.id).observe(this) { last ->
                 tvLast.text = when (last?.type) {
                     "FOR_TIME" -> {
@@ -286,13 +347,13 @@ class WorkoutActivity : AppCompatActivity(), AddEngineSkillDialog.OnAdded {
                 startActivity(intent)
             }
 
-            layoutExercises.addView(card)
+            containerMetcon.addView(card)
         }
     }
 
     /* ---------------- Engine/Skill cards ---------------- */
 
-    /** Simple card for each Engine/Skill day item. Tap opens quick log sheet. */
+    /** Simple card for each Engine/Skill day item. (Click currently opens quick log sheets) */
     private fun addEngineSkillCard(item: DayEngineSkillEntity) {
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -321,6 +382,7 @@ class WorkoutActivity : AppCompatActivity(), AddEngineSkillDialog.OnAdded {
                 else -> ""
             }
             card.setOnClickListener {
+                // Step #2 will change this to route into metcon-style screens
                 com.example.safitness.ui.engine.EngineQuickLogSheet()
                     .show(supportFragmentManager, "engineQuickLog")
             }
@@ -334,6 +396,7 @@ class WorkoutActivity : AppCompatActivity(), AddEngineSkillDialog.OnAdded {
                 else -> ""
             }
             card.setOnClickListener {
+                // Step #2 will change this to route into metcon-style screens
                 com.example.safitness.ui.engine.SkillQuickLogSheet()
                     .show(supportFragmentManager, "skillQuickLog")
             }
@@ -342,7 +405,7 @@ class WorkoutActivity : AppCompatActivity(), AddEngineSkillDialog.OnAdded {
         card.addView(title)
         if (meta.text.isNotBlank()) card.addView(meta)
 
-        layoutExercises.addView(
+        containerEngineSkills.addView(
             card,
             LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,

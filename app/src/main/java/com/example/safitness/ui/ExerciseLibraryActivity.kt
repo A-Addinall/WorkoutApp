@@ -106,8 +106,8 @@ class ExerciseLibraryActivity : AppCompatActivity() {
         findViewById<ImageView>(R.id.ivBack).setOnClickListener { finish() }
 
         // NEW: init Engine/Skill adapters
-        engineAdapter = EngineLibraryAdapter(this)
-        skillAdapter  = SkillLibraryAdapter(this)
+        engineAdapter = EngineLibraryAdapter(this) { item -> toggleEngineItem(item) }
+        skillAdapter  = SkillLibraryAdapter(this)  { item -> toggleSkillItem(item) }
 
         btnClearFilters.setOnClickListener {
             when (mode) {
