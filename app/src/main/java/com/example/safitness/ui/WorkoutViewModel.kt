@@ -204,4 +204,40 @@ class WorkoutViewModel(private val repo: WorkoutRepository) : ViewModel() {
 
     suspend fun suggestNextLoadKg(exerciseId: Long, equipment: Equipment, reps: Int): Double? =
         repo.suggestNextLoadKg(exerciseId, equipment, reps)
+
+    class DebugTestViewModel(
+        private val libraryDao: com.example.safitness.data.dao.LibraryDao,
+        private val metconDao: com.example.safitness.data.dao.MetconDao
+    ) : ViewModel() {
+
+        fun runMetadataTests() = viewModelScope.launch {
+            // A) Exercise metadata query
+            val dbChestPushDB = libraryDao.filterExercises(
+                movement = com.example.safitness.core.MovementPattern.HORIZONTAL_PUSH,
+                muscles = listOf(com.example.safitness.core.MuscleGroup.CHEST),
+                equipment = listOf(com.example.safitness.core.Equipment.DUMBBELL)
+            )
+            android.util.Log.d("TEST", "DB Horizontal Push (CHEST + DB): ${dbChestPushDB.map { it.name }}")
+
+            // B) Metcon metadata query (AMRAP lower-body, bodyweight only)
+            val amrapLegsBodyweight = metconDao.filterComponents(
+                blockType = com.example.safitness.core.BlockType.AMRAP,
+                movement = com.example.safitness.core.MovementPattern.SQUAT,
+                muscles = listOf(
+                    com.example.safitness.core.MuscleGroup.QUADS,
+                    com.example.safitness.core.MuscleGroup.GLUTES
+                ),
+                equipment = listOf(com.example.safitness.core.Equipment.BODYWEIGHT)
+            )
+            android.util.Log.d("TEST", "AMRAP legs BW components: ${
+                amrapLegsBodyweight.map { "planId=${it.planId} order=${it.orderInPlan} text=${it.text}" }
+            }")
+
+            // C) Sanity check a known metcon (Cindy/Helen) still load via your existing relation
+            // (This uses your existing flow relation and ensures the text + structured fields coexist)
+            // metconDao.getPlanWithComponents(planId).collect { planWithComps -> ... }  // if you want
+        }
+    }
+
+
 }

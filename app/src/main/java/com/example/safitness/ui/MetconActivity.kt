@@ -56,6 +56,7 @@ class MetconActivity : AppCompatActivity() {
     private val beeper = TimerBeeper()
 
     override fun onCreate(savedInstanceState: Bundle?) {
+
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_metcon)
 
