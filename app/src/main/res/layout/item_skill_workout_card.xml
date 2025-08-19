@@ -3,8 +3,8 @@
     android:id="@+id/skillWorkoutCardRoot"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:orientation="vertical"
     android:background="@drawable/bg_metcon_card"
+    android:orientation="vertical"
     android:padding="16dp"
     android:layout_marginBottom="12dp">
 
@@ -13,8 +13,18 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="Skill"
-        android:textStyle="bold"
-        android:textSize="20sp" />
+        android:textSize="20sp"
+        android:textStyle="bold" />
+
+    <!-- Last result line (like metcon) -->
+    <TextView
+        android:id="@+id/tvPlanLastTime"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="No previous result"
+        android:textSize="14sp"
+        android:textColor="#666666"
+        android:layout_marginTop="4dp" />
 
     <LinearLayout
         android:id="@+id/layoutPlanComponents"

@@ -36,7 +36,7 @@
             android:text="Clear" />
     </LinearLayout>
 
-    <!-- Mode toggle -->
+    <!-- Mode toggle: icon-only radio buttons -->
     <RadioGroup
         android:id="@+id/rgMode"
         android:layout_width="match_parent"
@@ -44,36 +44,70 @@
         android:orientation="horizontal"
         android:layout_marginTop="12dp">
 
+        <!-- Strength -->
         <RadioButton
             android:id="@+id/rbExercises"
             android:layout_width="0dp"
-            android:layout_height="wrap_content"
+            android:layout_height="56dp"
             android:layout_weight="1"
+            android:gravity="center"
+            android:padding="8dp"
             android:checked="true"
-            android:text="Strength" />
+            android:button="@null"
+            android:background="@drawable/bg_toggle_radio"
+            android:contentDescription="Strength"
+            android:text=""
+            android:drawableTop="@drawable/ic_mod_strength"
+            android:drawablePadding="4dp"
+            app:drawableTint="@color/modality_icon_tint" />
 
+        <!-- Metcon -->
         <RadioButton
             android:id="@+id/rbMetcons"
             android:layout_width="0dp"
-            android:layout_height="wrap_content"
+            android:layout_height="56dp"
             android:layout_weight="1"
-            android:text="Metcons" />
+            android:gravity="center"
+            android:padding="8dp"
+            android:button="@null"
+            android:background="@drawable/bg_toggle_radio"
+            android:contentDescription="Metcon"
+            android:text=""
+            android:drawableTop="@drawable/ic_mod_metcon"
+            android:drawablePadding="4dp"
+            app:drawableTint="@color/modality_icon_tint" />
 
-        <!-- NEW -->
+        <!-- Engine -->
         <RadioButton
             android:id="@+id/rbEngine"
             android:layout_width="0dp"
-            android:layout_height="wrap_content"
+            android:layout_height="56dp"
             android:layout_weight="1"
-            android:text="Engine" />
+            android:gravity="center"
+            android:padding="8dp"
+            android:button="@null"
+            android:background="@drawable/bg_toggle_radio"
+            android:contentDescription="Engine"
+            android:text=""
+            android:drawableTop="@drawable/ic_mod_engine"
+            android:drawablePadding="4dp"
+            app:drawableTint="@color/modality_icon_tint" />
 
-        <!-- NEW -->
+        <!-- Skills -->
         <RadioButton
             android:id="@+id/rbSkills"
             android:layout_width="0dp"
-            android:layout_height="wrap_content"
+            android:layout_height="56dp"
             android:layout_weight="1"
-            android:text="Skills" />
+            android:gravity="center"
+            android:padding="8dp"
+            android:button="@null"
+            android:background="@drawable/bg_toggle_radio"
+            android:contentDescription="Skills"
+            android:text=""
+            android:drawableTop="@drawable/ic_mod_skill"
+            android:drawablePadding="4dp"
+            app:drawableTint="@color/modality_icon_tint" />
     </RadioGroup>
 
     <!-- Filters row (labels change meaning in code per mode) -->

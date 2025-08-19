@@ -1,5 +1,6 @@
 package com.example.safitness.ui.engine
 
+import android.content.Context
 import android.os.Bundle
 import android.os.CountDownTimer
 import android.widget.*
@@ -16,13 +17,13 @@ class SkillEmomActivity : AppCompatActivity() {
 
     private lateinit var tvWorkoutTitle: TextView
     private lateinit var tvTimer: TextView
+    private lateinit var tvLastTime: TextView
     private lateinit var btnStartStop: Button
     private lateinit var btnReset: Button
     private lateinit var btnComplete: Button
     private lateinit var btnSuccess: Button
     private lateinit var btnFail: Button
 
-    // Included card
     private var cardTitle: TextView? = null
     private var cardMeta: TextView? = null
     private var cardComponents: LinearLayout? = null
@@ -76,9 +77,7 @@ class SkillEmomActivity : AppCompatActivity() {
                 }
                 tvWorkoutTitle.text = "Skill – ${plan.title}"
                 cardTitle?.text = plan.title
-                cardMeta?.text = (plan.description ?: "").ifBlank {
-                    plan.defaultTestType ?: ""
-                }
+                cardMeta?.text = (plan.description ?: "").ifBlank { plan.defaultTestType ?: "" }
                 cardComponents?.removeAllViews()
                 pwc.second.forEach { c ->
                     val line = c.title.ifBlank { c.description ?: "" }
@@ -90,6 +89,8 @@ class SkillEmomActivity : AppCompatActivity() {
                 }
             }
         }
+
+        tvLastTime.text = loadLastLabel()
 
         btnStartStop.setOnClickListener {
             when (phase) {
@@ -117,6 +118,7 @@ class SkillEmomActivity : AppCompatActivity() {
             }
             if (phase == Phase.RUN) pause()
             beeper.finalBuzz()
+            saveLast()
             Toast.makeText(this, "Skill EMOM logged ($success✓ / $fail✗).", Toast.LENGTH_LONG).show()
             finish()
         }
@@ -125,6 +127,7 @@ class SkillEmomActivity : AppCompatActivity() {
     private fun bindViews() {
         tvWorkoutTitle = findViewById(R.id.tvWorkoutTitle)
         tvTimer = findViewById(R.id.tvTimer)
+        tvLastTime = findViewById(R.id.tvLastTime)
         btnStartStop = findViewById(R.id.btnStartStop)
         btnReset = findViewById(R.id.btnReset)
         btnComplete = findViewById(R.id.btnComplete)
@@ -178,6 +181,7 @@ class SkillEmomActivity : AppCompatActivity() {
                 btnStartStop.text = "START"
                 updateTimer()
                 beeper.finalBuzz()
+                saveLast()
                 Toast.makeText(this@SkillEmomActivity, "Time!", Toast.LENGTH_SHORT).show()
             }
         }.also { it.start() }
@@ -220,4 +224,14 @@ class SkillEmomActivity : AppCompatActivity() {
             beeper.countdownPip()
         }
     }
+
+    // --------- "Last result" via SharedPreferences ---------
+    private fun prefs() = getSharedPreferences("last_results", Context.MODE_PRIVATE)
+    private fun saveLast() {
+        val label = "$success success / $fail fail"
+        prefs().edit().putString("skill_emom_last_$planId", label).apply()
+        tvLastTime.text = "Last: $label"
+    }
+    private fun loadLastLabel(): String =
+        prefs().getString("skill_emom_last_$planId", null)?.let { "Last: $it" } ?: "No previous result"
 }
