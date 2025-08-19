@@ -56,6 +56,12 @@ import com.example.safitness.data.entities.SkillLogEntity
 // Engine/Skill log entities
         EngineLogEntity::class,
         SkillLogEntity::class,
+        ExerciseMuscle::class,
+        ExerciseEquipment::class,
+        ExerciseTag::class,
+        MetconComponentMuscle::class,
+        MetconComponentEquipment::class,
+
     ]
 )
 @TypeConverters(Converters::class)
@@ -76,6 +82,7 @@ abstract class AppDatabase : RoomDatabase() {
     // Log DAOs
     abstract fun engineLogDao(): EngineLogDao
     abstract fun skillLogDao(): SkillLogDao
+    abstract fun exerciseMetadataDao(): ExerciseMetadataDao
 
     companion object {
         @Volatile private var INSTANCE: AppDatabase? = null
@@ -97,7 +104,7 @@ abstract class AppDatabase : RoomDatabase() {
                                     db.libraryDao().insertAll(ExerciseSeed.DEFAULT_EXERCISES)
                                 }
                                 if (db.metconDao().countPlans() == 0) {
-                                    MetconSeed.seed(db)
+                                    MetconSeed.seedOrUpdate(db)
                                     SkillLibrarySeeder.seedIfNeeded(db)
                                     EngineLibrarySeeder.seedIfNeeded(db)
                                 }

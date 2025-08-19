@@ -7,6 +7,8 @@ import com.example.safitness.data.entities.ProgramMetconSelection
 import com.example.safitness.data.entities.MetconLog   // <-- added
 import kotlinx.coroutines.flow.Flow
 import com.example.safitness.core.MetconType
+import com.example.safitness.data.entities.ExerciseEquipment
+import com.example.safitness.data.entities.ExerciseMuscle
 
 
 /* -- Relations for convenient reads -- */
@@ -152,5 +154,30 @@ interface MetconDao {
     // NEW helper at the end of MetconDao.kt
     @Query("SELECT id FROM metcon_plan ORDER BY id ASC LIMIT 1")
     suspend fun firstPlanId(): Long?
+
+    @Query("""
+    UPDATE metcon_component
+    SET blockType = :blockType,
+        rounds = :rounds,
+        durationSec = :durationSec,
+        emomIntervalSec = :emomIntervalSec,
+        movement = :movement,
+        reps = :reps,
+        intensityType = :intensityType,
+        intensityValue = :intensityValue
+    WHERE planId = :planId AND orderInPlan = :orderInPlan
+""")
+    suspend fun updateComponentStructure(
+        planId: Long,
+        orderInPlan: Int,
+        blockType: com.example.safitness.core.BlockType?,
+        rounds: Int?,
+        durationSec: Int?,
+        emomIntervalSec: Int?,
+        movement: com.example.safitness.core.MovementPattern?,
+        reps: Int?,
+        intensityType: String?,
+        intensityValue: Float?
+    ): Int
 
 }
