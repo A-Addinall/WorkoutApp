@@ -180,4 +180,26 @@ interface MetconDao {
         intensityValue: Float?
     ): Int
 
+    @Transaction
+    @Query("""
+        SELECT mc.* FROM metcon_component mc
+        WHERE (:blockType IS NULL OR mc.blockType = :blockType)
+          AND (:movement IS NULL OR mc.movement = :movement)
+          AND EXISTS (
+            SELECT 1 FROM metcon_component_muscle mcm
+            WHERE mcm.componentId = mc.id AND mcm.muscle IN (:muscles)
+          )
+          AND EXISTS (
+            SELECT 1 FROM metcon_component_equipment mce
+            WHERE mce.componentId = mc.id AND mce.equipment IN (:equipment)
+          )
+        ORDER BY mc.orderInPlan ASC
+    """)
+    suspend fun filterComponents(
+        blockType: com.example.safitness.core.BlockType?,
+        movement: com.example.safitness.core.MovementPattern?,
+        muscles: List<com.example.safitness.core.MuscleGroup>,
+        equipment: List<com.example.safitness.core.Equipment>
+    ): List<MetconComponent>
+
 }
