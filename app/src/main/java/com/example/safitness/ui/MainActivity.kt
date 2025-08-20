@@ -20,6 +20,10 @@ import com.example.safitness.data.repo.Repos
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.first
 import java.util.LinkedHashSet
+import androidx.lifecycle.lifecycleScope
+import com.example.safitness.BuildConfig
+import com.example.safitness.data.repo.PlannerRepository
+import com.example.safitness.core.Equipment
 
 class MainActivity : AppCompatActivity() {
     private val scope = MainScope()
@@ -31,6 +35,33 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        // inside onCreate() AFTER setContentView(...)
+        if (BuildConfig.DEBUG) {
+            lifecycleScope.launch {
+                val repo = PlannerRepository(
+                    planDao = Repos.planDao(this@MainActivity),
+                    libraryDao = Repos.libraryDao(this@MainActivity)
+                )
+
+                val suggestions = repo.generateSuggestionsForDay(
+                    dayIndex = 1,
+                    focus = WorkoutType.PUSH,
+                    availableEq = listOf(Equipment.DUMBBELL, Equipment.BODYWEIGHT)
+                )
+                val summary = suggestions.joinToString { s ->
+                    "${s.exercise.name} ${s.repsMin}-${s.repsMax} x${s.targetSets}"
+                }
+                val db = com.example.safitness.data.db.AppDatabase.get(this@MainActivity)
+                android.util.Log.d("PLANNER", "muscles=${db.exerciseMetadataDao().countMuscles()} eqLinks=${db.exerciseMetadataDao().countExerciseEquipment()}")
+
+                android.util.Log.d("PLANNER", "SUGGESTIONS: $summary")
+
+                // Optional: persist so current UI shows them
+                // repo.persistSuggestionsToDay(dayIndex = 1, suggestions)
+                // Toast.makeText(this@MainActivity, "Day 1 autoloaded (${suggestions.size})", Toast.LENGTH_SHORT).show()
+            }
+        }
+
 
         // Ask for notifications permission (Android 13+)
         requestNotificationPermission()

@@ -57,24 +57,90 @@ object ExerciseSeed {
         val muscles = mutableListOf<ExerciseMuscle>()
         val equipment = mutableListOf<ExerciseEquipment>()
 
-        // Example muscle mapping (extend as needed)
-        ids["Barbell Bench Press"]?.let { id ->
-            muscles += ExerciseMuscle(exerciseId = id, muscle = MuscleGroup.CHEST, role = "PRIMARY")
-            muscles += ExerciseMuscle(exerciseId = id, muscle = MuscleGroup.TRICEPS, role = "SECONDARY")
-        }
-        ids["Back Squat"]?.let { id ->
+        // --- MUSCLES (Legs/Core) ---
+        ids["Front Squat"]?.let { id ->
             muscles += ExerciseMuscle(exerciseId = id, muscle = MuscleGroup.QUADS, role = "PRIMARY")
             muscles += ExerciseMuscle(exerciseId = id, muscle = MuscleGroup.GLUTES, role = "SECONDARY")
         }
-        ids["Deadlift"]?.let { id ->
+        ids["Goblet Squat"]?.let { id ->
+            muscles += ExerciseMuscle(exerciseId = id, muscle = MuscleGroup.QUADS, role = "PRIMARY")
+            muscles += ExerciseMuscle(exerciseId = id, muscle = MuscleGroup.GLUTES, role = "SECONDARY")
+        }
+        ids["Bulgarian Split Squat"]?.let { id ->
+            muscles += ExerciseMuscle(exerciseId = id, muscle = MuscleGroup.QUADS, role = "PRIMARY")
+            muscles += ExerciseMuscle(exerciseId = id, muscle = MuscleGroup.GLUTES, role = "SECONDARY")
+        }
+        ids["Romanian Deadlift"]?.let { id ->
             muscles += ExerciseMuscle(exerciseId = id, muscle = MuscleGroup.HAMSTRINGS, role = "PRIMARY")
+            muscles += ExerciseMuscle(exerciseId = id, muscle = MuscleGroup.GLUTES, role = "SECONDARY")
+            muscles += ExerciseMuscle(exerciseId = id, muscle = MuscleGroup.ERECTORS, role = "SECONDARY")
+        }
+        ids["Hip Thrust"]?.let { id ->
             muscles += ExerciseMuscle(exerciseId = id, muscle = MuscleGroup.GLUTES, role = "PRIMARY")
+            muscles += ExerciseMuscle(exerciseId = id, muscle = MuscleGroup.HAMSTRINGS, role = "SECONDARY")
+        }
+        ids["Walking Lunge"]?.let { id ->
+            muscles += ExerciseMuscle(exerciseId = id, muscle = MuscleGroup.QUADS, role = "PRIMARY")
+            muscles += ExerciseMuscle(exerciseId = id, muscle = MuscleGroup.GLUTES, role = "SECONDARY")
+        }
+        ids["Standing Calf Raise"]?.let { id ->
+            muscles += ExerciseMuscle(exerciseId = id, muscle = MuscleGroup.CALVES, role = "PRIMARY")
+        }
+        ids["Crunch"]?.let { id ->
+            muscles += ExerciseMuscle(exerciseId = id, muscle = MuscleGroup.ABS, role = "PRIMARY")
+        }
+        ids["Hanging Leg Raise"]?.let { id ->
+            muscles += ExerciseMuscle(exerciseId = id, muscle = MuscleGroup.ABS, role = "PRIMARY")
+            muscles += ExerciseMuscle(exerciseId = id, muscle = MuscleGroup.OBLIQUES, role = "SECONDARY")
+        }
+        ids["Plank"]?.let { id ->
+            muscles += ExerciseMuscle(exerciseId = id, muscle = MuscleGroup.ABS, role = "PRIMARY")
+        }
+        ids["Russian Twist"]?.let { id ->
+            muscles += ExerciseMuscle(exerciseId = id, muscle = MuscleGroup.OBLIQUES, role = "PRIMARY")
         }
 
-        // Example equipment flexibility
+// --- EQUIPMENT (Legs/Core) ---
+        ids["Back Squat"]?.let { id ->
+            equipment += ExerciseEquipment(exerciseId = id, equipment = Equipment.BARBELL)
+        }
+        ids["Front Squat"]?.let { id ->
+            equipment += ExerciseEquipment(exerciseId = id, equipment = Equipment.BARBELL)
+        }
         ids["Goblet Squat"]?.let { id ->
             equipment += ExerciseEquipment(exerciseId = id, equipment = Equipment.DUMBBELL)
             equipment += ExerciseEquipment(exerciseId = id, equipment = Equipment.KETTLEBELL)
+        }
+        ids["Bulgarian Split Squat"]?.let { id ->
+            equipment += ExerciseEquipment(exerciseId = id, equipment = Equipment.DUMBBELL)
+        }
+        ids["Walking Lunge"]?.let { id ->
+            equipment += ExerciseEquipment(exerciseId = id, equipment = Equipment.DUMBBELL)
+        }
+        ids["Deadlift"]?.let { id ->
+            equipment += ExerciseEquipment(exerciseId = id, equipment = Equipment.BARBELL)
+        }
+        ids["Romanian Deadlift"]?.let { id ->
+            equipment += ExerciseEquipment(exerciseId = id, equipment = Equipment.BARBELL)
+            equipment += ExerciseEquipment(exerciseId = id, equipment = Equipment.DUMBBELL)
+        }
+        ids["Hip Thrust"]?.let { id ->
+            equipment += ExerciseEquipment(exerciseId = id, equipment = Equipment.BARBELL)
+        }
+        ids["Standing Calf Raise"]?.let { id ->
+            equipment += ExerciseEquipment(exerciseId = id, equipment = Equipment.DUMBBELL)
+        }
+        ids["Crunch"]?.let { id ->
+            equipment += ExerciseEquipment(exerciseId = id, equipment = Equipment.BODYWEIGHT)
+        }
+        ids["Hanging Leg Raise"]?.let { id ->
+            equipment += ExerciseEquipment(exerciseId = id, equipment = Equipment.BODYWEIGHT)
+        }
+        ids["Plank"]?.let { id ->
+            equipment += ExerciseEquipment(exerciseId = id, equipment = Equipment.BODYWEIGHT)
+        }
+        ids["Russian Twist"]?.let { id ->
+            equipment += ExerciseEquipment(exerciseId = id, equipment = Equipment.DUMBBELL)
         }
 
         metaDao.insertAllMuscles(muscles)

@@ -23,11 +23,9 @@ class WorkoutApp : Application() {
             // Idempotent content seeds
             ExerciseSeed.seedOrUpdate(db)
             MetconSeed.seedOrUpdate(db)
-
-            // DEV: create "Dev Test Phase" & Week 1 Day 1..5 if empty
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                DevPhaseSeed_dev.seedFromLegacy(db)
+            EngineLibrarySeeder.seedIfNeeded(db)
+            SkillLibrarySeeder.seedIfNeeded(db)
             }
         }
     }
-}
+

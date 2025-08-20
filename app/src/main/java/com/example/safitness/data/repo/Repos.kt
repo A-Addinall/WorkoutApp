@@ -11,7 +11,11 @@ object Repos {
             sessionDao = sessionDao(),
             prDao = personalRecordDao(),
             metconDao = metconDao(),
-            planDao = planDao() // NEW
+            planDao = planDao() // already here
         )
     }
+
+    // NEW: expose raw DAOs so MainActivity can use them
+    fun planDao(context: Context) = AppDatabase.get(context).planDao()
+    fun libraryDao(context: Context) = AppDatabase.get(context).libraryDao()
 }
