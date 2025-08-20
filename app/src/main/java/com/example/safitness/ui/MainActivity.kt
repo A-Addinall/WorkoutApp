@@ -3,27 +3,27 @@ package com.example.safitness.ui
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.provider.Settings
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.cardview.widget.CardView
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import com.example.safitness.R
+import com.example.safitness.BuildConfig
+import com.example.safitness.core.Equipment
 import com.example.safitness.core.Modality
 import com.example.safitness.core.WorkoutType
+import com.example.safitness.data.entities.UserProfile
+import com.example.safitness.data.repo.PlannerRepository
 import com.example.safitness.data.repo.Repos
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.first
 import java.util.LinkedHashSet
-import androidx.lifecycle.lifecycleScope
-import com.example.safitness.BuildConfig
-import com.example.safitness.data.repo.PlannerRepository
-import com.example.safitness.core.Equipment
+
 
 class MainActivity : AppCompatActivity() {
     private val scope = MainScope()
@@ -35,76 +35,23 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-        // inside onCreate() AFTER setContentView(...)
+
+        // ---- DEV: optional auto-generate on boot (disable if noisy) ----
         if (BuildConfig.DEBUG) {
             lifecycleScope.launch {
-                val repo = PlannerRepository(
-                    planDao = Repos.planDao(this@MainActivity),
-                    libraryDao = Repos.libraryDao(this@MainActivity),
-                    metconDao = Repos.metconDao(this@MainActivity)
-                )
-
-                val suggestions = repo.generateSuggestionsForDay(
+                generateDayFromProfile(
                     dayIndex = 1,
-                    focus = com.example.safitness.core.WorkoutType.PUSH,
-                    availableEq = listOf(
-                        com.example.safitness.core.Equipment.DUMBBELL,
-                        com.example.safitness.core.Equipment.BODYWEIGHT
-                    )
+                    focus = WorkoutType.PUSH,
+                    replaceStrength = true,
+                    replaceMetcon = true
                 )
-
-                // 👇 actually write them into the day plan
-                repo.persistSuggestionsToDay(dayIndex = 1, suggestions)
-
-                // Optional: persist so current UI shows them
-                Toast.makeText(this@MainActivity, "Day 1 autoloaded (${suggestions.size})", Toast.LENGTH_SHORT).show()
             }
         }
-        lifecycleScope.launch {
-            val repo = com.example.safitness.data.repo.PlannerRepository(
-                planDao = com.example.safitness.data.repo.Repos.planDao(this@MainActivity),
-                libraryDao = com.example.safitness.data.repo.Repos.libraryDao(this@MainActivity),
-                metconDao = com.example.safitness.data.repo.Repos.metconDao(this@MainActivity) // NEW helper or use AppDatabase.get(...).metconDao()
-            )
-
-            val focus = com.example.safitness.core.WorkoutType.PUSH
-            val eq = listOf(
-                com.example.safitness.core.Equipment.DUMBBELL,
-                com.example.safitness.core.Equipment.BODYWEIGHT
-            )
-
-            // Strength
-            val suggestions = repo.generateSuggestionsForDay(
-                dayIndex = 1,
-                focus = focus,
-                availableEq = eq
-            )
-            repo.persistSuggestionsToDay(dayIndex = 1, suggestions, replaceStrength = true)
-
-            // Metcon (match focus)
-            val planId = repo.pickMetconPlanIdForFocus(
-                focus = focus,
-                availableEq = eq,
-                preferredBlock = null // or BlockType.AMRAP / EMOM if you want to force a style
-            )
-            if (planId != null) {
-                repo.persistMetconPlanToDay(dayIndex = 1, planId = planId, replaceMetcon = true, required = true)
-            }
-
-            // Optional: quick count log
-            val pd = com.example.safitness.data.repo.Repos.planDao(this@MainActivity)
-            val phaseId = pd.currentPhaseId() ?: -1
-            val dayPlanId = pd.getPlanId(phaseId, 1, 1) ?: -1
-            val count = pd.countItemsForDay(dayPlanId)
-            android.util.Log.d("PLANNER", "Day1 plan=$dayPlanId items=$count (strength+metcon)")
-        }
-
-
 
         // Ask for notifications permission (Android 13+)
         requestNotificationPermission()
 
-        // Bind all five day cards with Start/Edit actions
+        // Bind the 5 day cards
         bindDayCard(1, R.id.cardDay1)
         bindDayCard(2, R.id.cardDay2)
         bindDayCard(3, R.id.cardDay3)
@@ -117,6 +64,36 @@ class MainActivity : AppCompatActivity() {
         findViewById<CardView>(R.id.cardSettings)?.setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
         }
+        findViewById<CardView>(R.id.cardGenerateProgram)?.setOnClickListener {
+            lifecycleScope.launch {
+                val userDao = Repos.userProfileDao(this@MainActivity)
+                val profile = userDao.flowProfile().first() ?: UserProfile()
+                val daysToFill = minOf(5, profile.daysPerWeek)
+
+                // simple default weekly split
+                val split = listOf(
+                    com.example.safitness.core.WorkoutType.PUSH,
+                    com.example.safitness.core.WorkoutType.PULL,
+                    com.example.safitness.core.WorkoutType.LEGS_CORE,
+                    com.example.safitness.core.WorkoutType.PUSH,
+                    com.example.safitness.core.WorkoutType.PULL
+                )
+
+                // fill visible 1..daysToFill using profile equipment
+                for (d in 1..daysToFill) {
+                    val focus = split[d - 1]
+                    generateDayFromProfile(
+                        dayIndex = d,
+                        focus = focus,
+                        replaceStrength = true,
+                        replaceMetcon = true
+                    )
+                }
+
+                refreshDayLabels()
+                Toast.makeText(this@MainActivity, "Program generated from profile", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     override fun onResume() {
@@ -124,20 +101,85 @@ class MainActivity : AppCompatActivity() {
         refreshDayLabels()
     }
 
+
     private fun bindDayCard(day: Int, cardId: Int) {
         val card = findViewById<CardView>(cardId)
 
+        findViewById<CardView>(R.id.cardProfile)?.setOnClickListener {
+            startActivity(Intent(this, com.example.safitness.ui.profile.ProfileActivity::class.java))
+        }
+        // Start workout
         card.findViewById<com.google.android.material.button.MaterialButton?>(R.id.btnStartDay)
             ?.setOnClickListener { openDay(day) }
 
+        // Edit day (existing behavior)
         card.findViewById<com.google.android.material.button.MaterialButton?>(R.id.btnEditDay)
             ?.setOnClickListener {
                 startActivity(Intent(this, ExerciseLibraryActivity::class.java).apply {
                     putExtra("DAY_INDEX", day)
                 })
             }
+
+        // NEW: long-press the card to auto-generate from saved profile
+        // (no XML change needed; nice for testing)
+        card.setOnLongClickListener {
+            // Map day -> focus (adjust if you prefer another split)
+            val focus = when (day) {
+                1 -> WorkoutType.PUSH
+                2 -> WorkoutType.PULL
+                3 -> WorkoutType.LEGS_CORE
+                4 -> WorkoutType.PUSH
+                else -> WorkoutType.PULL
+            }
+            lifecycleScope.launch {
+                generateDayFromProfile(
+                    dayIndex = day,
+                    focus = focus,
+                    replaceStrength = true,
+                    replaceMetcon = true
+                )
+                refreshDayLabels()
+                Toast.makeText(this@MainActivity, "Day $day generated", Toast.LENGTH_SHORT).show()
+            }
+            true
+        }
     }
 
+    /**
+     * Phase 5: one-tap generate using the saved User Profile.
+     * - Reads profile (equipment, etc.)
+     * - Generates strength + focus-matched metcon
+     * - Persists to day_item
+     */
+    private suspend fun generateDayFromProfile(
+        dayIndex: Int,
+        focus: WorkoutType,
+        replaceStrength: Boolean,
+        replaceMetcon: Boolean
+    ) {
+        val planDao = Repos.planDao(this)
+        val libraryDao = Repos.libraryDao(this)
+        val metconDao = Repos.metconDao(this)
+        val userDao = Repos.userProfileDao(this)
+
+        // ✅ add this:
+        val repo = PlannerRepository(planDao, libraryDao, metconDao)
+
+        val profile = userDao.flowProfile().first() ?: com.example.safitness.data.entities.UserProfile()
+
+        val availableEq: List<Equipment> =
+            profile.equipmentCsv
+                .split(',')
+                .mapNotNull { runCatching { Equipment.valueOf(it) }.getOrNull() }
+                .ifEmpty { listOf(Equipment.BODYWEIGHT, Equipment.DUMBBELL) }
+
+        val suggestions = repo.generateSuggestionsForDay(dayIndex, focus, availableEq)
+        repo.persistSuggestionsToDay(dayIndex, suggestions, replaceStrength = replaceStrength)
+
+        repo.pickMetconPlanIdForFocus(focus, availableEq, preferredBlock = null)?.let { planId ->
+            repo.persistMetconPlanToDay(dayIndex, planId, replaceMetcon = replaceMetcon, required = true)
+        }
+    }
     private fun refreshDayLabels() {
         scope.launch(Dispatchers.IO) {
             val repo = Repos.workoutRepository(this@MainActivity)
@@ -214,39 +256,19 @@ class MainActivity : AppCompatActivity() {
                     Manifest.permission.POST_NOTIFICATIONS
                 )
                 if (showRationale) {
-                    // Soft deny: explain why it matters
                     Toast.makeText(
                         this,
                         "Enable notifications to hear rest-timer beeps in the background.",
                         Toast.LENGTH_LONG
                     ).show()
                 } else {
-                    // “Don’t ask again” or policy deny: point to Settings
                     Toast.makeText(
                         this,
                         "Notifications are disabled. Enable them in Settings to hear the rest timer.",
                         Toast.LENGTH_LONG
                     ).show()
-                    // (Optional) Offer to open settings automatically:
-                    // openAppNotificationSettings()
                 }
             }
-        }
-    }
-
-    // Open app-specific notification settings (only used if you decide to trigger it)
-    @Suppress("unused")
-    private fun openAppNotificationSettings() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
-                putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
-            }
-            startActivity(intent)
-        } else {
-            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                data = Uri.fromParts("package", packageName, null)
-            }
-            startActivity(intent)
         }
     }
 

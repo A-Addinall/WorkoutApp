@@ -28,7 +28,7 @@ import com.example.safitness.data.entities.SkillLogEntity
 
 
 @Database(
-    version = 8,                 // bump for new tables
+    version = 9,                 // bump for new tables
     exportSchema = false,        // fine for dev; turn on for prod
     entities = [
         // legacy
@@ -61,6 +61,7 @@ import com.example.safitness.data.entities.SkillLogEntity
         ExerciseTag::class,
         MetconComponentMuscle::class,
         MetconComponentEquipment::class,
+        UserProfile::class
 
     ]
 )
@@ -83,7 +84,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun engineLogDao(): EngineLogDao
     abstract fun skillLogDao(): SkillLogDao
     abstract fun exerciseMetadataDao(): ExerciseMetadataDao
-
+    abstract fun userProfileDao(): com.example.safitness.data.dao.UserProfileDao
     companion object {
         @Volatile private var INSTANCE: AppDatabase? = null
 

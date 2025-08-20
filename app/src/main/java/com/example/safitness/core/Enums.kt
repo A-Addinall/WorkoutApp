@@ -2,7 +2,7 @@ package com.example.safitness.core
 
 enum class WorkoutType { PUSH, PULL, LEGS_CORE }
 
-enum class Equipment { BARBELL, DUMBBELL, CABLE, BODYWEIGHT, KETTLEBELL }
+enum class Equipment { BARBELL, DUMBBELL, CABLE, BODYWEIGHT, KETTLEBELL,MACHINE, BAND }
 
 enum class Modality { STRENGTH, METCON }
 

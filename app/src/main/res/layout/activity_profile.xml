@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:fillViewport="true"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <LinearLayout
+        android:orientation="vertical"
+        android:padding="16dp"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <!-- Goal -->
+        <TextView
+            android:id="@+id/tvGoalLabel"
+            android:text="Goal"
+            android:textStyle="bold"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"/>
+
+        <RadioGroup
+            android:id="@+id/rgGoal"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+            <RadioButton android:id="@+id/rbGoalStrength" android:text="Strength" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+            <RadioButton android:id="@+id/rbGoalHypertrophy" android:text="Hypertrophy" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+            <RadioButton android:id="@+id/rbGoalEndurance" android:text="Endurance" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+        </RadioGroup>
+
+        <!-- Experience -->
+        <TextView
+            android:text="Experience"
+            android:textStyle="bold"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"/>
+        <RadioGroup
+            android:id="@+id/rgExperience"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+            <RadioButton android:id="@+id/rbExpBeginner" android:text="Beginner" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+            <RadioButton android:id="@+id/rbExpIntermediate" android:text="Intermediate" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+            <RadioButton android:id="@+id/rbExpAdvanced" android:text="Advanced" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+        </RadioGroup>
+
+        <!-- Equipment -->
+        <TextView
+            android:text="Available Equipment"
+            android:textStyle="bold"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"/>
+
+        <!-- Days / Minutes -->
+        <LinearLayout
+            android:id="@+id/equipmentContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <CheckBox
+                android:id="@+id/cbEqBodyweight"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Bodyweight" />
+
+            <CheckBox
+                android:id="@+id/cbEqDumbbell"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Dumbbell" />
+
+            <CheckBox
+                android:id="@+id/cbEqKettlebell"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Kettlebell" />
+
+            <CheckBox
+                android:id="@+id/cbEqBarbell"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Barbell" />
+
+            <CheckBox
+                android:id="@+id/cbEqCable"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Cable" />
+
+            <CheckBox
+                android:id="@+id/cbEqMachine"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Machine" />
+
+            <CheckBox
+                android:id="@+id/cbEqBand"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Band" />
+        </LinearLayout>
+        <!-- Program length (weeks) -->
+        <TextView
+            android:text="Program length (weeks)"
+            android:textStyle="bold"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content" />
+
+        <SeekBar
+            android:id="@+id/seekWeeks"
+            android:max="11"
+            android:progress="3"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <TextView
+            android:id="@+id/tvWeeksValue"
+            android:text="4"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content" />
+
+        <!-- Days / Minutes -->
+        <TextView
+            android:text="Days per week"
+            android:textStyle="bold"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"/>
+
+        <SeekBar
+            android:id="@+id/seekDays"
+            android:max="6"
+            android:progress="2"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <TextView
+            android:id="@+id/tvDaysValue"
+            android:text="3"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"/>
+
+        <TextView
+            android:text="Session length (minutes)"
+            android:textStyle="bold"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"/>
+
+        <SeekBar
+            android:id="@+id/seekMinutes"
+            android:max="100"
+            android:progress="25"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+        <TextView
+            android:id="@+id/tvMinutesValue"
+            android:text="45"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"/>
+        <Button
+            android:id="@+id/btnSaveProfile"
+            android:text="Save"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"/>
+    </LinearLayout>
+</ScrollView>
