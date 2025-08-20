@@ -1,15 +1,16 @@
 package com.example.safitness.data.dao
 
 import androidx.room.*
+import com.example.safitness.core.BlockType
+import com.example.safitness.core.Equipment
+import com.example.safitness.core.MovementPattern
+import com.example.safitness.core.WorkoutType
 import com.example.safitness.data.entities.MetconComponent
 import com.example.safitness.data.entities.MetconPlan
 import com.example.safitness.data.entities.ProgramMetconSelection
-import com.example.safitness.data.entities.MetconLog   // <-- added
+import com.example.safitness.data.entities.MetconLog
 import kotlinx.coroutines.flow.Flow
 import com.example.safitness.core.MetconType
-import com.example.safitness.data.entities.ExerciseEquipment
-import com.example.safitness.data.entities.ExerciseMuscle
-
 
 /* -- Relations for convenient reads -- */
 
@@ -84,7 +85,7 @@ interface MetconDao {
     """)
     suspend fun setDisplayOrder(day: Int, planId: Long, orderInDay: Int)
 
-    /* ----- NEW: Plan-scoped metcon logs ----- */
+    /* ----- Plan-scoped metcon logs ----- */
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertLog(log: MetconLog): Long
@@ -104,6 +105,8 @@ interface MetconDao {
         LIMIT 1
     """)
     fun lastForDay(day: Int): Flow<MetconLog?>
+
+    /* ----- Convenience helpers ----- */
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertPlansIgnore(plans: List<MetconPlan>): List<Long>
@@ -151,50 +154,79 @@ interface MetconDao {
     """)
     suspend fun deleteComponentsNotIn(planId: Long, validOrders: List<Int>)
 
-    // NEW helper at the end of MetconDao.kt
     @Query("SELECT id FROM metcon_plan ORDER BY id ASC LIMIT 1")
     suspend fun firstPlanId(): Long?
 
     @Query("""
-    UPDATE metcon_component
-    SET blockType = :blockType,
-        rounds = :rounds,
-        durationSec = :durationSec,
-        emomIntervalSec = :emomIntervalSec,
-        movement = :movement,
-        reps = :reps,
-        intensityType = :intensityType,
-        intensityValue = :intensityValue
-    WHERE planId = :planId AND orderInPlan = :orderInPlan
-""")
+        UPDATE metcon_component
+        SET blockType = :blockType,
+            rounds = :rounds,
+            durationSec = :durationSec,
+            emomIntervalSec = :emomIntervalSec,
+            movement = :movement,
+            reps = :reps,
+            intensityType = :intensityType,
+            intensityValue = :intensityValue
+        WHERE planId = :planId AND orderInPlan = :orderInPlan
+    """)
     suspend fun updateComponentStructure(
         planId: Long,
         orderInPlan: Int,
-        blockType: com.example.safitness.core.BlockType?,
+        blockType: BlockType?,
         rounds: Int?,
         durationSec: Int?,
         emomIntervalSec: Int?,
-        movement: com.example.safitness.core.MovementPattern?,
+        movement: MovementPattern?,
         reps: Int?,
         intensityType: String?,
         intensityValue: Float?
     ): Int
 
-    @Transaction
+    /* ----- Focus ranking (NEW) ----- */
+
+    data class MetconPlanHit(
+        val planId: Long,
+        val hitCount: Int
+    )
+
     @Query("""
-        SELECT mc.* FROM metcon_component mc
-        WHERE (:blockType IS NULL OR mc.blockType = :blockType)
-          AND (:movement IS NULL OR mc.movement = :movement)
-          AND EXISTS (
-            SELECT 1 FROM metcon_component_muscle mcm
-            WHERE mcm.componentId = mc.id AND mcm.muscle IN (:muscles)
-          )
-          AND EXISTS (
-            SELECT 1 FROM metcon_component_equipment mce
-            WHERE mce.componentId = mc.id AND mce.equipment IN (:equipment)
-          )
-        ORDER BY mc.orderInPlan ASC
+         SELECT mc.planId AS planId,
+                   COUNT(mc.id) 
+                   + CASE WHEN (:focus IS NOT NULL AND p.focusWorkoutType = :focus) THEN 100 ELSE 0 END
+                   AS hitCount
+            FROM metcon_component mc
+            JOIN metcon_plan p ON p.id = mc.planId
+            LEFT JOIN metcon_component_equipment mce ON mce.componentId = mc.id
+            WHERE (:blockType IS NULL OR mc.blockType = :blockType)
+              AND (:movementFilterEmpty = 1 OR mc.movement IN (:movements))
+              AND (mce.equipment IS NULL OR mce.equipment IN (:availableEquipment))
+            GROUP BY mc.planId
+            ORDER BY hitCount DESC
+            LIMIT :limit
     """)
+    suspend fun rankPlansForFocus(
+        blockType: BlockType?,
+        movements: List<MovementPattern>,
+        movementFilterEmpty: Int,
+        availableEquipment: List<Equipment>,
+        focus: WorkoutType?,
+        limit: Int = 5
+    ): List<MetconPlanHit>
+
+    @Query("""
+    SELECT mc.* FROM metcon_component mc
+    WHERE (:blockType IS NULL OR mc.blockType = :blockType)
+      AND (:movement IS NULL OR mc.movement = :movement)
+      AND EXISTS (
+        SELECT 1 FROM metcon_component_muscle mcm
+        WHERE mcm.componentId = mc.id AND mcm.muscle IN (:muscles)
+      )
+      AND EXISTS (
+        SELECT 1 FROM metcon_component_equipment mce
+        WHERE mce.componentId = mc.id AND mce.equipment IN (:equipment)
+      )
+    ORDER BY mc.orderInPlan ASC
+""")
     suspend fun filterComponents(
         blockType: com.example.safitness.core.BlockType?,
         movement: com.example.safitness.core.MovementPattern?,

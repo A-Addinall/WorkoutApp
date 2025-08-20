@@ -23,8 +23,7 @@ data class GenerateRequest(
 data class ExerciseSpec(
     val exerciseId: Long,                 // must refer to Exercise.id in DB
     val sets: Int,
-    val repsMin: Int,
-    val repsMax: Int,
+    val targetReps: Int,
     val intensityType: String? = null,    // "RPE", "%1RM", "LOAD"
     val intensityValue: Float? = null
 )

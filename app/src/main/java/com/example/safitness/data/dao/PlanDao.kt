@@ -268,4 +268,17 @@ interface PlanDao {
     @Query("SELECT refId FROM day_item WHERE dayPlanId = :dayPlanId AND itemType = 'SKILL'")
     suspend fun skillItemIdsForDay(dayPlanId: Long): List<Long>
 
+    // PlanDao.kt
+    @Query("DELETE FROM day_item WHERE dayPlanId = :dayPlanId AND itemType = 'STRENGTH'")
+    suspend fun clearStrength(dayPlanId: Long)
+
+    // Clear only METCON items for a given day
+    @Query("DELETE FROM day_item WHERE dayPlanId = :dayPlanId AND itemType = 'METCON'")
+    suspend fun clearMetcon(dayPlanId: Long)
+
+    // Next sort order across ALL items (strength + metcon)
+    @Query("SELECT COALESCE(MAX(sortOrder), -1) + 1 FROM day_item WHERE dayPlanId = :dayPlanId")
+    suspend fun nextSortOrder(dayPlanId: Long): Int
+
+
 }

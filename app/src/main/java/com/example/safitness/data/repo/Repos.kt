@@ -18,4 +18,6 @@ object Repos {
     // NEW: expose raw DAOs so MainActivity can use them
     fun planDao(context: Context) = AppDatabase.get(context).planDao()
     fun libraryDao(context: Context) = AppDatabase.get(context).libraryDao()
+
+    fun metconDao(context: Context) = AppDatabase.get(context).metconDao()
 }

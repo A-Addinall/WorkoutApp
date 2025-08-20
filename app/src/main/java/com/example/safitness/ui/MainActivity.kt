@@ -40,27 +40,65 @@ class MainActivity : AppCompatActivity() {
             lifecycleScope.launch {
                 val repo = PlannerRepository(
                     planDao = Repos.planDao(this@MainActivity),
-                    libraryDao = Repos.libraryDao(this@MainActivity)
+                    libraryDao = Repos.libraryDao(this@MainActivity),
+                    metconDao = Repos.metconDao(this@MainActivity)
                 )
 
                 val suggestions = repo.generateSuggestionsForDay(
                     dayIndex = 1,
-                    focus = WorkoutType.PUSH,
-                    availableEq = listOf(Equipment.DUMBBELL, Equipment.BODYWEIGHT)
+                    focus = com.example.safitness.core.WorkoutType.PUSH,
+                    availableEq = listOf(
+                        com.example.safitness.core.Equipment.DUMBBELL,
+                        com.example.safitness.core.Equipment.BODYWEIGHT
+                    )
                 )
-                val summary = suggestions.joinToString { s ->
-                    "${s.exercise.name} ${s.repsMin}-${s.repsMax} x${s.targetSets}"
-                }
-                val db = com.example.safitness.data.db.AppDatabase.get(this@MainActivity)
-                android.util.Log.d("PLANNER", "muscles=${db.exerciseMetadataDao().countMuscles()} eqLinks=${db.exerciseMetadataDao().countExerciseEquipment()}")
 
-                android.util.Log.d("PLANNER", "SUGGESTIONS: $summary")
+                // 👇 actually write them into the day plan
+                repo.persistSuggestionsToDay(dayIndex = 1, suggestions)
 
                 // Optional: persist so current UI shows them
-                // repo.persistSuggestionsToDay(dayIndex = 1, suggestions)
-                // Toast.makeText(this@MainActivity, "Day 1 autoloaded (${suggestions.size})", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@MainActivity, "Day 1 autoloaded (${suggestions.size})", Toast.LENGTH_SHORT).show()
             }
         }
+        lifecycleScope.launch {
+            val repo = com.example.safitness.data.repo.PlannerRepository(
+                planDao = com.example.safitness.data.repo.Repos.planDao(this@MainActivity),
+                libraryDao = com.example.safitness.data.repo.Repos.libraryDao(this@MainActivity),
+                metconDao = com.example.safitness.data.repo.Repos.metconDao(this@MainActivity) // NEW helper or use AppDatabase.get(...).metconDao()
+            )
+
+            val focus = com.example.safitness.core.WorkoutType.PUSH
+            val eq = listOf(
+                com.example.safitness.core.Equipment.DUMBBELL,
+                com.example.safitness.core.Equipment.BODYWEIGHT
+            )
+
+            // Strength
+            val suggestions = repo.generateSuggestionsForDay(
+                dayIndex = 1,
+                focus = focus,
+                availableEq = eq
+            )
+            repo.persistSuggestionsToDay(dayIndex = 1, suggestions, replaceStrength = true)
+
+            // Metcon (match focus)
+            val planId = repo.pickMetconPlanIdForFocus(
+                focus = focus,
+                availableEq = eq,
+                preferredBlock = null // or BlockType.AMRAP / EMOM if you want to force a style
+            )
+            if (planId != null) {
+                repo.persistMetconPlanToDay(dayIndex = 1, planId = planId, replaceMetcon = true, required = true)
+            }
+
+            // Optional: quick count log
+            val pd = com.example.safitness.data.repo.Repos.planDao(this@MainActivity)
+            val phaseId = pd.currentPhaseId() ?: -1
+            val dayPlanId = pd.getPlanId(phaseId, 1, 1) ?: -1
+            val count = pd.countItemsForDay(dayPlanId)
+            android.util.Log.d("PLANNER", "Day1 plan=$dayPlanId items=$count (strength+metcon)")
+        }
+
 
 
         // Ask for notifications permission (Android 13+)
