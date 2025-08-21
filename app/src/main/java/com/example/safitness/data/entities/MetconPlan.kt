@@ -4,6 +4,7 @@ import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.example.safitness.core.MetconType
+import com.example.safitness.core.WorkoutType
 
 /**
  * Stable-identity Metcon plan.
@@ -26,5 +27,6 @@ data class MetconPlan(
     val type: MetconType,
     val durationMinutes: Int? = null,   // used by filters (AMRAP total / EMOM total / FOR_TIME estimate)
     val emomIntervalSec: Int? = null,   // seconds; only meaningful for EMOM
-    val isArchived: Boolean = false
+    val isArchived: Boolean = false,
+    val focusWorkoutType: WorkoutType? = null
 )

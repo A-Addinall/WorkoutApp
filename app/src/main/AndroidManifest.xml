@@ -35,6 +35,9 @@
         <activity android:name=".ui.engine.SkillEmomActivity" />
         <activity android:name=".ui.engine.SkillAmrapActivity" />
         <activity android:name=".ui.engine.SkillForTimeActivity" />
+        <activity
+            android:name=".ui.profile.ProfileActivity"
+            android:exported="false"/>
 
         <activity
             android:name=".ui.MainActivity"

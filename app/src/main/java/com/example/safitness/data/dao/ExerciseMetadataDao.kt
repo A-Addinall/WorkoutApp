@@ -11,4 +11,10 @@ interface ExerciseMetadataDao {
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertAllEquipment(items: List<ExerciseEquipment>)
+
+    @Query("SELECT COUNT(*) FROM exercise_muscle")
+    suspend fun countMuscles(): Int
+
+    @Query("SELECT COUNT(*) FROM exercise_equipment")
+    suspend fun countExerciseEquipment(): Int
 }

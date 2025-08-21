@@ -7,6 +7,7 @@ import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.Button
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.RadioButton
 import android.widget.TextView
@@ -74,6 +75,8 @@ class MetconAmrapActivity : AppCompatActivity() {
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         toolbar.setNavigationOnClickListener { finish() }
         toolbar.title = "AMRAP"
+
+        findViewById<ImageView>(R.id.ivBack).setOnClickListener { finish() }
 
         vm.planWithComponents(planId).observe(this) { pwc ->
             val mins = (pwc?.plan?.durationMinutes ?: 20).coerceAtLeast(1)

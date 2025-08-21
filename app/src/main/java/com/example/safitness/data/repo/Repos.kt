@@ -1,3 +1,4 @@
+// app/src/main/java/com/example/safitness/data/repo/Repos.kt
 package com.example.safitness.data.repo
 
 import android.content.Context
@@ -11,7 +12,14 @@ object Repos {
             sessionDao = sessionDao(),
             prDao = personalRecordDao(),
             metconDao = metconDao(),
-            planDao = planDao() // NEW
+            planDao = planDao()
         )
     }
+
+    fun planDao(context: Context) = AppDatabase.get(context).planDao()
+    fun libraryDao(context: Context) = AppDatabase.get(context).libraryDao()
+    fun metconDao(context: Context) = AppDatabase.get(context).metconDao()
+
+    // ✅ correct name: userProfileDao() (lowercase u), no extra params
+    fun userProfileDao(context: Context) = AppDatabase.get(context).userProfileDao()
 }

@@ -3,6 +3,7 @@ package com.example.safitness.ui
 import android.os.Bundle
 import android.os.CountDownTimer
 import android.widget.Button
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.RadioButton
 import android.widget.TextView
@@ -53,6 +54,8 @@ class MetconEmomActivity : AppCompatActivity() {
 
         dayIndex = intent.getIntExtra("DAY_INDEX", 1).coerceIn(1, 5)
         planId = intent.getLongExtra("PLAN_ID", -1L)
+
+        findViewById<ImageView>(R.id.ivBack).setOnClickListener { finish() }
 
         bindViews()
         setSupportActionBar(toolbar)

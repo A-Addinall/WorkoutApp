@@ -1,13 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
     <!-- Header -->
     <LinearLayout
         android:id="@+id/layoutHeader"
-        android:layout_width="match_parent"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:padding="16dp"
@@ -16,14 +17,17 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
+        <!-- Edit on the left -->
         <ImageView
             android:id="@+id/ivBack"
             android:layout_width="24dp"
             android:layout_height="24dp"
-            android:src="@drawable/ic_arrow_back"
             android:contentDescription="@string/back"
+            android:src="@drawable/ic_arrow_back"
             app:tint="?attr/colorOnSurface" />
 
+
+        <!-- Title centered -->
         <TextView
             android:id="@+id/tvWorkoutTitle"
             android:layout_width="0dp"
@@ -32,21 +36,29 @@
             android:text="Workout"
             android:textSize="20sp"
             android:textStyle="bold"
-            android:textColor="?attr/colorOnSurface"
             android:gravity="center"
-            android:layout_marginStart="16dp"
-            android:layout_marginEnd="40dp" />
+            android:layout_marginStart="12dp"
+            android:layout_marginEnd="12dp"
+            tools:text="Tue, 21 Aug 2025" />
+
+        <!-- Back on the right -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnEditDay"
+            style="@style/Widget.Material3.Button"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:text="Edit" />
     </LinearLayout>
 
     <ScrollView
-        android:layout_width="match_parent"
+        android:id="@+id/scrollContent"
+        android:layout_width="0dp"
         android:layout_height="0dp"
         app:layout_constraintTop_toBottomOf="@id/layoutHeader"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
-        <!-- Content area: no forced background; cards inside provide the white surfaces -->
         <LinearLayout
             android:id="@+id/layoutExercises"
             android:layout_width="match_parent"
