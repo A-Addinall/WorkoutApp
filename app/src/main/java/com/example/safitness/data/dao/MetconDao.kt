@@ -234,4 +234,13 @@ interface MetconDao {
         equipment: List<com.example.safitness.core.Equipment>
     ): List<MetconComponent>
 
+    @Query("""
+    SELECT * FROM metcon_log
+    WHERE dateEpochDay = :epochDay
+    ORDER BY createdAt DESC
+    LIMIT 1
+""")
+    fun lastForDate(epochDay: Long): Flow<MetconLog?>
+
+
 }

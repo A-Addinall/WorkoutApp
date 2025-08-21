@@ -6,6 +6,7 @@ import androidx.room.PrimaryKey
 @Entity(tableName = "engine_logs")
 data class EngineLogEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val dateEpochDay: Long,
     val createdAtEpochSec: Long = System.currentTimeMillis() / 1000,
 
     val mode: String,        // EngineMode

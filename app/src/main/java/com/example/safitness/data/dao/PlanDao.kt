@@ -279,6 +279,31 @@ interface PlanDao {
     // Next sort order across ALL items (strength + metcon)
     @Query("SELECT COALESCE(MAX(sortOrder), -1) + 1 FROM day_item WHERE dayPlanId = :dayPlanId")
     suspend fun nextSortOrder(dayPlanId: Long): Int
+// --- Date-first lookups ---
+
+    /** Get a plan id for a real calendar date within a specific phase. */
+    @Query("""
+    SELECT id FROM week_day_plan
+    WHERE phaseId = :phaseId AND dateEpochDay = :epochDay
+    LIMIT 1
+""")
+    suspend fun getPlanIdByDateInPhase(phaseId: Long, epochDay: Long): Long?
+
+    /** Reactive variant (phase-scoped). */
+    @Query("""
+    SELECT id FROM week_day_plan
+    WHERE phaseId = :phaseId AND dateEpochDay = :epochDay
+    LIMIT 1
+""")
+    fun flowPlanIdByDateInPhase(phaseId: Long, epochDay: Long): Flow<Long?>
+
+    /** If you know dates are globally unique across phases, this is convenient. */
+    @Query("SELECT id FROM week_day_plan WHERE dateEpochDay = :epochDay LIMIT 1")
+    suspend fun getPlanIdByDate(epochDay: Long): Long?
+
+    /** Reactive variant (global). */
+    @Query("SELECT id FROM week_day_plan WHERE dateEpochDay = :epochDay LIMIT 1")
+    fun flowPlanIdByDate(epochDay: Long): Flow<Long?>
 
 
 }

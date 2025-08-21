@@ -2,15 +2,21 @@
 package com.example.safitness.data.entities
 
 import androidx.room.Entity
-import androidx.room.PrimaryKey
-import com.example.safitness.core.Equipment
+import androidx.room.Index
 
-@Entity
+@Entity(
+    tableName = "ProgramSelection",
+    primaryKeys = ["dayIndex", "exerciseId"],  // keep the legacy PK
+    indices = [
+        Index("dateEpochDay"),                 // allow fast date queries
+        Index(value = ["dateEpochDay", "exerciseId"], unique = false) // optional helper
+    ]
+)
 data class ProgramSelection(
-    @PrimaryKey(autoGenerate = true) val id: Long = 0L,
-    val dayIndex: Int,
-    val exerciseId: Long,
+    val dayIndex: Int,                         // legacy PK part
+    val exerciseId: Long,                      // legacy PK part
+    val dateEpochDay: Long?,                   // NEW: nullable during migration
     val required: Boolean,
-    val preferredEquipment: Equipment?,
-    val targetReps: Int? // selected rep target (3/5/8/10/12/15) or null
+    val preferredEquipment: com.example.safitness.core.Equipment?,
+    val targetReps: Int?
 )

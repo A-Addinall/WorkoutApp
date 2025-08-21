@@ -10,14 +10,14 @@ import androidx.room.PrimaryKey
  */
 @Entity(
     tableName = "week_day_plan",
-    indices = [Index(value = ["phaseId", "weekIndex", "dayIndex"], unique = true)]
+    indices = [Index("dateEpochDay")] // add if not present
+    // Optionally: Index(value = ["phaseId", "dateEpochDay"], unique = true)
 )
 data class WeekDayPlanEntity(
-    @PrimaryKey(autoGenerate = true) val id: Long = 0L,
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val phaseId: Long,
     val weekIndex: Int,
-    val dayIndex: Int, // 1..7; current UI cares about 1..5
-    val displayName: String? = null, // optional “Week 1 Day 1: Lower”
-    // NEW: date attachment (nullable until user picks a start date)
-    val dateEpochDay: Long? = null
+    val dayIndex: Int,
+    val dateEpochDay: Long? // keep nullable during migration; can make non-null later
 )
+

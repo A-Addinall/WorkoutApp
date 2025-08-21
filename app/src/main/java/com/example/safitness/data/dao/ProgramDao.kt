@@ -61,4 +61,46 @@ interface ProgramDao {
         WHERE ps.dayIndex = :day
     """)
     suspend fun distinctTypesForDay(day: Int): List<WorkoutType>
+
+    // -------- Date-first mirrors (additive) --------
+
+    @Transaction
+    @Query("""
+    SELECT e.*, ps.required, ps.preferredEquipment, ps.targetReps
+    FROM Exercise e
+    JOIN ProgramSelection ps ON ps.exerciseId = e.id
+    WHERE ps.dateEpochDay = :epochDay
+    ORDER BY ps.required DESC, e.name ASC
+""")
+    fun getProgramForDate(epochDay: Long): kotlinx.coroutines.flow.Flow<List<ExerciseWithSelection>>
+
+    @Query("DELETE FROM ProgramSelection WHERE dateEpochDay = :epochDay AND exerciseId = :exerciseId")
+    suspend fun removeByDate(epochDay: Long, exerciseId: Long)
+
+    @Query("UPDATE ProgramSelection SET required = :required WHERE dateEpochDay = :epochDay AND exerciseId = :exerciseId")
+    suspend fun setRequiredByDate(epochDay: Long, exerciseId: Long, required: Boolean)
+
+    @Query("UPDATE ProgramSelection SET preferredEquipment = :preferred WHERE dateEpochDay = :epochDay AND exerciseId = :exerciseId")
+    suspend fun setPreferredByDate(epochDay: Long, exerciseId: Long, preferred: com.example.safitness.core.Equipment?)
+
+    @Query("UPDATE ProgramSelection SET targetReps = :reps WHERE dateEpochDay = :epochDay AND exerciseId = :exerciseId")
+    suspend fun setTargetRepsByDate(epochDay: Long, exerciseId: Long, reps: Int?)
+
+    @Query("SELECT COUNT(*) FROM ProgramSelection WHERE dateEpochDay = :epochDay AND exerciseId = :exerciseId")
+    suspend fun existsByDate(epochDay: Long, exerciseId: Long): Int
+
+    @Query("SELECT targetReps FROM ProgramSelection WHERE dateEpochDay = :epochDay AND exerciseId = :exerciseId LIMIT 1")
+    suspend fun getTargetRepsByDate(epochDay: Long, exerciseId: Long): Int?
+
+    @Query("SELECT required FROM ProgramSelection WHERE dateEpochDay = :epochDay AND exerciseId = :exerciseId LIMIT 1")
+    suspend fun getRequiredByDate(epochDay: Long, exerciseId: Long): Boolean?
+
+    @Query("""
+    SELECT DISTINCT e.workoutType
+    FROM Exercise e
+    JOIN ProgramSelection ps ON ps.exerciseId = e.id
+    WHERE ps.dateEpochDay = :epochDay
+""")
+    suspend fun distinctTypesForDate(epochDay: Long): List<com.example.safitness.core.WorkoutType>
+
 }
