@@ -222,7 +222,7 @@ class WorkoutActivity : AppCompatActivity() {
         )
     }
 
-    /** ---- Metcon (your proven-good block) ---- */
+    /** ---- Metcon ---- */
     private fun addMetconPlanCards(
         selections: List<SelectionWithPlanAndComponents>
     ) {
@@ -288,7 +288,7 @@ class WorkoutActivity : AppCompatActivity() {
         }
     }
 
-    // ---------------- Engine & Skill workout cards (now with "last" via SharedPreferences) ----------------
+    // ---------------- Engine & Skill workout cards (with "last" via SharedPreferences) ----------------
 
     private fun addEngineWorkoutCard(plan: EnginePlanEntity) {
         val card = layoutInflater.inflate(R.layout.item_engine_workout_card, layoutExercises, false)
