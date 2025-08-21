@@ -30,6 +30,14 @@ import com.example.safitness.ui.engine.SkillForTimeActivity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import android.view.View
+import com.example.safitness.ui.ExerciseLibraryActivity
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import com.google.android.material.button.MaterialButton
+import com.example.safitness.ui.MainActivity.Companion.EXTRA_DATE_EPOCH_DAY
+import com.example.safitness.ui.MainActivity.Companion.EXTRA_DAY_INDEX
+import com.example.safitness.ui.MainActivity.Companion.EXTRA_WORKOUT_NAME
 
 class WorkoutActivity : AppCompatActivity() {
 
@@ -67,7 +75,25 @@ class WorkoutActivity : AppCompatActivity() {
         tvWorkoutTitle.text = workoutName
 
         findViewById<ImageView?>(R.id.ivBack)?.setOnClickListener { finish() }
+// ----- Date-aware title -----
+        val epochDay: Long = intent.getLongExtra(EXTRA_DATE_EPOCH_DAY, LocalDate.now().toEpochDay())
+        val selectedDate: LocalDate = LocalDate.ofEpochDay(epochDay)
 
+// If caller already provided a pretty title we can use it; otherwise format here.
+        val prettyTitle: String = intent.getStringExtra(EXTRA_WORKOUT_NAME)
+            ?: selectedDate.format(DateTimeFormatter.ofPattern("EEE d MMM, yyyy"))
+
+// Your existing title TextView id (kept): tvWorkoutTitle
+        findViewById<TextView>(R.id.tvWorkoutTitle)?.text = prettyTitle
+
+// ----- Edit Day button -> Library (legacy still needs a 1..5 day index) -----
+        findViewById<com.google.android.material.button.MaterialButton?>(R.id.btnEditDay)?.setOnClickListener {
+            val i = Intent(this, ExerciseLibraryActivity::class.java).apply {
+                putExtra(MainActivity.EXTRA_DAY_INDEX, dayIndex)
+                putExtra(MainActivity.EXTRA_DATE_EPOCH_DAY, epochDay)
+            }
+            startActivity(i)
+        }
         lifecycleScope.launch(Dispatchers.IO) {
             if (sessionId == 0L) {
                 sessionId = Repos.workoutRepository(this@WorkoutActivity).startSession(dayIndex)

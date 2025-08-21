@@ -11,23 +11,26 @@ import androidx.cardview.widget.CardView
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.example.safitness.R
-import com.example.safitness.data.entities.UserProfile
-import com.example.safitness.data.repo.Repos
 import com.google.android.material.datepicker.MaterialDatePicker
 import com.google.android.material.snackbar.Snackbar
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
-import java.util.*
-import androidx.lifecycle.lifecycleScope
+import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val REQ_CODE_POST_NOTIFICATIONS = 1001
+
+        // legacy key kept for older code paths (we still set it so nothing else breaks)
+        const val EXTRA_DAY_INDEX = "DAY_INDEX"
+
+        // new keys (date-first)
+        const val EXTRA_DATE_EPOCH_DAY = "DATE_EPOCH_DAY"
+        const val EXTRA_WORKOUT_NAME = "WORKOUT_NAME"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -64,15 +67,9 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(this, com.example.safitness.ui.profile.ProfileActivity::class.java))
         }
 
-        // Generate Program from Profile (stub kept)
+        // Generate Program (placeholder)
         findViewById<CardView>(R.id.cardGenerateProgram).setOnClickListener {
-            lifecycleScope.launch {
-                val userDao = Repos.userProfileDao(this@MainActivity)
-                val profile = userDao.flowProfile().first() ?: UserProfile()
-                val daysToFill = minOf(5, profile.daysPerWeek)
-                // Keep your existing generator wiring if you like; this is just a stub notice.
-                Toast.makeText(this@MainActivity, "Program generation stub (unchanged)", Toast.LENGTH_SHORT).show()
-            }
+            Toast.makeText(this, "Program generation coming next.", Toast.LENGTH_SHORT).show()
         }
 
         // Personal Records
@@ -86,34 +83,38 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** Map a calendar date to your current 1..5 day model (temporary adapter). */
+    /** Open WorkoutActivity for a real date. UI shows the date; we also pass a legacy dayIndex for now. */
     private fun openForDate(date: LocalDate) {
-        // For now, map weekdays -> Day 1..5 and warn on weekends.
-        val dayIndex = when (date.dayOfWeek) {
-            java.time.DayOfWeek.MONDAY -> 1
-            java.time.DayOfWeek.TUESDAY -> 2
-            java.time.DayOfWeek.WEDNESDAY -> 3
-            java.time.DayOfWeek.THURSDAY -> 4
-            java.time.DayOfWeek.FRIDAY -> 5
-            java.time.DayOfWeek.SATURDAY, java.time.DayOfWeek.SUNDAY -> null
-        }
-
+        val dayIndex = mapDateToLegacyDayIndex(date)
         if (dayIndex == null) {
             val prettyDow = date.dayOfWeek.getDisplayName(TextStyle.FULL, Locale.getDefault())
-            Snackbar.make(findViewById(R.id.rootScroll),
+            Snackbar.make(
+                findViewById(R.id.rootScroll),
                 "No programmed workout for $prettyDow yet.",
                 Snackbar.LENGTH_LONG
             ).show()
             return
         }
 
+        val pretty = date.format(DateTimeFormatter.ofPattern("EEE d MMM, yyyy"))
+
         val i = Intent(this, WorkoutActivity::class.java).apply {
-            putExtra("DAY_INDEX", dayIndex)
-            putExtra("WORKOUT_NAME", "Day $dayIndex")
-            // If later you add date-backed storage, also pass:
-            // putExtra("DATE_EPOCH_DAY", date.toEpochDay())
+            putExtra(EXTRA_DATE_EPOCH_DAY, date.toEpochDay())
+            putExtra(EXTRA_WORKOUT_NAME, pretty)
+            // keep sending legacy index so nothing else breaks inside older flows
+            putExtra(EXTRA_DAY_INDEX, dayIndex)
         }
         startActivity(i)
+    }
+
+    /** Temporary adapter while DB is still day-indexed internally. */
+    private fun mapDateToLegacyDayIndex(date: LocalDate): Int? = when (date.dayOfWeek) {
+        java.time.DayOfWeek.MONDAY -> 1
+        java.time.DayOfWeek.TUESDAY -> 2
+        java.time.DayOfWeek.WEDNESDAY -> 3
+        java.time.DayOfWeek.THURSDAY -> 4
+        java.time.DayOfWeek.FRIDAY -> 5
+        else -> null // weekends not yet programmed
     }
 
     // ----- permissions (Android 13+) -----
