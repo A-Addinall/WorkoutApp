@@ -55,20 +55,33 @@ interface MetconDao {
     @Query("SELECT COUNT(*) FROM metcon_plan")
     suspend fun countPlans(): Int
 
-    /* ----- Program selections per day ----- */
+    /* ----- Program selections (legacy table) ----- */
 
+    // Day-index legacy reads (kept for compatibility, repository no longer calls these)
     @Transaction
     @Query("""
         SELECT * FROM program_metcon_selection
         WHERE dayIndex = :day
         ORDER BY displayOrder ASC, id ASC
     """)
+    @Deprecated("Use PlanDao day-item APIs via epochDay")
     fun getMetconsForDay(day: Int): Flow<List<SelectionWithPlanAndComponents>>
+
+    // Date-first reads (new)
+    @Transaction
+    @Query("""
+        SELECT * FROM program_metcon_selection
+        WHERE dateEpochDay = :epochDay
+        ORDER BY displayOrder ASC, id ASC
+    """)
+    fun getMetconsForDate(epochDay: Long): Flow<List<SelectionWithPlanAndComponents>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertSelection(selection: ProgramMetconSelection): Long
 
+    // Day-index legacy mutators (kept but repository avoids them now)
     @Query("DELETE FROM program_metcon_selection WHERE dayIndex = :day AND planId = :planId")
+    @Deprecated("Use PlanDao day-item APIs via epochDay")
     suspend fun removeSelection(day: Int, planId: Long)
 
     @Query("""
@@ -76,6 +89,7 @@ interface MetconDao {
         SET required = :required
         WHERE dayIndex = :day AND planId = :planId
     """)
+    @Deprecated("Use PlanDao day-item APIs via epochDay")
     suspend fun setRequired(day: Int, planId: Long, required: Boolean)
 
     @Query("""
@@ -83,7 +97,26 @@ interface MetconDao {
         SET displayOrder = :orderInDay
         WHERE dayIndex = :day AND planId = :planId
     """)
+    @Deprecated("Use PlanDao day-item APIs via epochDay")
     suspend fun setDisplayOrder(day: Int, planId: Long, orderInDay: Int)
+
+    // Date-first mutators (new)
+    @Query("DELETE FROM program_metcon_selection WHERE dateEpochDay = :epochDay AND planId = :planId")
+    suspend fun removeSelectionByDate(epochDay: Long, planId: Long)
+
+    @Query("""
+        UPDATE program_metcon_selection
+        SET required = :required
+        WHERE dateEpochDay = :epochDay AND planId = :planId
+    """)
+    suspend fun setRequiredByDate(epochDay: Long, planId: Long, required: Boolean)
+
+    @Query("""
+        UPDATE program_metcon_selection
+        SET displayOrder = :orderInDay
+        WHERE dateEpochDay = :epochDay AND planId = :planId
+    """)
+    suspend fun setDisplayOrderByDate(epochDay: Long, planId: Long, orderInDay: Int)
 
     /* ----- Plan-scoped metcon logs ----- */
 
@@ -104,7 +137,16 @@ interface MetconDao {
         ORDER BY createdAt DESC
         LIMIT 1
     """)
+    @Deprecated("Use PlanDao day-item APIs via epochDay")
     fun lastForDay(day: Int): Flow<MetconLog?>
+
+    @Query("""
+        SELECT * FROM metcon_log
+        WHERE dateEpochDay = :epochDay
+        ORDER BY createdAt DESC
+        LIMIT 1
+    """)
+    fun lastForDate(epochDay: Long): Flow<MetconLog?>
 
     /* ----- Convenience helpers ----- */
 
@@ -182,7 +224,7 @@ interface MetconDao {
         intensityValue: Float?
     ): Int
 
-    /* ----- Focus ranking (NEW) ----- */
+    /* ----- Focus ranking (FIXED return type) ----- */
 
     data class MetconPlanHit(
         val planId: Long,
@@ -191,18 +233,18 @@ interface MetconDao {
 
     @Query("""
          SELECT mc.planId AS planId,
-                   COUNT(mc.id) 
-                   + CASE WHEN (:focus IS NOT NULL AND p.focusWorkoutType = :focus) THEN 100 ELSE 0 END
-                   AS hitCount
-            FROM metcon_component mc
-            JOIN metcon_plan p ON p.id = mc.planId
-            LEFT JOIN metcon_component_equipment mce ON mce.componentId = mc.id
-            WHERE (:blockType IS NULL OR mc.blockType = :blockType)
-              AND (:movementFilterEmpty = 1 OR mc.movement IN (:movements))
-              AND (mce.equipment IS NULL OR mce.equipment IN (:availableEquipment))
-            GROUP BY mc.planId
-            ORDER BY hitCount DESC
-            LIMIT :limit
+                COUNT(mc.id)
+                + CASE WHEN (:focus IS NOT NULL AND p.focusWorkoutType = :focus) THEN 100 ELSE 0 END
+                AS hitCount
+           FROM metcon_component mc
+           JOIN metcon_plan p ON p.id = mc.planId
+           LEFT JOIN metcon_component_equipment mce ON mce.componentId = mc.id
+          WHERE (:blockType IS NULL OR mc.blockType = :blockType)
+            AND (:movementFilterEmpty = 1 OR mc.movement IN (:movements))
+            AND (mce.equipment IS NULL OR mce.equipment IN (:availableEquipment))
+       GROUP BY mc.planId
+       ORDER BY hitCount DESC
+          LIMIT :limit
     """)
     suspend fun rankPlansForFocus(
         blockType: BlockType?,
@@ -233,14 +275,4 @@ interface MetconDao {
         muscles: List<com.example.safitness.core.MuscleGroup>,
         equipment: List<com.example.safitness.core.Equipment>
     ): List<MetconComponent>
-
-    @Query("""
-    SELECT * FROM metcon_log
-    WHERE dateEpochDay = :epochDay
-    ORDER BY createdAt DESC
-    LIMIT 1
-""")
-    fun lastForDate(epochDay: Long): Flow<MetconLog?>
-
-
 }

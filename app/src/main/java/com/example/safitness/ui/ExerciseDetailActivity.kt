@@ -103,7 +103,7 @@ class ExerciseDetailActivity : AppCompatActivity() {
         tvLastSuccessful = findViewById(R.id.tvLastSuccessful)
         tvSuggestedWeight = findViewById(R.id.tvSuggestedWeight)
         tvE1rm = findViewById(R.id.tvE1rm)
-        tvBestAtReps = findViewById(R.id.tvBestAtReps) // NEW: bind from XML
+        tvBestAtReps = findViewById(R.id.tvBestAtReps)
 
         layoutSets = findViewById(R.id.layoutSets)
         btnAddSet = findViewById(R.id.btnAddSet)
@@ -202,11 +202,15 @@ class ExerciseDetailActivity : AppCompatActivity() {
                 if (success && repsVal > 0 && weightVal > 0.0) {
                     val preview = vm.previewPrEvent(exerciseId, equipment, repsVal, weightVal)
                     if (firstPr == null && preview != null) firstPr = preview
-                    vm.logStrengthSet(sessionId, exerciseId, equipment, index + 1, repsVal, weightVal, 6.0, true,
-                        etNotes.text?.toString()?.ifBlank { null })
+                    vm.logStrengthSet(
+                        sessionId, exerciseId, equipment, index + 1, repsVal, weightVal, 6.0, true,
+                        etNotes.text?.toString()?.ifBlank { null }
+                    )
                 } else {
-                    vm.logStrengthSet(sessionId, exerciseId, equipment, index + 1, repsVal, weightVal, 9.0, false,
-                        etNotes.text?.toString()?.ifBlank { null })
+                    vm.logStrengthSet(
+                        sessionId, exerciseId, equipment, index + 1, repsVal, weightVal, 9.0, false,
+                        etNotes.text?.toString()?.ifBlank { null }
+                    )
                 }
                 logged++
             }
@@ -291,7 +295,8 @@ class ExerciseDetailActivity : AppCompatActivity() {
     private fun fmtKg(value: Double): String =
         String.format(Locale.UK, "%.1f kg", value)
 
-    // Rest timer banner + sound (unchanged)
+    // ---- Rest timer banner & beep logic (unchanged) ----
+
     private fun ensureBannerInflated() {
         if (findViewById<View>(R.id.restTimerContainer) != null) return
 

@@ -34,7 +34,6 @@ import android.view.View
 import com.example.safitness.ui.ExerciseLibraryActivity
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
-import com.google.android.material.button.MaterialButton
 import com.example.safitness.ui.MainActivity.Companion.EXTRA_DATE_EPOCH_DAY
 import com.example.safitness.ui.MainActivity.Companion.EXTRA_DAY_INDEX
 import com.example.safitness.ui.MainActivity.Companion.EXTRA_WORKOUT_NAME
@@ -67,26 +66,22 @@ class WorkoutActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_workout)
 
-        dayIndex = intent.getIntExtra("DAY_INDEX", 1).coerceIn(1, 5)
-        workoutName = intent.getStringExtra("WORKOUT_NAME") ?: "Day $dayIndex"
+        dayIndex = intent.getIntExtra(EXTRA_DAY_INDEX, 1).coerceIn(1, 5)
+        workoutName = intent.getStringExtra(EXTRA_WORKOUT_NAME) ?: "Day $dayIndex"
 
         tvWorkoutTitle = findViewById(R.id.tvWorkoutTitle)
         layoutExercises = findViewById(R.id.layoutExercises)
-        tvWorkoutTitle.text = workoutName
 
-        findViewById<ImageView?>(R.id.ivBack)?.setOnClickListener { finish() }
-// ----- Date-aware title -----
+        // ----- Date-aware title -----
         val epochDay: Long = intent.getLongExtra(EXTRA_DATE_EPOCH_DAY, LocalDate.now().toEpochDay())
         val selectedDate: LocalDate = LocalDate.ofEpochDay(epochDay)
-
-// If caller already provided a pretty title we can use it; otherwise format here.
         val prettyTitle: String = intent.getStringExtra(EXTRA_WORKOUT_NAME)
             ?: selectedDate.format(DateTimeFormatter.ofPattern("EEE d MMM, yyyy"))
+        tvWorkoutTitle.text = prettyTitle
 
-// Your existing title TextView id (kept): tvWorkoutTitle
-        findViewById<TextView>(R.id.tvWorkoutTitle)?.text = prettyTitle
+        findViewById<ImageView?>(R.id.ivBack)?.setOnClickListener { finish() }
 
-// ----- Edit Day button -> Library (legacy still needs a 1..5 day index) -----
+        // ----- Edit Day button -> Library (legacy still needs a 1..5 day index) -----
         findViewById<com.google.android.material.button.MaterialButton?>(R.id.btnEditDay)?.setOnClickListener {
             val i = Intent(this, ExerciseLibraryActivity::class.java).apply {
                 putExtra(MainActivity.EXTRA_DAY_INDEX, dayIndex)
@@ -94,22 +89,29 @@ class WorkoutActivity : AppCompatActivity() {
             }
             startActivity(i)
         }
+
+        // Start a session (repository records the actual date internally)
         lifecycleScope.launch(Dispatchers.IO) {
             if (sessionId == 0L) {
                 sessionId = Repos.workoutRepository(this@WorkoutActivity).startSession(dayIndex)
             }
         }
 
-        vm.programForDay.observe(this) { items ->
+        // ---------- DATE-FIRST DATA SOURCES ----------
+        // Strength (by date, falls back to legacy weekday if no day plan exists)
+        Repos.workoutRepository(this).programForDate(epochDay).asLiveData().observe(this) { items ->
             lastProgramItems = items ?: emptyList()
             rebuildWorkoutUi()
         }
-        vm.metconsForDay.observe(this) { selections ->
+
+        // Metcons (by date, falls back to legacy selection-by-date)
+        Repos.workoutRepository(this).metconsForDate(epochDay).asLiveData().observe(this) { selections ->
             lastMetconSelections = selections ?: emptyList()
             rebuildWorkoutUi()
         }
 
-        Repos.workoutRepository(this).enginePlanIdsForDay(dayIndex).asLiveData()
+        // Engine / Skill plan IDs for the date, then load details from their DAOs
+        Repos.workoutRepository(this).enginePlanIdsForDate(epochDay).asLiveData()
             .observe(this) { ids ->
                 lifecycleScope.launch {
                     lastEnginePlans = fetchEnginePlansByIds(ids ?: emptySet())
@@ -117,7 +119,7 @@ class WorkoutActivity : AppCompatActivity() {
                 }
             }
 
-        Repos.workoutRepository(this).skillPlanIdsForDay(dayIndex).asLiveData()
+        Repos.workoutRepository(this).skillPlanIdsForDate(epochDay).asLiveData()
             .observe(this) { ids ->
                 lifecycleScope.launch {
                     lastSkillPlans = fetchSkillPlansByIds(ids ?: emptySet())
@@ -125,7 +127,7 @@ class WorkoutActivity : AppCompatActivity() {
                 }
             }
 
-        vm.setDay(dayIndex)
+        // (No need to call vm.setDay(...) any more; everything is date-first here.)
     }
 
     /** Rebuild the whole list with collapsible sections. */
@@ -273,7 +275,8 @@ class WorkoutActivity : AppCompatActivity() {
                 })
             }
 
-            vm.lastMetconForPlan(plan.id).observe(this) { last ->
+            // Observe directly from repository to avoid ViewModel dependency changes
+            Repos.workoutRepository(this).lastMetconForPlan(plan.id).asLiveData().observe(this) { last ->
                 tvLast.text = when (last?.type) {
                     "FOR_TIME" -> {
                         val sec = last.timeSeconds ?: 0
@@ -302,8 +305,8 @@ class WorkoutActivity : AppCompatActivity() {
                     title.contains("emom")  -> Intent(this, MetconEmomActivity::class.java)
                     else                    -> Intent(this, MetconActivity::class.java) // For Time
                 }.apply {
-                    putExtra("DAY_INDEX", dayIndex)
-                    putExtra("WORKOUT_NAME", workoutName)
+                    putExtra(EXTRA_DAY_INDEX, dayIndex)
+                    putExtra(EXTRA_WORKOUT_NAME, workoutName)
                     putExtra("PLAN_ID", plan.id)
                     putExtra("DURATION_MINUTES", plan.durationMinutes)
                 }
@@ -346,8 +349,10 @@ class WorkoutActivity : AppCompatActivity() {
             val titleL = plan.title.lowercase()
             val intent = when {
                 titleL.contains("emom") -> Intent(this, EngineEmomActivity::class.java).apply {
-                    putExtra("ENGINE_EMOM_UNIT",
-                        if ((plan.programTargetCalories ?: 0) > 0) "CALORIES" else "METERS")
+                    putExtra(
+                        "ENGINE_EMOM_UNIT",
+                        if ((plan.programTargetCalories ?: 0) > 0) "CALORIES" else "METERS"
+                    )
                 }
                 plan.intent.equals("FOR_TIME", true) ->
                     Intent(this, EngineForTimeActivity::class.java)
@@ -359,8 +364,8 @@ class WorkoutActivity : AppCompatActivity() {
                         )
                     }
             }.apply {
-                putExtra("DAY_INDEX", dayIndex)
-                putExtra("WORKOUT_NAME", workoutName)
+                putExtra(EXTRA_DAY_INDEX, dayIndex)
+                putExtra(EXTRA_WORKOUT_NAME, workoutName)
                 putExtra("PLAN_ID", plan.id)
                 putExtra("DURATION_SECONDS", plan.programDurationSeconds ?: 0)
                 putExtra("TARGET_METERS", plan.programDistanceMeters ?: 0)
@@ -420,8 +425,8 @@ class WorkoutActivity : AppCompatActivity() {
                 else ->
                     Intent(this, SkillAmrapActivity::class.java)
             }.apply {
-                putExtra("DAY_INDEX", dayIndex)
-                putExtra("WORKOUT_NAME", workoutName)
+                putExtra(EXTRA_DAY_INDEX, dayIndex)
+                putExtra(EXTRA_WORKOUT_NAME, workoutName)
                 putExtra("PLAN_ID", plan.id)
                 putExtra("DURATION_SECONDS", plan.targetDurationSeconds ?: 0)
             }

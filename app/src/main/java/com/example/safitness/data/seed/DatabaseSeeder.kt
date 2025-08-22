@@ -40,7 +40,7 @@ object DatabaseSeeder {
                             phaseId = phaseId,
                             weekIndex = w,
                             dayIndex = d,
-                            displayName = "Week $w Day $d"
+                            dateEpochDay = null
                         )
                     )
                 }

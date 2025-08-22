@@ -249,10 +249,6 @@ interface PlanDao {
     """)
     suspend fun updateSkillOrder(dayPlanId: Long, planId: Long, orderInDay: Int)
 
-    /** Count all items already scheduled for a given day-plan. */
-
-    /** Current ENGINE plan IDs scheduled for a given day-plan. */
-
     /** Check if a specific item (by type + refId) already exists for the day. */
     @Query("""
         SELECT COUNT(*) FROM day_item
@@ -268,18 +264,17 @@ interface PlanDao {
     @Query("SELECT refId FROM day_item WHERE dayPlanId = :dayPlanId AND itemType = 'SKILL'")
     suspend fun skillItemIdsForDay(dayPlanId: Long): List<Long>
 
-    // PlanDao.kt
+    // Clear helpers
     @Query("DELETE FROM day_item WHERE dayPlanId = :dayPlanId AND itemType = 'STRENGTH'")
     suspend fun clearStrength(dayPlanId: Long)
 
-    // Clear only METCON items for a given day
     @Query("DELETE FROM day_item WHERE dayPlanId = :dayPlanId AND itemType = 'METCON'")
     suspend fun clearMetcon(dayPlanId: Long)
 
-    // Next sort order across ALL items (strength + metcon)
     @Query("SELECT COALESCE(MAX(sortOrder), -1) + 1 FROM day_item WHERE dayPlanId = :dayPlanId")
     suspend fun nextSortOrder(dayPlanId: Long): Int
-// --- Date-first lookups ---
+
+    // --- Date-first lookups ---
 
     /** Get a plan id for a real calendar date within a specific phase. */
     @Query("""
@@ -304,6 +299,4 @@ interface PlanDao {
     /** Reactive variant (global). */
     @Query("SELECT id FROM week_day_plan WHERE dateEpochDay = :epochDay LIMIT 1")
     fun flowPlanIdByDate(epochDay: Long): Flow<Long?>
-
-
 }
