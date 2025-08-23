@@ -212,6 +212,34 @@ object SkillLibrarySeeder {
             )
         )
         repo.upsert(ctbAmrap, ctbAmrapComps)
+        // Kipping Pull-Up — EMOM 10:00 (5 reps)
+        repo.upsert(
+            SkillPlanEntity(
+                title = "Kipping Pull-Up — EMOM 10:00 (5 reps)",
+                skill = "KIPPING_PULL_UP",
+                description = "Technique under small density.",
+                defaultTestType = "EMOM",
+                targetDurationSeconds = 10 * 60,
+                rxNotes = "Smooth beat swing; timing first.",
+                scaledNotes = "Jumping PU / banded."
+            ),
+            listOf(SkillComponentEntity(0,0,1,"Main Set","EMOM 10:00 — 5 reps","FOR_TIME_REPS", targetReps = 5))
+        )
+
+// Double-Unders — Ladder 10→50 by 10
+        repo.upsert(
+            SkillPlanEntity(
+                title = "Double-Unders — Ladder 10→50 by 10",
+                skill = "DOUBLE_UNDER",
+                description = "Short sets; composure over speed.",
+                defaultTestType = "FOR_TIME_REPS",
+                targetDurationSeconds = 300,
+                rxNotes = "Relaxed shoulders; wrists drive.",
+                scaledNotes = "Singles x2."
+            ),
+            listOf(SkillComponentEntity(0,0,1,"Main Set","10,20,30,40,50 DU","FOR_TIME_REPS", targetReps = 150))
+        )
+
 
         Log.d(TAG, "Skill seed complete.")
     }

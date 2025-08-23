@@ -157,6 +157,49 @@
             android:text="45"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"/>
+        <!-- Engine preference -->
+        <TextView
+            android:text="Include Engine sessions"
+            android:textStyle="bold"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"/>
+        <CheckBox
+            android:id="@+id/cbIncludeEngine"
+            android:text="Yes, include Engine work"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"/>
+
+        <!-- Engine modes -->
+        <TextView
+            android:text="Engine modes"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"/>
+        <LinearLayout
+            android:orientation="horizontal"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+            <CheckBox android:id="@+id/cbModeRun" android:text="Run"  android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"/>
+            <CheckBox android:id="@+id/cbModeRow" android:text="Row"  android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"/>
+            <CheckBox android:id="@+id/cbModeBike" android:text="Bike" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"/>
+        </LinearLayout>
+
+        <!-- Skill focus -->
+        <TextView
+            android:text="Skill focus"
+            android:textStyle="bold"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"/>
+        <LinearLayout
+            android:orientation="vertical"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+            <CheckBox android:id="@+id/cbSkillDU"    android:text="Double-Unders"     android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+            <CheckBox android:id="@+id/cbSkillHSPU"  android:text="Handstand Push-Up" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+            <CheckBox android:id="@+id/cbSkillHS"    android:text="Handstand Hold"    android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+            <CheckBox android:id="@+id/cbSkillTTB"   android:text="Toes-to-Bar"       android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+            <CheckBox android:id="@+id/cbSkillBMU"   android:text="Bar Muscle-Up"     android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+            <CheckBox android:id="@+id/cbSkillKPU"   android:text="Kipping Pull-Up"   android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+        </LinearLayout>
 
         <!-- Explicit training days -->
         <TextView

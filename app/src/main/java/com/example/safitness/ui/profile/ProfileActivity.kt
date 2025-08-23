@@ -16,61 +16,115 @@ import java.time.DayOfWeek
 
 class ProfileActivity : AppCompatActivity() {
 
-    private lateinit var rgGoal: RadioGroup
-    private lateinit var rgExperience: RadioGroup
-
     // Equipment
-    private lateinit var cbBody: CheckBox; private lateinit var cbDb: CheckBox; private lateinit var cbKb: CheckBox
-    private lateinit var cbBb: CheckBox;  private lateinit var cbCable: CheckBox; private lateinit var cbMachine: CheckBox; private lateinit var cbBand: CheckBox
+    private lateinit var cbBody: CheckBox
+    private lateinit var cbDb: CheckBox
+    private lateinit var cbKb: CheckBox
+    private lateinit var cbBb: CheckBox
+    private lateinit var cbCable: CheckBox
+    private lateinit var cbMachine: CheckBox
+    private lateinit var cbBand: CheckBox
 
-    // Weeks / Minutes
-    private lateinit var seekMinutes: SeekBar; private lateinit var tvMinutes: TextView
-    private lateinit var seekWeeks: SeekBar;   private lateinit var tvWeeks: TextView
+    // Engine
+    private lateinit var cbIncludeEngine: CheckBox
+    private lateinit var cbModeRun: CheckBox
+    private lateinit var cbModeRow: CheckBox
+    private lateinit var cbModeBike: CheckBox
 
-    // Days
-    private lateinit var cbMon: CheckBox; private lateinit var cbTue: CheckBox; private lateinit var cbWed: CheckBox
-    private lateinit var cbThu: CheckBox; private lateinit var cbFri: CheckBox; private lateinit var cbSat: CheckBox; private lateinit var cbSun: CheckBox
+    // Skills
+    private lateinit var cbSkillDU: CheckBox
+    private lateinit var cbSkillHSPU: CheckBox
+    private lateinit var cbSkillHS: CheckBox
+    private lateinit var cbSkillTTB: CheckBox
+    private lateinit var cbSkillBMU: CheckBox
+    private lateinit var cbSkillKPU: CheckBox
+
+    // Explicit days
+    private lateinit var cbMon: CheckBox
+    private lateinit var cbTue: CheckBox
+    private lateinit var cbWed: CheckBox
+    private lateinit var cbThu: CheckBox
+    private lateinit var cbFri: CheckBox
+    private lateinit var cbSat: CheckBox
+    private lateinit var cbSun: CheckBox
+
+    // Duration controls
+    private lateinit var seekMinutes: SeekBar
+    private lateinit var tvMinutes: TextView
+    private lateinit var seekWeeks: SeekBar
+    private lateinit var tvWeeks: TextView
 
     private lateinit var btnSave: Button
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_profile)
 
-        rgGoal = findViewById(R.id.rgGoal)
-        rgExperience = findViewById(R.id.rgExperience)
-
+        // Equipment
         cbBody = findViewById(R.id.cbEqBodyweight)
-        cbDb   = findViewById(R.id.cbEqDumbbell)
-        cbKb   = findViewById(R.id.cbEqKettlebell)
-        cbBb   = findViewById(R.id.cbEqBarbell)
-        cbCable= findViewById(R.id.cbEqCable)
-        cbMachine=findViewById(R.id.cbEqMachine)
+        cbDb = findViewById(R.id.cbEqDumbbell)
+        cbKb = findViewById(R.id.cbEqKettlebell)
+        cbBb = findViewById(R.id.cbEqBarbell)
+        cbCable = findViewById(R.id.cbEqCable)
+        cbMachine = findViewById(R.id.cbEqMachine)
         cbBand = findViewById(R.id.cbEqBand)
 
-        seekWeeks   = findViewById(R.id.seekWeeks)
-        tvWeeks     = findViewById(R.id.tvWeeksValue)
+        // Engine + modes
+        cbIncludeEngine = findViewById(R.id.cbIncludeEngine)
+        cbModeRun = findViewById(R.id.cbModeRun)
+        cbModeRow = findViewById(R.id.cbModeRow)
+        cbModeBike = findViewById(R.id.cbModeBike)
+
+        // Skills
+        cbSkillDU = findViewById(R.id.cbSkillDU)
+        cbSkillHSPU = findViewById(R.id.cbSkillHSPU)
+        cbSkillHS = findViewById(R.id.cbSkillHS)
+        cbSkillTTB = findViewById(R.id.cbSkillTTB)
+        cbSkillBMU = findViewById(R.id.cbSkillBMU)
+        cbSkillKPU = findViewById(R.id.cbSkillKPU)
+
+        // Days
+        cbMon = findViewById(R.id.cbMon); cbTue = findViewById(R.id.cbTue); cbWed =
+            findViewById(R.id.cbWed)
+        cbThu = findViewById(R.id.cbThu); cbFri = findViewById(R.id.cbFri); cbSat =
+            findViewById(R.id.cbSat)
+        cbSun = findViewById(R.id.cbSun)
+
+        // Duration
         seekMinutes = findViewById(R.id.seekMinutes)
-        tvMinutes   = findViewById(R.id.tvMinutesValue)
-
-        cbMon = findViewById(R.id.cbMon); cbTue = findViewById(R.id.cbTue); cbWed = findViewById(R.id.cbWed)
-        cbThu = findViewById(R.id.cbThu); cbFri = findViewById(R.id.cbFri); cbSat = findViewById(R.id.cbSat); cbSun = findViewById(R.id.cbSun)
-
-        // SeekBars
-        tvWeeks.text = (seekWeeks.progress + 1).toString()
-        seekWeeks.setOnSeekBarChangeListener(simpleSeek { p -> tvWeeks.text = (p + 1).toString() })
+        tvMinutes = findViewById(R.id.tvMinutesValue)
+        seekWeeks = findViewById(R.id.seekWeeks)
+        tvWeeks = findViewById(R.id.tvWeeksValue)
+        btnSave = findViewById(R.id.btnSaveProfile)
 
         tvMinutes.text = (seekMinutes.progress + 20).toString()
-        seekMinutes.setOnSeekBarChangeListener(simpleSeek { p -> tvMinutes.text = (p + 20).toString() })
+        tvWeeks.text = (seekWeeks.progress + 1).toString()
 
-        // Load profile
+        seekMinutes.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: SeekBar?, p: Int, fromUser: Boolean) {
+                tvMinutes.text = (p + 20).toString()
+            }
+
+            override fun onStartTrackingTouch(p0: SeekBar?) {}
+            override fun onStopTrackingTouch(p0: SeekBar?) {}
+        })
+        seekWeeks.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: SeekBar?, p: Int, fromUser: Boolean) {
+                tvWeeks.text = (p + 1).toString()
+            }
+
+            override fun onStartTrackingTouch(p0: SeekBar?) {}
+            override fun onStopTrackingTouch(p0: SeekBar?) {}
+        })
+
+        // Load existing profile
         lifecycleScope.launch {
             val dao = Repos.userProfileDao(this@ProfileActivity)
             val profile = dao.flowProfile().first() ?: UserProfile()
             bindProfile(profile)
         }
 
-        btnSave = findViewById(R.id.btnSaveProfile)
         btnSave.setOnClickListener {
             lifecycleScope.launch {
                 val dao = Repos.userProfileDao(this@ProfileActivity)
@@ -82,127 +136,148 @@ class ProfileActivity : AppCompatActivity() {
         }
     }
 
+
     private fun simpleSeek(onChange: (Int) -> Unit) = object : SeekBar.OnSeekBarChangeListener {
-        override fun onProgressChanged(sb: SeekBar?, p: Int, fromUser: Boolean) { onChange(p) }
+        override fun onProgressChanged(sb: SeekBar?, p: Int, fromUser: Boolean) {
+            onChange(p)
+        }
+
         override fun onStartTrackingTouch(p0: SeekBar?) {}
         override fun onStopTrackingTouch(p0: SeekBar?) {}
     }
 
     private fun bindProfile(p: UserProfile) {
         // Goal
-        when (p.goal) {
-            Goal.STRENGTH        -> findViewById<RadioButton>(R.id.rbGoalStrength).isChecked = true
-            Goal.HYPERTROPHY     -> findViewById<RadioButton>(R.id.rbGoalHypertrophy).isChecked = true
-            Goal.ENDURANCE       -> findViewById<RadioButton>(R.id.rbGoalEndurance).isChecked = true
-            Goal.RECOMP, Goal.GENERAL_FITNESS -> { /* leave default */ }
-        }
+        findViewById<RadioButton>(R.id.rbGoalStrength).isChecked = p.goal == Goal.STRENGTH
+        findViewById<RadioButton>(R.id.rbGoalHypertrophy).isChecked = p.goal == Goal.HYPERTROPHY
+        findViewById<RadioButton>(R.id.rbGoalEndurance).isChecked = p.goal == Goal.ENDURANCE
+
         // Experience
-        when (p.experience) {
-            ExperienceLevel.BEGINNER     -> findViewById<RadioButton>(R.id.rbExpBeginner).isChecked = true
-            ExperienceLevel.INTERMEDIATE -> findViewById<RadioButton>(R.id.rbExpIntermediate).isChecked = true
-            ExperienceLevel.ADVANCED     -> findViewById<RadioButton>(R.id.rbExpAdvanced).isChecked = true
-        }
-        // Equipment
-        val eq = (p.equipmentCsv ?: "").split(',').filter { it.isNotBlank() }.toSet()
-        cbBody.isChecked    = eq.contains(Equipment.BODYWEIGHT.name)
-        cbDb.isChecked      = eq.contains(Equipment.DUMBBELL.name)
-        cbKb.isChecked      = eq.contains(Equipment.KETTLEBELL.name)
-        cbBb.isChecked      = eq.contains(Equipment.BARBELL.name)
-        cbCable.isChecked   = eq.contains(Equipment.CABLE.name)
-        cbMachine.isChecked = eq.contains(Equipment.MACHINE.name)
-        cbBand.isChecked    = eq.contains(Equipment.BAND.name)
+        findViewById<RadioButton>(R.id.rbExpBeginner).isChecked =
+            p.experience == ExperienceLevel.BEGINNER
+        findViewById<RadioButton>(R.id.rbExpIntermediate).isChecked =
+            p.experience == ExperienceLevel.INTERMEDIATE
+        findViewById<RadioButton>(R.id.rbExpAdvanced).isChecked =
+            p.experience == ExperienceLevel.ADVANCED
 
-        // Weeks / Minutes
-        val weeks = (p.programWeeks ?: 4).coerceIn(1, 12)
-        seekWeeks.progress = weeks - 1
-        tvWeeks.text = weeks.toString()
+        // Equipment CSV → checkboxes
+        val eq = (p.equipmentCsv.takeIf { it.isNotBlank() } ?: "BODYWEIGHT").split(',').toSet()
+        cbBody.isChecked = "BODYWEIGHT" in eq
+        cbDb.isChecked = "DUMBBELL" in eq
+        cbKb.isChecked = "KETTLEBELL" in eq
+        cbBb.isChecked = "BARBELL" in eq
+        cbCable.isChecked = "CABLE" in eq
+        cbMachine.isChecked = "MACHINE" in eq
+        cbBand.isChecked = "BAND" in eq
 
-        val minutes = (p.sessionMinutes ?: 45).coerceIn(20, 120)
-        seekMinutes.progress = minutes - 20
-        tvMinutes.text = minutes.toString()
+        // Minutes / Weeks
+        seekMinutes.progress = (p.sessionMinutes - 20).coerceIn(0, 100)
+        tvMinutes.text = p.sessionMinutes.toString()
+        seekWeeks.progress = (p.programWeeks - 1).coerceIn(0, 11)
+        tvWeeks.text = p.programWeeks.toString()
 
-        // Days (prefer explicit CSV if present)
-        val days = parseDaysCsv(p.workoutDaysCsv) ?: deriveDaysOfWeek((p.daysPerWeek ?: 3).coerceIn(1,7))
-        cbMon.isChecked = DayOfWeek.MONDAY in days
-        cbTue.isChecked = DayOfWeek.TUESDAY in days
-        cbWed.isChecked = DayOfWeek.WEDNESDAY in days
-        cbThu.isChecked = DayOfWeek.THURSDAY in days
-        cbFri.isChecked = DayOfWeek.FRIDAY in days
-        cbSat.isChecked = DayOfWeek.SATURDAY in days
-        cbSun.isChecked = DayOfWeek.SUNDAY in days
+        // Engine
+        cbIncludeEngine.isChecked = p.includeEngine
+        val modes = parseCsv(p.engineModesCsv)
+        cbModeRun.isChecked = "RUN" in modes
+        cbModeRow.isChecked = "ROW" in modes
+        cbModeBike.isChecked = "BIKE" in modes
+
+        // Skills
+        val skills = parseCsv(p.preferredSkillsCsv)
+        cbSkillDU.isChecked = "DOUBLE_UNDER" in skills
+        cbSkillHSPU.isChecked = "HANDSTAND_PUSH_UP" in skills
+        cbSkillHS.isChecked = "HANDSTAND" in skills
+        cbSkillTTB.isChecked = "TOES_TO_BAR" in skills
+        cbSkillBMU.isChecked = "BAR_MUSCLE_UP" in skills
+        cbSkillKPU.isChecked = "KIPPING_PULL_UP" in skills
+
+        // Days (explicit)
+        bindDayCheckboxes(p.workoutDaysCsv)
     }
+
 
     private fun collectProfileFromUi(): UserProfile {
         val goal = when {
             findViewById<RadioButton>(R.id.rbGoalHypertrophy).isChecked -> Goal.HYPERTROPHY
-            findViewById<RadioButton>(R.id.rbGoalEndurance).isChecked   -> Goal.ENDURANCE
+            findViewById<RadioButton>(R.id.rbGoalEndurance).isChecked -> Goal.ENDURANCE
             else -> Goal.STRENGTH
         }
         val exp = when {
-            findViewById<RadioButton>(R.id.rbExpAdvanced).isChecked     -> ExperienceLevel.ADVANCED
+            findViewById<RadioButton>(R.id.rbExpAdvanced).isChecked -> ExperienceLevel.ADVANCED
             findViewById<RadioButton>(R.id.rbExpIntermediate).isChecked -> ExperienceLevel.INTERMEDIATE
             else -> ExperienceLevel.BEGINNER
         }
-        val eqCsv = buildList {
-            if (cbBody.isChecked) add(Equipment.BODYWEIGHT.name)
-            if (cbDb.isChecked)   add(Equipment.DUMBBELL.name)
-            if (cbKb.isChecked)   add(Equipment.KETTLEBELL.name)
-            if (cbBb.isChecked)   add(Equipment.BARBELL.name)
-            if (cbCable.isChecked)add(Equipment.CABLE.name)
-            if (cbMachine.isChecked)add(Equipment.MACHINE.name)
-            if (cbBand.isChecked) add(Equipment.BAND.name)
+
+        val eq = buildSet {
+            if (cbBody.isChecked) add("BODYWEIGHT")
+            if (cbDb.isChecked) add("DUMBBELL")
+            if (cbKb.isChecked) add("KETTLEBELL")
+            if (cbBb.isChecked) add("BARBELL")
+            if (cbCable.isChecked) add("CABLE")
+            if (cbMachine.isChecked) add("MACHINE")
+            if (cbBand.isChecked) add("BAND")
         }.joinToString(",")
 
-        val selectedDays = buildSet {
-            if (cbMon.isChecked) add(DayOfWeek.MONDAY)
-            if (cbTue.isChecked) add(DayOfWeek.TUESDAY)
-            if (cbWed.isChecked) add(DayOfWeek.WEDNESDAY)
-            if (cbThu.isChecked) add(DayOfWeek.THURSDAY)
-            if (cbFri.isChecked) add(DayOfWeek.FRIDAY)
-            if (cbSat.isChecked) add(DayOfWeek.SATURDAY)
-            if (cbSun.isChecked) add(DayOfWeek.SUNDAY)
-        }
-        val daysCsv = if (selectedDays.isEmpty()) null else selectedDays.joinToString(",") { it.name.take(3) }
+        val minutes = tvMinutes.text.toString().toIntOrNull() ?: 45
+        val weeks = tvWeeks.text.toString().toIntOrNull() ?: 4
 
-        val weeks   = seekWeeks.progress + 1
-        val minutes = seekMinutes.progress + 20
+        val engineModes = buildList {
+            if (cbModeRun.isChecked) add("RUN")
+            if (cbModeRow.isChecked) add("ROW")
+            if (cbModeBike.isChecked) add("BIKE")
+        }.joinToString(",").ifBlank { null }
 
-        // Keep legacy daysPerWeek in sync for older code paths
-        val daysPerWeek = selectedDays.size.coerceIn(1, 7)
+        val skills = buildList {
+            if (cbSkillDU.isChecked) add("DOUBLE_UNDER")
+            if (cbSkillHSPU.isChecked) add("HANDSTAND_PUSH_UP")
+            if (cbSkillHS.isChecked) add("HANDSTAND")
+            if (cbSkillTTB.isChecked) add("TOES_TO_BAR")
+            if (cbSkillBMU.isChecked) add("BAR_MUSCLE_UP")
+            if (cbSkillKPU.isChecked) add("KIPPING_PULL_UP")
+        }.joinToString(",").ifBlank { null }
+
+        val daysCsv = daysCsvFromCheckboxes()
 
         return UserProfile(
             id = 1L,
             goal = goal,
             experience = exp,
-            daysPerWeek = daysPerWeek,
+            daysPerWeek = daysCsv?.split(',')?.size ?: 3, // keep legacy field roughly in sync
             sessionMinutes = minutes,
-            equipmentCsv = eqCsv,
+            equipmentCsv = eq,
             programWeeks = weeks,
-            workoutDaysCsv = daysCsv
+            workoutDaysCsv = daysCsv,
+            includeEngine = cbIncludeEngine.isChecked,
+            engineModesCsv = engineModes,
+            preferredSkillsCsv = skills
         )
     }
 
-    private fun parseDaysCsv(csv: String?): Set<DayOfWeek>? =
-        csv?.split(',')?.mapNotNull { k ->
-            when (k.trim().uppercase()) {
-                "MON","MONDAY" -> DayOfWeek.MONDAY
-                "TUE","TUESDAY"-> DayOfWeek.TUESDAY
-                "WED","WEDNESDAY"-> DayOfWeek.WEDNESDAY
-                "THU","THURSDAY"-> DayOfWeek.THURSDAY
-                "FRI","FRIDAY" -> DayOfWeek.FRIDAY
-                "SAT","SATURDAY"-> DayOfWeek.SATURDAY
-                "SUN","SUNDAY" -> DayOfWeek.SUNDAY
-                else -> null
-            }
-        }?.toSet()?.takeIf { it.isNotEmpty() }
+    private fun parseCsv(csv: String?): Set<String> =
+        csv?.split(',')?.mapNotNull { it.trim().takeIf { it.isNotEmpty() } }?.toSet() ?: emptySet()
 
-    private fun deriveDaysOfWeek(n: Int): Set<DayOfWeek> = when (n.coerceIn(1,7)) {
-        1 -> setOf(DayOfWeek.MONDAY)
-        2 -> setOf(DayOfWeek.MONDAY, DayOfWeek.THURSDAY)
-        3 -> setOf(DayOfWeek.MONDAY, DayOfWeek.WEDNESDAY, DayOfWeek.FRIDAY)
-        4 -> setOf(DayOfWeek.MONDAY, DayOfWeek.TUESDAY, DayOfWeek.THURSDAY, DayOfWeek.FRIDAY)
-        5 -> setOf(DayOfWeek.MONDAY, DayOfWeek.TUESDAY, DayOfWeek.WEDNESDAY, DayOfWeek.THURSDAY, DayOfWeek.FRIDAY)
-        6 -> DayOfWeek.values().toSet() - DayOfWeek.SUNDAY
-        else -> DayOfWeek.values().toSet()
+    private fun bindDayCheckboxes(csv: String?) {
+        val set = parseCsv(csv).map { it.uppercase() }.toSet()
+        cbMon.isChecked = "MON" in set || "MONDAY" in set
+        cbTue.isChecked = "TUE" in set || "TUESDAY" in set
+        cbWed.isChecked = "WED" in set || "WEDNESDAY" in set
+        cbThu.isChecked = "THU" in set || "THURSDAY" in set
+        cbFri.isChecked = "FRI" in set || "FRIDAY" in set
+        cbSat.isChecked = "SAT" in set || "SATURDAY" in set
+        cbSun.isChecked = "SUN" in set || "SUNDAY" in set
+    }
+
+    private fun daysCsvFromCheckboxes(): String? {
+        val days = buildList {
+            if (cbMon.isChecked) add("MON")
+            if (cbTue.isChecked) add("TUE")
+            if (cbWed.isChecked) add("WED")
+            if (cbThu.isChecked) add("THU")
+            if (cbFri.isChecked) add("FRI")
+            if (cbSat.isChecked) add("SAT")
+            if (cbSun.isChecked) add("SUN")
+        }
+        return days.joinToString(",").ifBlank { null }
     }
 }

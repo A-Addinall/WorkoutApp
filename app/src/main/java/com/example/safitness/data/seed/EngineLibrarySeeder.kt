@@ -144,6 +144,48 @@ object EngineLibrarySeeder {
             ),
             listOf(EngineComponentEntity(0,0,1,"Main Set","EMOM 16:00 — 200 m / min"))
         )
+        // RUN — 8×400m (1:1 rest)
+        repo.upsert(
+            EnginePlanEntity(
+                title = "Run — 8×400m (1:1 rest)",
+                mode = EngineMode.RUN.name,
+                intent = EngineIntent.FOR_TIME.name,
+                description = "400s at ~5k pace; walk/jog 400m between.",
+                rxNotes = "Even pacing; last 2 slightly faster.",
+                scaledNotes = "6×400m or 8×300m."
+            ),
+            listOf(
+                EngineComponentEntity(0,0,1,"Main Set","8×400m; 400m easy between")
+            )
+        )
+
+// ROW — 10×250m (rest 1:00)
+        repo.upsert(
+            EnginePlanEntity(
+                title = "Row — 10×250m (rest 1:00)",
+                mode = EngineMode.ROW.name,
+                intent = EngineIntent.FOR_TIME.name,
+                description = "Sharpen power; consistent split.",
+                rxNotes = "Rate 28–32 spm.",
+                scaledNotes = "8×250m."
+            ),
+            listOf(EngineComponentEntity(0,0,1,"Main Set","10×250m; rest 1:00"))
+        )
+
+// BIKE — 5×3:00 hard / 2:00 easy
+        repo.upsert(
+            EnginePlanEntity(
+                title = "Bike — 5×3:00 Hard / 2:00 Easy",
+                mode = EngineMode.BIKE.name,
+                intent = EngineIntent.FOR_DISTANCE.name,
+                programDurationSeconds = (5 * (3 + 2)) * 60,
+                description = "Z4 efforts with Z2 recoveries.",
+                rxNotes = "Cadence > 80 rpm in hard blocks.",
+                scaledNotes = "4× blocks."
+            ),
+            listOf(EngineComponentEntity(0,0,1,"Main Set","5×3:00 hard / 2:00 easy"))
+        )
+
 
         Log.d(TAG, "Engine seed complete.")
     }
