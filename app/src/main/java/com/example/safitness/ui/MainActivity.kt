@@ -85,36 +85,15 @@ class MainActivity : AppCompatActivity() {
 
     /** Open WorkoutActivity for a real date. UI shows the date; we also pass a legacy dayIndex for now. */
     private fun openForDate(date: LocalDate) {
-        val dayIndex = mapDateToLegacyDayIndex(date)
-        if (dayIndex == null) {
-            val prettyDow = date.dayOfWeek.getDisplayName(TextStyle.FULL, Locale.getDefault())
-            Snackbar.make(
-                findViewById(R.id.rootScroll),
-                "No programmed workout for $prettyDow yet.",
-                Snackbar.LENGTH_LONG
-            ).show()
-            return
-        }
-
         val pretty = date.format(DateTimeFormatter.ofPattern("EEE d MMM, yyyy"))
-
         val i = Intent(this, WorkoutActivity::class.java).apply {
             putExtra(EXTRA_DATE_EPOCH_DAY, date.toEpochDay())
             putExtra(EXTRA_WORKOUT_NAME, pretty)
-            // keep sending legacy index so nothing else breaks inside older flows
-            putExtra(EXTRA_DAY_INDEX, dayIndex)
+            // Keep sending a benign legacy index so older flows don't break.
+            // We do NOT gate weekends anymore.
+            putExtra(EXTRA_DAY_INDEX, 1)
         }
         startActivity(i)
-    }
-
-    /** Temporary adapter while DB is still day-indexed internally. */
-    private fun mapDateToLegacyDayIndex(date: LocalDate): Int? = when (date.dayOfWeek) {
-        java.time.DayOfWeek.MONDAY -> 1
-        java.time.DayOfWeek.TUESDAY -> 2
-        java.time.DayOfWeek.WEDNESDAY -> 3
-        java.time.DayOfWeek.THURSDAY -> 4
-        java.time.DayOfWeek.FRIDAY -> 5
-        else -> null // weekends not yet programmed
     }
 
     // ----- permissions (Android 13+) -----

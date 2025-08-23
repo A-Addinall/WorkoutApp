@@ -73,7 +73,7 @@ class WorkoutRepository(
         preferred: com.example.safitness.core.Equipment?,
         targetReps: Int?
     ): Boolean {
-        val dayPlanId = planDao.getPlanIdByDate(epochDay) ?: return false
+        val dayPlanId = ensurePlanForDate(epochDay) ?: return false
         if (planDao.strengthItemCount(dayPlanId, exercise.id) == 0) {
             val order = planDao.nextStrengthSortOrder(dayPlanId)
             planDao.insertItems(
@@ -96,6 +96,7 @@ class WorkoutRepository(
         }
         return true
     }
+
 
     suspend fun removeStrengthFromDate(epochDay: Long, exerciseId: Long): Boolean {
         val dayPlanId = planDao.getPlanIdByDate(epochDay) ?: return false
@@ -440,12 +441,22 @@ class WorkoutRepository(
     }
 
     suspend fun removeMetconFromDate(epochDay: Long, planId: Long): Boolean {
+        // Prefer removing from the date-first plan if one exists for this date
         val dayPlanId = planDao.getPlanIdByDate(epochDay)
-        return if (dayPlanId == null) {
-            metconDao.removeSelectionByDate(epochDay, planId); true
-        } else {
-            planDao.deleteMetconItem(dayPlanId, planId); true
+        if (dayPlanId != null) {
+            // Only delete if this plan is actually attached to the day
+            if (planDao.metconItemCount(dayPlanId, planId) > 0) {
+                planDao.deleteMetconItem(dayPlanId, planId)
+                return true
+            }
+            // If a day plan exists but this metcon isn't there, we fall through to legacy
+            // just in case an old selection was left around.
         }
+
+        // Legacy fallback: remove from the old per-date selection table
+        // (kept for backward compatibility / dates that haven’t been migrated yet)
+        metconDao.removeSelectionByDate(epochDay, planId)
+        return true
     }
 
     suspend fun setMetconRequiredForDate(
@@ -491,7 +502,7 @@ class WorkoutRepository(
         }
 
     suspend fun addEngineToDate(epochDay: Long, planId: Long, required: Boolean, orderInDay: Int): Boolean {
-        val dayPlanId = planDao.getPlanIdByDate(epochDay) ?: return false
+        val dayPlanId = ensurePlanForDate(epochDay) ?: return false
         if (planDao.engineItemCount(dayPlanId, planId) == 0) {
             planDao.insertItems(
                 listOf(
@@ -511,6 +522,7 @@ class WorkoutRepository(
         return true
     }
 
+
     suspend fun removeEngineFromDate(epochDay: Long, planId: Long): Boolean {
         val dayPlanId = planDao.getPlanIdByDate(epochDay) ?: return false
         planDao.deleteEngineItem(dayPlanId, planId); return true
@@ -527,7 +539,7 @@ class WorkoutRepository(
     }
 
     suspend fun addSkillToDate(epochDay: Long, planId: Long, required: Boolean, orderInDay: Int): Boolean {
-        val dayPlanId = planDao.getPlanIdByDate(epochDay) ?: return false
+        val dayPlanId = ensurePlanForDate(epochDay) ?: return false
         if (planDao.skillItemCount(dayPlanId, planId) == 0) {
             planDao.insertItems(
                 listOf(
@@ -546,6 +558,33 @@ class WorkoutRepository(
         }
         return true
     }
+    private suspend fun ensurePlanForDate(epochDay: Long): Long? {
+        planDao.getPlanIdByDate(epochDay)?.let { return it }
+
+        val phaseId = ensurePhase()
+        val row = WeekDayPlanEntity(
+            id = 0L,
+            phaseId = phaseId,
+            weekIndex = 1,
+            dayIndex = 1,
+            dateEpochDay = epochDay
+        )
+        planDao.insertWeekPlans(listOf(row))
+        return planDao.getPlanIdByDate(epochDay)
+    }
+
+    private suspend fun ensurePhase(): Long {
+        planDao.currentPhaseId()?.let { return it }
+        return planDao.insertPhase(
+            PhaseEntity(
+                id = 0L,
+                name = "Auto Phase",
+                startDateEpochDay = java.time.LocalDate.now().toEpochDay(),
+                weeks = 4
+            )
+        )
+    }
+
 
     suspend fun removeSkillFromDate(epochDay: Long, planId: Long): Boolean {
         val dayPlanId = planDao.getPlanIdByDate(epochDay) ?: return false

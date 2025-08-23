@@ -93,7 +93,8 @@ class WorkoutActivity : AppCompatActivity() {
         // Start a session (repository records the actual date internally)
         lifecycleScope.launch(Dispatchers.IO) {
             if (sessionId == 0L) {
-                sessionId = Repos.workoutRepository(this@WorkoutActivity).startSessionForDate(epochDay)
+                sessionId = Repos.workoutRepository(this@WorkoutActivity)
+                    .startSessionForDate(epochDay)
             }
         }
 

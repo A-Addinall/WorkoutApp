@@ -491,25 +491,19 @@ class ExerciseLibraryActivity : AppCompatActivity() {
         }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
-            // Simple row: Title, subtitle (type/duration), primary button
-            val context = parent.context
-            val container = LinearLayout(context).apply {
-                orientation = LinearLayout.VERTICAL
-                setPadding(32, 24, 32, 24)
-            }
-            val title = TextView(context).apply { textSize = 16f }
-            val subtitle = TextView(context).apply { textSize = 12f }
-            val btn = Button(context)
-            container.addView(title)
-            container.addView(subtitle)
-            container.addView(btn)
-            return VH(container, title, subtitle, btn)
+            val v = LayoutInflater.from(parent.context)
+                .inflate(R.layout.item_metcon_plan_row, parent, false)
+            val title = v.findViewById<TextView>(R.id.tvPlanTitle)
+            val subtitle = v.findViewById<TextView>(R.id.tvPlanMeta)  // adjust if your ID differs
+            val btn = v.findViewById<Button>(R.id.btnPlanPrimary)
+            return VH(v, title, subtitle, btn)
         }
 
         override fun onBindViewHolder(holder: VH, position: Int) {
             val plan = items[position]
             val minutes = plan.durationMinutes ?: 0
-            val type = plan.type.name.replace('_', ' ').lowercase().replaceFirstChar { it.titlecase() }
+            val type = plan.type.name.replace('_', ' ').lowercase()
+                .replaceFirstChar { it.titlecase() }
 
             holder.title.text = plan.title ?: "Metcon"
             holder.subtitle.text = "$type • ${minutes}m"
@@ -518,6 +512,7 @@ class ExerciseLibraryActivity : AppCompatActivity() {
             holder.btn.text = if (isAdded) "Remove" else "Add to Day"
             holder.btn.setOnClickListener { onPrimary(plan, isAdded) }
         }
+
 
         override fun getItemCount(): Int = items.size
 
