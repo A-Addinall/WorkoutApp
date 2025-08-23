@@ -14,7 +14,10 @@ data class UserProfile(
     val sessionMinutes: Int = 45,
     val equipmentCsv: String = "BODYWEIGHT",
     val programWeeks: Int = 4, // store as CSV for simplicity
-    val workoutDaysCsv: String? = null
+    val workoutDaysCsv: String? = null,
+    val includeEngine: Boolean = true,
+    val engineModesCsv: String? = null,
+    val preferredSkillsCsv: String? = null,
 
 )
 

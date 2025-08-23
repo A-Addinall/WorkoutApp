@@ -14,7 +14,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.math.abs
 import java.time.LocalDate
-import com.example.safitness.core.BlockType
+import kotlinx.coroutines.flow.first
+import com.example.safitness.data.entities.MetconPlan
+import com.example.safitness.core.MetconType
 import com.example.safitness.core.MovementPattern
 
 class PlannerRepository(
@@ -28,10 +30,12 @@ class PlannerRepository(
     /** Pure suggestion generation (date-agnostic). */
     suspend fun generateSuggestions(
         focus: WorkoutType,
-        availableEq: List<Equipment>
+        availableEq: List<Equipment>,
+        epochDay: Long? = null
     ): List<Suggestion> = planner.suggestFor(
         focus = focus,
-        availableEq = availableEq
+        availableEq = availableEq,
+        epochDay = epochDay
     )
 
     /** Persist strength suggestions for a concrete calendar date. */
@@ -110,6 +114,92 @@ class PlannerRepository(
             )
         }
     }
+    /** Attach/replace a SKILL plan for a concrete calendar date. */
+    suspend fun persistSkillPlanToDate(
+        epochDay: Long,
+        planId: Long,
+        replaceExisting: Boolean = false,
+        required: Boolean = true
+    ) = withContext(Dispatchers.IO) {
+        val phaseId = planDao.currentPhaseId() ?: return@withContext
+        val dayPlanId = planDao.getPlanIdByDateInPhase(phaseId, epochDay)
+            ?: planDao.getPlanIdByDate(epochDay)
+            ?: return@withContext
+
+        if (replaceExisting) {
+            planDao.skillItemIdsForDay(dayPlanId).forEach { existing ->
+                planDao.deleteSkillItem(dayPlanId, existing)
+            }
+        }
+
+        val already = planDao.existsDayItem(dayPlanId, "SKILL", planId) > 0
+        if (!already) {
+            val order = planDao.nextSortOrder(dayPlanId)
+            planDao.insertItems(
+                listOf(
+                    DayItemEntity(
+                        id = 0L,
+                        dayPlanId = dayPlanId,
+                        itemType = "SKILL",
+                        refId = planId,
+                        required = required,
+                        sortOrder = order,
+                        prescriptionJson = null
+                    )
+                )
+            )
+        } else {
+            planDao.updateSkillRequired(dayPlanId, planId, required)
+        }
+    }
+    suspend fun clearStrengthAndMetconForDate(epochDay: Long) = withContext(Dispatchers.IO) {
+        val phaseId = planDao.currentPhaseId() ?: return@withContext
+        val dayPlanId = planDao.getPlanIdByDateInPhase(phaseId, epochDay)
+            ?: planDao.getPlanIdByDate(epochDay)
+            ?: return@withContext
+        planDao.clearStrength(dayPlanId)
+        planDao.clearMetcon(dayPlanId)
+    }
+    /** Attach/replace an ENGINE plan for a concrete calendar date. */
+    suspend fun persistEnginePlanToDate(
+        epochDay: Long,
+        planId: Long,
+        replaceExisting: Boolean = false,
+        required: Boolean = true
+    ) = withContext(Dispatchers.IO) {
+        val phaseId = planDao.currentPhaseId() ?: return@withContext
+        val dayPlanId = planDao.getPlanIdByDateInPhase(phaseId, epochDay)
+            ?: planDao.getPlanIdByDate(epochDay)    // fallback if your dates are globally unique
+            ?: return@withContext // No scaffold for this date -> skip silently (or log)
+
+        if (replaceExisting) {
+            // Clear all existing ENGINE items with the tools you already have
+            planDao.engineItemIdsForDay(dayPlanId).forEach { existing ->
+                planDao.deleteEngineItem(dayPlanId, existing)
+            }
+        }
+
+        // Avoid duplicate insertion
+        val already = planDao.existsDayItem(dayPlanId, "ENGINE", planId) > 0
+        if (!already) {
+            val order = planDao.nextSortOrder(dayPlanId)
+            planDao.insertItems(
+                listOf(
+                    DayItemEntity(
+                        id = 0L,
+                        dayPlanId = dayPlanId,
+                        itemType = "ENGINE",
+                        refId = planId,
+                        required = required,
+                        sortOrder = order,
+                        prescriptionJson = null
+                    )
+                )
+            )
+        } else {
+            planDao.updateEngineRequired(dayPlanId, planId, required)
+        }
+    }
 
     /** One-shot convenience: (re)build a date with strength + metcon. */
     suspend fun regenerateDateWithMetcon(
@@ -118,10 +208,18 @@ class PlannerRepository(
         availableEq: List<Equipment>,
         metconPlanId: Long
     ) = withContext(Dispatchers.IO) {
-        val suggestions = generateSuggestions(focus, availableEq)
+        // Strength variety is already handled inside generateSuggestions -> planner.suggestFor(epochDay)
+        val suggestions = generateSuggestions(
+            focus = focus,
+            availableEq = availableEq,
+            epochDay = epochDay
+        )
+
+        // Persist strength (replace) then metcon (replace)
         persistSuggestionsToDate(epochDay, suggestions, replaceStrength = true)
         persistMetconPlanToDate(epochDay, metconPlanId, replaceMetcon = true, required = true)
     }
+
 
     private suspend fun ensurePlanForDate(epochDay: Long): Long? {
         planDao.getPlanIdByDate(epochDay)?.let { return it }
@@ -195,20 +293,18 @@ class PlannerRepository(
         if (toInsert.isNotEmpty()) planDao.insertItems(toInsert)
 
         // ---------- Metcon ----------
-        resp.metcon?.let { m ->
-            // Prefer to *choose* an existing plan that matches focus & block type
-            val preferredBlock = when (m.blockType) {
-                com.example.safitness.core.BlockType.EMOM     -> com.example.safitness.core.BlockType.EMOM
-                com.example.safitness.core.BlockType.AMRAP    -> com.example.safitness.core.BlockType.AMRAP
-                com.example.safitness.core.BlockType.FOR_TIME -> com.example.safitness.core.BlockType.FOR_TIME
-                else -> null
-            }
-            val planId = pickMetconPlanIdForFocus(focus, availableEq, preferredBlock)
+        // ---------- Metcon ----------
+        resp.metcon?.let {
+            val planId = pickMetconPlanIdForFocus(
+                focus = focus,
+                availableEq = availableEq,
+                epochDay = epochDay            // << use date to make deterministic variety
+            )
             if (planId != null) {
                 persistMetconPlanToDate(epochDay, planId, replaceMetcon = replaceMetcon, required = true)
             }
-            // If no plan matched, we silently skip metcon (keeps UX predictable).
         }
+
     }
 
 
@@ -230,26 +326,34 @@ class PlannerRepository(
         else -> emptyList()
     }
 
+    /** Choose a metcon plan deterministically based on the date, to add variety across the week. */
     suspend fun pickMetconPlanIdForFocus(
-        focus: WorkoutType,
+        focus: com.example.safitness.core.WorkoutType,
         availableEq: List<com.example.safitness.core.Equipment>,
-        preferredBlock: BlockType? = null
-    ): Long? {
-        val movements = focusMovementsFor(focus)
-        val hits = metconDao.rankPlansForFocus(
-            blockType = preferredBlock,
-            movements = movements,
-            movementFilterEmpty = if (movements.isEmpty()) 1 else 0,
-            availableEquipment = if (availableEq.isEmpty()) listOf(
-                com.example.safitness.core.Equipment.BODYWEIGHT,
-                com.example.safitness.core.Equipment.DUMBBELL,
-                com.example.safitness.core.Equipment.KETTLEBELL
-            ) else availableEq,
-            focus = focus,
-            limit = 5
+        epochDay: Long
+    ): Long? = withContext(kotlinx.coroutines.Dispatchers.IO) {
+        // Fetch all (non-archived) plans
+        val plans: List<MetconPlan> =
+            metconDao.getAllPlans().first().filter { !it.isArchived }  // Flow<List<MetconPlan>> -> List<MetconPlan>
+        if (plans.isEmpty()) return@withContext null
+
+        // Gentle bias: AMRAP for PUSH/PULL; FOR_TIME for LEGS_CORE; otherwise neutral
+        val preferredType: MetconType? = when (focus) {
+            com.example.safitness.core.WorkoutType.PUSH,
+            com.example.safitness.core.WorkoutType.PULL -> MetconType.AMRAP
+            com.example.safitness.core.WorkoutType.LEGS_CORE -> MetconType.FOR_TIME
+            else -> null
+        }
+
+        val ranked = plans.sortedWith(
+            compareBy<MetconPlan> { p -> if (preferredType != null && p.type == preferredType) 0 else 1 }
+                .thenBy { it.title }
         )
-        return hits.firstOrNull()?.planId
+
+        val idx = (kotlin.math.abs(epochDay) % ranked.size).toInt()
+        ranked[idx].id
     }
+
 
     private fun pickTargetReps(min: Int, max: Int): Int {
         allowedRepBuckets.firstOrNull { it in min..max }?.let { return it }

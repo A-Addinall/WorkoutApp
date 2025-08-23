@@ -22,7 +22,8 @@ class SimplePlanner(
     suspend fun suggestFor(
         focus: WorkoutType,
         availableEq: List<Equipment>,
-        maxItems: Int = 4
+        maxItems: Int = 4,
+        epochDay: Long? = null        // NEW: deterministic seed for variety
     ): List<Suggestion> {
         val eqPool = if (availableEq.isEmpty()) {
             listOf(Equipment.BARBELL, Equipment.DUMBBELL, Equipment.BODYWEIGHT, Equipment.CABLE, Equipment.KETTLEBELL)
@@ -59,11 +60,23 @@ class SimplePlanner(
             primary: List<MuscleGroup>
         ): Exercise? {
             val list = candidateList(movement, primary)
-            // First unused; if none, allow a different movement to diversify
-            val unused = list.firstOrNull { it.id !in usedIds }
+            if (list.isEmpty()) return null
+
+// rotate deterministically by epochDay (or 0 if null)
+            val seed = kotlin.math.abs((epochDay ?: 0L).toInt())
+            fun <T> rotate(xs: List<T>): List<T> {
+                if (xs.isEmpty()) return xs
+                val off = seed % xs.size
+                return if (off == 0) xs else xs.drop(off) + xs.take(off)
+            }
+
+            val rot = rotate(list)
+
+// first unused in rotated order
+            val unused = rot.firstOrNull { it.id !in usedIds }
             if (unused != null) return unused
 
-            // Try a different movement that still fits the focus
+// try an alternate movement (also rotated)
             val altMovement = when (movement) {
                 MovementPattern.SQUAT -> MovementPattern.LUNGE
                 MovementPattern.LUNGE -> MovementPattern.SQUAT
@@ -75,12 +88,13 @@ class SimplePlanner(
                 else -> null
             }
             if (altMovement != null) {
-                val alt = candidateList(altMovement, primary).firstOrNull { it.id !in usedIds }
+                val alt = rotate(candidateList(altMovement, primary))
+                    .firstOrNull { it.id !in usedIds }
                 if (alt != null) return alt
             }
 
-            // As a last resort, take the first (even if duplicate) so we always return something
-            return list.firstOrNull()
+// last resort: first of rotated
+            return rot.firstOrNull()
         }
 
         fun makeSuggestion(index: Int, ex: Exercise) = when (index) {
