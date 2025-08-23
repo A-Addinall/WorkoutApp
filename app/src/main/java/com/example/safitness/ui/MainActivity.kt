@@ -5,6 +5,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.cardview.widget.CardView
@@ -30,6 +31,8 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.first
+
 
 class MainActivity : AppCompatActivity() {
 
@@ -84,7 +87,7 @@ class MainActivity : AppCompatActivity() {
         findViewById<CardView>(R.id.cardGenerateProgram).setOnClickListener {
             if (generating) return@setOnClickListener
             generating = true
-            runMlAndPersist(LocalDate.now())
+            generatePlanFromProfile(start = java.time.LocalDate.now())
         }
 
         // Personal Records
@@ -142,11 +145,12 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
-    /** Kick off ML generation, persist to the plan for [date], and navigate there. */
+    /** Kick off ML generation, persist to the plan for [date], and (by default) navigate there. */
     private fun runMlAndPersist(date: LocalDate, navigate: Boolean = true) {
-        val root = findViewById<android.view.View>(R.id.rootScroll)
+        val root: View = findViewById<View?>(R.id.rootScroll) ?: findViewById(android.R.id.content)
         val epochDay = date.toEpochDay()
 
+        // 1) Focus-by-day (uses core.WorkoutFocus)
         fun defaultFocusFor(d: LocalDate): WorkoutFocus =
             when (d.dayOfWeek) {
                 java.time.DayOfWeek.MONDAY    -> WorkoutFocus.PUSH
@@ -158,7 +162,7 @@ class MainActivity : AppCompatActivity() {
                 java.time.DayOfWeek.SUNDAY    -> WorkoutFocus.CONDITIONING
             }
 
-        // Map ML focus to your existing core.WorkoutType
+        // 2) Map session focus -> your existing WorkoutType buckets
         fun toCoreType(f: WorkoutFocus): WorkoutType =
             when (f) {
                 WorkoutFocus.PUSH          -> WorkoutType.PUSH
@@ -172,37 +176,44 @@ class MainActivity : AppCompatActivity() {
             }
 
         val focus = defaultFocusFor(date)
-        val user = com.example.safitness.ml.UserContext(
-            goal = com.example.safitness.ml.Goal.GENERAL_FITNESS,
-            experience = com.example.safitness.ml.ExperienceLevel.INTERMEDIATE,
-            availableEquipment = listOf(
-                com.example.safitness.core.Equipment.BARBELL,
-                com.example.safitness.core.Equipment.DUMBBELL,
-                com.example.safitness.core.Equipment.BODYWEIGHT
-            ),
-            sessionMinutes = 45,
-            daysPerWeek = 5
-        )
 
         lifecycleScope.launch {
             try {
+                // 3) Load the user's saved profile (goal, experience, equipment CSV, days/week, minutes)
+                val profile = withContext(Dispatchers.IO) {
+                    Repos.userProfileDao(this@MainActivity).flowProfile().first()   // returns UserProfile?
+                }
+
+                // 4) Build ML user context from profile (fallbacks if unset)
+                val availableEq: List<Equipment> =
+                    parseEquipmentCsv(profile?.equipmentCsv).takeIf { it.isNotEmpty() }
+                        ?: listOf(Equipment.BARBELL, Equipment.DUMBBELL, Equipment.BODYWEIGHT)
+
+                val user = UserContext(
+                    goal = profile?.goal ?: Goal.GENERAL_FITNESS,
+                    experience = profile?.experience ?: ExperienceLevel.INTERMEDIATE,
+                    availableEquipment = availableEq,
+                    sessionMinutes = profile?.sessionMinutes ?: 45,
+                    daysPerWeek = profile?.daysPerWeek ?: 5
+                )
+
+                // 5) Ask ML to generate strength + metcon, then merge
                 val ml = Repos.mlService(this@MainActivity)
-                val baseReq = com.example.safitness.ml.GenerateRequest(
+                val baseReq = GenerateRequest(
                     date = date.toString(),
-                    focus = focus,
-                    modality = com.example.safitness.core.Modality.STRENGTH,
+                    focus = focus,                 // core.WorkoutFocus
+                    modality = Modality.STRENGTH,
                     user = user
                 )
-                // Generate strength and metcon, then merge
                 val strengthResp = withContext(Dispatchers.IO) {
-                    ml.generate(baseReq.copy(modality = com.example.safitness.core.Modality.STRENGTH))
+                    ml.generate(baseReq.copy(modality = Modality.STRENGTH))
                 }
                 val metconResp = withContext(Dispatchers.IO) {
-                    ml.generate(baseReq.copy(modality = com.example.safitness.core.Modality.METCON))
+                    ml.generate(baseReq.copy(modality = Modality.METCON))
                 }
                 val merged = strengthResp.copy(metcon = metconResp.metcon)
 
-                // Persist the generated plan for the date
+                // 6) Persist the generated plan for the date
                 withContext(Dispatchers.IO) {
                     val planner = Repos.plannerRepository(this@MainActivity)
                     planner.applyMlToDate(
@@ -228,26 +239,91 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
-    private fun generateWeek(start: LocalDate = LocalDate.now()) {
-        if (generating) return
-        generating = true
+    private fun generatePlanFromProfile(start: java.time.LocalDate) {
+        val root = findViewById<android.view.View?>(R.id.rootScroll) ?: findViewById(android.R.id.content)
+
         lifecycleScope.launch {
             try {
-                // Generate 7 consecutive days without opening each date
-                for (i in 0..6) {
-                    runMlAndPersist(start.plusDays(i.toLong()), navigate = false)
+                val profile = withContext(Dispatchers.IO) {
+                    Repos.userProfileDao(this@MainActivity).flowProfile().first()
                 }
+                val weeks = (profile?.programWeeks ?: 4).coerceIn(1, 12)
+                val scheduledDays: Set<java.time.DayOfWeek> =
+                    parseDaysCsv(profile?.workoutDaysCsv)
+                        ?: deriveDaysOfWeek((profile?.daysPerWeek ?: 3).coerceIn(1, 7))
+
+                var generated = 0
+                for (i in 0 until weeks * 7) {
+                    val date = start.plusDays(i.toLong())
+                    if (scheduledDays.contains(date.dayOfWeek)) {
+                        runMlAndPersist(date, navigate = false)
+                        generated += 1
+                    }
+                }
+
                 Toast.makeText(
                     this@MainActivity,
-                    "Generated a 7-day block from ${start.format(DateTimeFormatter.ofPattern("EEE d MMM"))}.",
+                    "Generated $generated sessions from ${start.format(java.time.format.DateTimeFormatter.ofPattern("EEE d MMM"))}.",
                     Toast.LENGTH_LONG
                 ).show()
-                openForDate(start)
+                if (generated > 0) openForDate(start)
+            } catch (t: Throwable) {
+                com.google.android.material.snackbar.Snackbar
+                    .make(root, "Couldn’t generate plan: ${t.message}", com.google.android.material.snackbar.Snackbar.LENGTH_LONG)
+                    .show()
             } finally {
                 generating = false
             }
         }
     }
 
-}
 
+    private fun parseEquipmentCsv(csv: String?): List<Equipment> {
+        if (csv.isNullOrBlank()) return emptyList()
+        return csv.split(',')
+            .mapNotNull { raw ->
+                val k = raw.trim()
+                if (k.isEmpty()) null else runCatching { Equipment.valueOf(k) }.getOrNull()
+            }
+    }
+    /** CSV -> List<Equipment>, tolerates blanks and unknowns. */
+    private fun parseDaysCsv(csv: String?): Set<java.time.DayOfWeek>? {
+        if (csv.isNullOrBlank()) return null
+        return csv.split(',').mapNotNull { k ->
+            when (k.trim().uppercase()) {
+                "MON","MONDAY" -> java.time.DayOfWeek.MONDAY
+                "TUE","TUESDAY"-> java.time.DayOfWeek.TUESDAY
+                "WED","WEDNESDAY"-> java.time.DayOfWeek.WEDNESDAY
+                "THU","THURSDAY"-> java.time.DayOfWeek.THURSDAY
+                "FRI","FRIDAY" -> java.time.DayOfWeek.FRIDAY
+                "SAT","SATURDAY"-> java.time.DayOfWeek.SATURDAY
+                "SUN","SUNDAY" -> java.time.DayOfWeek.SUNDAY
+                else -> null
+            }
+        }.toSet().takeIf { it.isNotEmpty() }
+    }
+
+    private fun maybeRequestPostNotifications() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        val has = ContextCompat.checkSelfPermission(
+            this, android.Manifest.permission.POST_NOTIFICATIONS
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (!has) {
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),
+                REQ_CODE_POST_NOTIFICATIONS
+            )
+        }
+    }
+    private fun deriveDaysOfWeek(n: Int): Set<java.time.DayOfWeek> = when (n.coerceIn(1,7)) {
+        1 -> setOf(java.time.DayOfWeek.MONDAY)
+        2 -> setOf(java.time.DayOfWeek.MONDAY, java.time.DayOfWeek.THURSDAY)
+        3 -> setOf(java.time.DayOfWeek.MONDAY, java.time.DayOfWeek.WEDNESDAY, java.time.DayOfWeek.FRIDAY)
+        4 -> setOf(java.time.DayOfWeek.MONDAY, java.time.DayOfWeek.TUESDAY, java.time.DayOfWeek.THURSDAY, java.time.DayOfWeek.FRIDAY)
+        5 -> setOf(java.time.DayOfWeek.MONDAY, java.time.DayOfWeek.TUESDAY, java.time.DayOfWeek.WEDNESDAY, java.time.DayOfWeek.THURSDAY, java.time.DayOfWeek.FRIDAY)
+        6 -> java.time.DayOfWeek.values().toSet() - java.time.DayOfWeek.SUNDAY
+        else -> java.time.DayOfWeek.values().toSet()
+    }
+
+}
