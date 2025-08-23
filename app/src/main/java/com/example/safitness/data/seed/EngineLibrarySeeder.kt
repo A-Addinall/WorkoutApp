@@ -11,182 +11,85 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * Seeds representative Engine plans covering:
- * - FOR_TIME  (Run/Row time trial)
- * - FOR_DISTANCE (Run/Row/Bike accumulation)
- * - FOR_CALORIES (Bike accumulation)
- * - EMOM-style variants (route via title contains "EMOM"; intent remains FOR_DISTANCE / FOR_CALORIES)
+ * Extra Engine seeds. Adds, never removes.
  */
 object EngineLibrarySeeder {
-    private const val TAG = "EngineSeed"
+    private const val TAG = "EngineSeedMore"
 
     suspend fun seedIfNeeded(db: AppDatabase) = withContext(Dispatchers.IO) {
         val repo = EnginePlanRepository(db.enginePlanDao())
-        if (repo.count() > 0) {
-            Log.d(TAG, "Engine plans exist; skipping.")
-            return@withContext
-        }
-        Log.d(TAG, "Seeding Engine library...")
+        Log.d(TAG, "Seeding extra Engine plans...")
 
-        // --- RUN (For Time) ---
-        repo.upsert(
+        val defs = listOf(
+            // RUN
             EnginePlanEntity(
-                title = "Run — 5k For Time",
+                title = "Run — 10k For Time",
                 mode = EngineMode.RUN.name,
                 intent = EngineIntent.FOR_TIME.name,
-                programDistanceMeters = 5_000,
-                description = "Benchmark 5k. Even splits.",
-                rxNotes = "Aim negative splits.",
-                scaledNotes = "Drop to 3k if needed."
+                description = "Sustained time trial effort.",
+                rxNotes = "Aim for even pacing; hydrate.",
+                scaledNotes = "5k for time if building."
             ),
-            listOf(
-                EngineComponentEntity(0,0,1,"Warm-up","Easy 800m + drills"),
-                EngineComponentEntity(0,0,2,"Main Set","5,000m for time"),
-                EngineComponentEntity(0,0,3,"Cooldown","Walk 5–10 minutes")
-            )
-        )
-
-        // --- ROW (For Time) ---
-        repo.upsert(
             EnginePlanEntity(
-                title = "Row — 2k For Time",
+                title = "Run — 12×400m (1:1 easy jog)",
+                mode = EngineMode.RUN.name,
+                intent = EngineIntent.FOR_TIME.name,
+                description = "Cruise intervals around 5k pace.",
+                rxNotes = "Keep the last 3 fastest.",
+                scaledNotes = "8×400m."
+            ),
+
+            // ROW
+            EnginePlanEntity(
+                title = "Row — 5k For Time",
                 mode = EngineMode.ROW.name,
                 intent = EngineIntent.FOR_TIME.name,
-                programDistanceMeters = 2_000,
-                description = "Classic 2k test.",
-                rxNotes = "Controlled start; strong finish.",
-                scaledNotes = "Reduce to 1k."
+                description = "Benchmark TT on the erg.",
+                rxNotes = "26–30 spm; negative split.",
+                scaledNotes = "2k for time if newer."
             ),
-            listOf(EngineComponentEntity(0,0,1,"Main Set","2,000m for time"))
-        )
-
-        // --- RUN (For Distance accumulation) ---
-        repo.upsert(
             EnginePlanEntity(
-                title = "Run — 20:00 Accumulation (Meters)",
-                mode = EngineMode.RUN.name,
-                intent = EngineIntent.FOR_DISTANCE.name,
-                programDurationSeconds = 20*60,
-                description = "Max distance in 20 minutes.",
-                rxNotes = "Z3 pace.",
-                scaledNotes = "Walk/jog intervals."
-            ),
-            listOf(EngineComponentEntity(0,0,1,"Main Set","20:00 for Distance"))
-        )
-
-        // --- ROW (For Distance accumulation) ---
-        repo.upsert(
-            EnginePlanEntity(
-                title = "Row — 10:00 Accumulation (Meters)",
+                title = "Row — 30:30 × 16 (easy 30s)",
                 mode = EngineMode.ROW.name,
                 intent = EngineIntent.FOR_DISTANCE.name,
-                programDurationSeconds = 10*60,
-                description = "Max meters in 10:00.",
-                rxNotes = "Consistent split.",
-                scaledNotes = "Lower damper."
+                programDurationSeconds = 16 * 60,
+                description = "Thirty on / thirty off. Count metres.",
+                rxNotes = "Strong strokes; smooth recoveries.",
+                scaledNotes = "12× instead of 16×."
             ),
-            listOf(EngineComponentEntity(0,0,1,"Main Set","10:00 for Distance"))
-        )
 
-        // --- BIKE (For Calories accumulation) ---
-        repo.upsert(
+            // BIKE
             EnginePlanEntity(
-                title = "Bike — 10:00 for Calories",
-                mode = EngineMode.BIKE.name,
-                intent = EngineIntent.FOR_CALORIES.name,
-                programDurationSeconds = 10*60,
-                programTargetCalories = 150,
-                description = "Max calories in 10 minutes.",
-                rxNotes = "Cadence > 75 rpm.",
-                scaledNotes = "Lower resistance."
-            ),
-            listOf(EngineComponentEntity(0,0,1,"Main Set","10:00 for Calories"))
-        )
-
-        // --- BIKE (For Distance accumulation) ---
-        repo.upsert(
-            EnginePlanEntity(
-                title = "Bike — 20:00 Accumulation (Meters)",
+                title = "Bike — 5×5:00 Hard / 2:00 Easy",
                 mode = EngineMode.BIKE.name,
                 intent = EngineIntent.FOR_DISTANCE.name,
-                programDurationSeconds = 20*60,
-                description = "Max distance in 20 minutes.",
-                rxNotes = "Sustainable wattage.",
-                scaledNotes = "12:00 instead of 20:00."
-            ),
-            listOf(EngineComponentEntity(0,0,1,"Main Set","20:00 for Distance"))
-        )
-
-        // --- EMOM variants (use title flag; keeps schema stable) ---
-        repo.upsert(
-            EnginePlanEntity(
-                title = "Row — EMOM 20:00 (20 cal)",
-                mode = EngineMode.ROW.name,
-                intent = EngineIntent.FOR_CALORIES.name,
-                programDurationSeconds = 20*60,
-                programTargetCalories = 20,
-                description = "Every minute: 20 calories.",
-                rxNotes = "Spin-up fast; settle to pace.",
-                scaledNotes = "16/12 cal or EMOM 12:00."
-            ),
-            listOf(EngineComponentEntity(0,0,1,"Main Set","EMOM 20:00 — 20 cal / min"))
-        )
-        repo.upsert(
-            EnginePlanEntity(
-                title = "Run — EMOM 16:00 (200 m)",
-                mode = EngineMode.RUN.name,
-                intent = EngineIntent.FOR_DISTANCE.name,
-                programDurationSeconds = 16*60,
-                programDistanceMeters = 200,
-                description = "Every minute: 200 m shuttle.",
-                rxNotes = "Crisp turns; posture tall.",
-                scaledNotes = "150 m or EMOM 12:00."
-            ),
-            listOf(EngineComponentEntity(0,0,1,"Main Set","EMOM 16:00 — 200 m / min"))
-        )
-        // RUN — 8×400m (1:1 rest)
-        repo.upsert(
-            EnginePlanEntity(
-                title = "Run — 8×400m (1:1 rest)",
-                mode = EngineMode.RUN.name,
-                intent = EngineIntent.FOR_TIME.name,
-                description = "400s at ~5k pace; walk/jog 400m between.",
-                rxNotes = "Even pacing; last 2 slightly faster.",
-                scaledNotes = "6×400m or 8×300m."
-            ),
-            listOf(
-                EngineComponentEntity(0,0,1,"Main Set","8×400m; 400m easy between")
-            )
-        )
-
-// ROW — 10×250m (rest 1:00)
-        repo.upsert(
-            EnginePlanEntity(
-                title = "Row — 10×250m (rest 1:00)",
-                mode = EngineMode.ROW.name,
-                intent = EngineIntent.FOR_TIME.name,
-                description = "Sharpen power; consistent split.",
-                rxNotes = "Rate 28–32 spm.",
-                scaledNotes = "8×250m."
-            ),
-            listOf(EngineComponentEntity(0,0,1,"Main Set","10×250m; rest 1:00"))
-        )
-
-// BIKE — 5×3:00 hard / 2:00 easy
-        repo.upsert(
-            EnginePlanEntity(
-                title = "Bike — 5×3:00 Hard / 2:00 Easy",
-                mode = EngineMode.BIKE.name,
-                intent = EngineIntent.FOR_DISTANCE.name,
-                programDurationSeconds = (5 * (3 + 2)) * 60,
-                description = "Z4 efforts with Z2 recoveries.",
-                rxNotes = "Cadence > 80 rpm in hard blocks.",
+                programDurationSeconds = (5 * (5 + 2)) * 60,
+                description = "Z4 efforts with Z2 recovery.",
+                rxNotes = "Cadence > 80 rpm in work.",
                 scaledNotes = "4× blocks."
             ),
-            listOf(EngineComponentEntity(0,0,1,"Main Set","5×3:00 hard / 2:00 easy"))
+            EnginePlanEntity(
+                title = "Bike — 20:00 Time Trial",
+                mode = EngineMode.BIKE.name,
+                intent = EngineIntent.FOR_DISTANCE.name,
+                programDurationSeconds = 20 * 60,
+                description = "Sustained best effort for 20:00.",
+                rxNotes = "Start conservatively; push last 5:00.",
+                scaledNotes = "12–15 minutes."
+            )
         )
 
+        defs.forEach { plan ->
+            repo.upsert(
+                plan,
+                listOf(
+                    EngineComponentEntity(0,0,1,"Warm-up","Easy aerobic + drills (5–10 min)"),
+                    EngineComponentEntity(0,0,2,"Main Set", plan.description ?: ""),
+                    EngineComponentEntity(0,0,3,"Cooldown","Walk/Spin easy (5–10 min)")
+                )
+            )
+        }
 
-        Log.d(TAG, "Engine seed complete.")
+        Log.d(TAG, "Engine extra seed complete.")
     }
 }

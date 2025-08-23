@@ -6,6 +6,7 @@ import com.example.safitness.core.MuscleGroup
 import com.example.safitness.core.WorkoutType
 import com.example.safitness.data.dao.LibraryDao
 import com.example.safitness.data.entities.Exercise
+import kotlin.math.abs
 
 data class Suggestion(
     val exercise: Exercise,
@@ -19,23 +20,34 @@ class SimplePlanner(
 ) {
     private fun Boolean.toInt() = if (this) 1 else 0
 
+    /**
+     * Suggest up to [maxItems] strength movements for a given focus.
+     * We try to pick a main lift, then accessories with different patterns.
+     * Variety is made deterministic with [epochDay] rotation.
+     */
     suspend fun suggestFor(
         focus: WorkoutType,
         availableEq: List<Equipment>,
         maxItems: Int = 4,
-        epochDay: Long? = null        // NEW: deterministic seed for variety
+        epochDay: Long? = null
     ): List<Suggestion> {
-        val eqPool = if (availableEq.isEmpty()) {
-            listOf(Equipment.BARBELL, Equipment.DUMBBELL, Equipment.BODYWEIGHT, Equipment.CABLE, Equipment.KETTLEBELL)
-        } else availableEq
+        val eqPool = if (availableEq.isEmpty())
+            listOf(
+                Equipment.BARBELL, Equipment.DUMBBELL, Equipment.BODYWEIGHT,
+                Equipment.CABLE, Equipment.KETTLEBELL
+            )
+        else
+            availableEq
 
         val usedIds = mutableSetOf<Long>()
+
+        // ---- helpers --------------------------------------------------------
 
         suspend fun candidateList(
             movement: MovementPattern?,
             primary: List<MuscleGroup>
         ): List<Exercise> {
-            // Prefer metadata filter
+            // Preferred: use metadata
             val list = libraryDao.filterExercises(
                 movement = movement,
                 muscles = primary,
@@ -45,7 +57,7 @@ class SimplePlanner(
             )
             if (list.isNotEmpty()) return list
 
-            // Fallback: equipment‑only
+            // Fallback: equipment-only pool
             return libraryDao.filterExercises(
                 movement = null,
                 muscles = emptyList(),
@@ -55,28 +67,26 @@ class SimplePlanner(
             )
         }
 
+        fun <T> rotate(xs: List<T>, seed: Int): List<T> {
+            if (xs.isEmpty()) return xs
+            val off = abs(seed) % xs.size
+            return if (off == 0) xs else xs.drop(off) + xs.take(off)
+        }
+
         suspend fun pickUnique(
             movement: MovementPattern?,
             primary: List<MuscleGroup>
         ): Exercise? {
-            val list = candidateList(movement, primary)
-            if (list.isEmpty()) return null
+            val base = candidateList(movement, primary)
+            if (base.isEmpty()) return null
 
-// rotate deterministically by epochDay (or 0 if null)
-            val seed = kotlin.math.abs((epochDay ?: 0L).toInt())
-            fun <T> rotate(xs: List<T>): List<T> {
-                if (xs.isEmpty()) return xs
-                val off = seed % xs.size
-                return if (off == 0) xs else xs.drop(off) + xs.take(off)
-            }
+            val seed = abs((epochDay ?: 0L).toInt())
+            val rot = rotate(base, seed)
 
-            val rot = rotate(list)
+            // first unused in rotated order
+            rot.firstOrNull { it.id !in usedIds }?.let { return it }
 
-// first unused in rotated order
-            val unused = rot.firstOrNull { it.id !in usedIds }
-            if (unused != null) return unused
-
-// try an alternate movement (also rotated)
+            // try a sensible alternate movement (also rotated)
             val altMovement = when (movement) {
                 MovementPattern.SQUAT -> MovementPattern.LUNGE
                 MovementPattern.LUNGE -> MovementPattern.SQUAT
@@ -87,53 +97,113 @@ class SimplePlanner(
                 MovementPattern.HINGE -> MovementPattern.SQUAT
                 else -> null
             }
+
             if (altMovement != null) {
-                val alt = rotate(candidateList(altMovement, primary))
+                val alt = rotate(candidateList(altMovement, primary), seed)
                     .firstOrNull { it.id !in usedIds }
                 if (alt != null) return alt
             }
 
-// last resort: first of rotated
-            return rot.firstOrNull()
+            // last resort: first of rotated
+            return rot.first()
         }
 
-        fun makeSuggestion(index: Int, ex: Exercise) = when (index) {
-            0 -> Suggestion(ex, 4, 5, 8)    // main
-            1 -> Suggestion(ex, 3, 8, 12)   // secondary
-            else -> Suggestion(ex, 3, 10, 15)
+        fun makeSuggestion(
+            sets: Int,
+            reps: Int,
+            ex: Exercise
+        ) = Suggestion(exercise = ex, targetSets = sets, repsMin = reps, repsMax = reps)
+
+        // ---- focus → blueprint ---------------------------------------------
+
+        data class Blueprint(
+            val main: Pair<MovementPattern?, List<MuscleGroup>>,
+            val accessories: List<Pair<MovementPattern?, List<MuscleGroup>>>,
+            val mainSets: Int,
+            val mainReps: Int,
+            val accSets: Int,
+            val accReps: Int
+        )
+
+        val bp: Blueprint = when (focus) {
+            WorkoutType.PUSH -> Blueprint(
+                main = MovementPattern.HORIZONTAL_PUSH to listOf(MuscleGroup.CHEST, MuscleGroup.DELTS_ANT, MuscleGroup.TRICEPS),
+                accessories = listOf(
+                    MovementPattern.VERTICAL_PUSH to listOf(MuscleGroup.DELTS_ANT, MuscleGroup.TRICEPS),
+                    MovementPattern.HORIZONTAL_PULL to listOf(MuscleGroup.BACK, MuscleGroup.BICEPS)
+                ),
+                mainSets = 5, mainReps = 5, accSets = 3, accReps = 8
+            )
+
+            WorkoutType.PULL -> Blueprint(
+                main = MovementPattern.HORIZONTAL_PULL to listOf(MuscleGroup.BACK, MuscleGroup.BICEPS),
+                accessories = listOf(
+                    MovementPattern.VERTICAL_PULL to listOf(MuscleGroup.BACK, MuscleGroup.BICEPS),
+                    MovementPattern.HORIZONTAL_PUSH to listOf(MuscleGroup.CHEST, MuscleGroup.TRICEPS)
+                ),
+                mainSets = 5, mainReps = 5, accSets = 3, accReps = 8
+            )
+
+            WorkoutType.LEGS_CORE -> Blueprint(
+                main = MovementPattern.SQUAT to listOf(MuscleGroup.QUADS, MuscleGroup.GLUTES),
+                accessories = listOf(
+                    MovementPattern.HINGE to listOf(MuscleGroup.HAMSTRINGS, MuscleGroup.GLUTES),
+                    null to listOf(MuscleGroup.CORE)
+                ),
+                mainSets = 5, mainReps = 5, accSets = 3, accReps = 10
+            )
+
+            WorkoutType.FULL -> Blueprint(
+                main = MovementPattern.HINGE to listOf(MuscleGroup.HAMSTRINGS, MuscleGroup.GLUTES, MuscleGroup.BACK),
+                accessories = listOf(
+                    MovementPattern.HORIZONTAL_PUSH to listOf(MuscleGroup.CHEST, MuscleGroup.TRICEPS),
+                    MovementPattern.VERTICAL_PULL to listOf(MuscleGroup.BACK, MuscleGroup.BICEPS)
+                ),
+                mainSets = 4, mainReps = 6, accSets = 3, accReps = 10
+            )
         }
 
-        val picks = when (focus) {
-            WorkoutType.PUSH -> listOf(
-                MovementPattern.HORIZONTAL_PUSH to listOf(MuscleGroup.CHEST),
-                MovementPattern.VERTICAL_PUSH to listOf(MuscleGroup.DELTS_MED, MuscleGroup.DELTS_ANT),
-                null to listOf(MuscleGroup.TRICEPS)
-            )
+        // ---- build picks ----------------------------------------------------
 
-            WorkoutType.PULL -> listOf(
-                MovementPattern.VERTICAL_PULL to listOf(MuscleGroup.LATS),
-                MovementPattern.HORIZONTAL_PULL to listOf(MuscleGroup.UPPER_BACK, MuscleGroup.LATS),
-                null to listOf(MuscleGroup.BICEPS)
-            )
+        val out = mutableListOf<Suggestion>()
 
-            WorkoutType.LEGS_CORE -> listOf(
-                MovementPattern.SQUAT to listOf(MuscleGroup.QUADS),
-                MovementPattern.HINGE to listOf(MuscleGroup.HAMSTRINGS, MuscleGroup.GLUTES),
-                null to listOf(MuscleGroup.ABS, MuscleGroup.OBLIQUES)
-            )
-
-            else -> emptyList()
-        }
-
-        val suggestions = mutableListOf<Suggestion>()
-        for ((idx, pair) in picks.withIndex()) {
-            val (movement, muscles) = pair
-            val ex = pickUnique(movement, muscles) ?: continue
+        // main
+        pickUnique(bp.main.first, bp.main.second)?.let { ex ->
             usedIds += ex.id
-            suggestions += makeSuggestion(idx, ex)
-            if (suggestions.size >= maxItems) break
+            out += makeSuggestion(bp.mainSets, bp.mainReps, ex)
         }
 
-        return suggestions
+        // accessories
+        for (acc in bp.accessories) {
+            if (out.size >= maxItems) break
+            val ex = pickUnique(acc.first, acc.second) ?: continue
+            if (ex.id in usedIds) continue
+            usedIds += ex.id
+            out += makeSuggestion(bp.accSets, bp.accReps, ex)
+        }
+
+        // if still short, fill from broad equipment pool (deterministically rotated)
+        if (out.size < maxItems) {
+            val fillPool = libraryDao.filterExercises(
+                movement = null,
+                muscles = emptyList(),
+                equipment = eqPool,
+                musclesEmpty = 1,
+                equipmentEmpty = eqPool.isEmpty().toInt()
+            ).filter { it.id !in usedIds }
+
+            if (fillPool.isNotEmpty()) {
+                val seed = abs((epochDay ?: 0L).toInt())
+                val rotated = rotate(fillPool, seed)
+                for (ex in rotated) {
+                    if (out.size >= maxItems) break
+                    if (ex.id in usedIds) continue
+                    usedIds += ex.id
+                    out += makeSuggestion(bp.accSets, bp.accReps, ex)
+                }
+            }
+        }
+
+        return out.take(maxItems)
     }
 }

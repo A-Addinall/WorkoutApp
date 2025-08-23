@@ -36,6 +36,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import java.time.DayOfWeek
 import com.example.safitness.data.db.AppDatabase
 import com.example.safitness.data.entities.UserProfile
+import android.util.Log
 
 
 
@@ -52,6 +53,7 @@ class MainActivity : AppCompatActivity() {
         const val EXTRA_WORKOUT_NAME = "WORKOUT_NAME"
     }
 
+    private enum class Slot { PULL, PUSH, LEGS, FULL, ENGINE }
     private var generating = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -123,6 +125,61 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /** Build the weekly slot sequence based on days selected and whether Engine is enabled. */
+    private fun buildWeeklySlots(daysCount: Int, includeEngine: Boolean): List<Slot> {
+        val n = daysCount.coerceIn(1, 7)
+
+        val d3 = listOf(Slot.PULL, Slot.PUSH, Slot.LEGS)
+        val d4NoEngine = listOf(Slot.PULL, Slot.PUSH, Slot.LEGS, Slot.FULL)
+        val d4WithEngine = listOf(Slot.PULL, Slot.PUSH, Slot.LEGS, Slot.ENGINE)
+
+        return when {
+            n == 1 -> listOf(Slot.FULL)
+            n == 2 -> listOf(Slot.PUSH, Slot.PULL)
+            n == 3 -> d3
+            n == 4 && includeEngine -> d4WithEngine
+            n == 4 -> d4NoEngine
+            else -> {
+                // ≥5: cycle PULL,PUSH,LEGS,FULL and, if Engine on, dedicate the last day to ENGINE
+                val repeat = listOf(Slot.PULL, Slot.PUSH, Slot.LEGS, Slot.FULL)
+                val seq = buildList {
+                    while (size < n) addAll(repeat)
+                }.take(n).toMutableList()
+                if (includeEngine) seq[seq.lastIndex] = Slot.ENGINE
+                seq
+            }
+        }
+    }
+
+    /** Translate a slot to WorkoutType. FULL alternates to keep balance. */
+    private fun slotToWorkoutType(slot: Slot, epochDay: Long): WorkoutType = when (slot) {
+        Slot.PULL -> WorkoutType.PULL
+        Slot.PUSH -> WorkoutType.PUSH
+        Slot.LEGS -> WorkoutType.LEGS_CORE
+        Slot.FULL -> when ((kotlin.math.abs(epochDay) % 3).toInt()) {
+            0 -> WorkoutType.PUSH
+            1 -> WorkoutType.PULL
+            else -> WorkoutType.LEGS_CORE
+        }
+        Slot.ENGINE -> error("ENGINE slot has no WorkoutType; handle separately")
+    }
+    /** Map single-day WorkoutFocus -> WorkoutType without LEGS bias, using date parity for balance. */
+    private fun focusToWorkoutType(f: WorkoutFocus, epochDay: Long): WorkoutType = when (f) {
+        WorkoutFocus.PUSH          -> WorkoutType.PUSH
+        WorkoutFocus.PULL          -> WorkoutType.PULL
+        WorkoutFocus.LEGS,
+        WorkoutFocus.LOWER         -> WorkoutType.LEGS_CORE
+        WorkoutFocus.UPPER         -> WorkoutType.PUSH
+        WorkoutFocus.FULL_BODY     -> if (epochDay % 2L == 0L) WorkoutType.PUSH else WorkoutType.PULL
+        WorkoutFocus.CORE          -> if (epochDay % 2L == 0L) WorkoutType.PULL else WorkoutType.PUSH
+        WorkoutFocus.CONDITIONING  -> when ((kotlin.math.abs(epochDay) % 3).toInt()) {
+            0 -> WorkoutType.PULL
+            1 -> WorkoutType.PUSH
+            else -> WorkoutType.LEGS_CORE
+        }
+    }
+
+
     /** Open WorkoutActivity for a real date. UI shows the date; we also pass a legacy dayIndex for now. */
     private fun openForDate(date: LocalDate) {
         val pretty = date.format(DateTimeFormatter.ofPattern("EEE d MMM, yyyy"))
@@ -184,19 +241,6 @@ class MainActivity : AppCompatActivity() {
                 java.time.DayOfWeek.SUNDAY    -> WorkoutFocus.CONDITIONING
             }
 
-        // 2) Map session focus -> your existing WorkoutType buckets
-        fun toCoreType(f: WorkoutFocus): WorkoutType =
-            when (f) {
-                WorkoutFocus.PUSH          -> WorkoutType.PUSH
-                WorkoutFocus.PULL          -> WorkoutType.PULL
-                WorkoutFocus.LEGS          -> WorkoutType.LEGS_CORE
-                WorkoutFocus.UPPER         -> WorkoutType.PULL
-                WorkoutFocus.LOWER         -> WorkoutType.LEGS_CORE
-                WorkoutFocus.FULL_BODY     -> WorkoutType.LEGS_CORE
-                WorkoutFocus.CORE          -> WorkoutType.LEGS_CORE
-                WorkoutFocus.CONDITIONING  -> WorkoutType.LEGS_CORE
-            }
-
         val focus = defaultFocusFor(date)
 
         lifecycleScope.launch {
@@ -242,10 +286,10 @@ class MainActivity : AppCompatActivity() {
                     planner.applyMlToDate(
                         epochDay = epochDay,
                         resp = merged,
-                        focus = toCoreType(focus),
+                        focus = focusToWorkoutType(focus, epochDay),
                         availableEq = user.availableEquipment,
-                        replaceStrength = true,   // overwrite strength for the day
-                        replaceMetcon = true     // keep existing metcon if present
+                        replaceStrength = true,
+                        replaceMetcon = false
                     )
                     // We loaded profile as nullable; guard it before using.
                     profile?.let { p ->
@@ -275,13 +319,11 @@ class MainActivity : AppCompatActivity() {
         }
     }
     private fun generatePlanFromProfile(profile: com.example.safitness.data.entities.UserProfile) {
-        // Determine which days to schedule
         val weeks = (profile.programWeeks).coerceIn(1, 12)
         val selectedDays: Set<DayOfWeek> =
             parseDaysCsv(profile.workoutDaysCsv)
                 ?: deriveDaysOfWeek((profile.daysPerWeek).coerceIn(1, 7))
 
-        // Build the date list we’ll generate for
         val start = LocalDate.now()
         val allDates = buildList {
             var d = start
@@ -295,49 +337,83 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        // Ask before overwriting anything in that range
+        // Build slots once per week from the user's choice
+        val slots = buildWeeklySlots(selectedDays.size, profile.includeEngine)
+
         MaterialAlertDialogBuilder(this)
             .setTitle("Generate plan")
             .setMessage("Create a programme for ${weeks} week(s) on your selected days.\nThis will overwrite Strength & Metcon on those dates. Continue?")
             .setNegativeButton("Cancel", null)
             .setPositiveButton("Overwrite & Generate") { _, _ ->
-                lifecycleScope.launchWhenStarted {
+                lifecycleScope.launch {
                     val planner = com.example.safitness.data.repo.Repos.plannerRepository(this@MainActivity)
                     val eq = parseEquipmentCsv(profile.equipmentCsv)
 
                     allDates.forEachIndexed { idx, date ->
                         val epochDay = date.toEpochDay()
+                        val slot = slots[idx % slots.size]
+                        val enginePlanId = pickEnginePlanIdFor(profile, epochDay)
+                        Log.d("PLAN", "date=$date slot=$slot epochDay=$epochDay")
 
-                        // Rotate focus so days aren't identical
-                        val focus = focusCycle[idx % focusCycle.size]
+                        when (slot) {
+                            Slot.ENGINE -> {
+                                withContext(Dispatchers.IO) {
+                                    // Make the day Engine-only
+                                    planner.clearStrengthAndMetconForDate(epochDay)
 
-                        // Pick a metcon plan in a round-robin manner (see PlannerRepository patch below)
-                        val metconPlanId = planner.pickMetconPlanIdForFocus(focus, eq, epochDay)
-                            ?: return@forEachIndexed
+                                    // Pick an Engine plan (with your fallback logic inside the picker)
+                                    val engId: Long? = pickEnginePlanIdFor(profile, epochDay)
+                                    Log.d("PLAN", "ENGINE day -> planId=$engId on $date")
 
-                        // Replace strength + metcon for that date
-                        planner.regenerateDateWithMetcon(
-                            epochDay = epochDay,
-                            focus = focus,
-                            availableEq = eq,
-                            metconPlanId = metconPlanId
-                        )
+                                    // Only persist if we actually found one
+                                    if (engId != null) {
+                                        planner.persistEnginePlanToDate(
+                                            epochDay = epochDay,
+                                            planId = engId,
+                                            replaceExisting = true,
+                                            required = true
+                                        )
+                                    } else {
+                                        Log.w("PLAN", "No Engine plan available; leaving Engine day empty on $date")
+                                    }
+                                }
+                                // (Optionally attach a Skill here)
+                            }
 
-// Attach Engine/Skills for this date too
-                        if (profile.includeEngine) {
-                            val enginePlanId = pickEnginePlanIdFor(profile, epochDay)
-                            if (enginePlanId != null) {
-                                planner.persistEnginePlanToDate(epochDay, enginePlanId, replaceExisting = true, required = true)
+                            else -> {
+
+                        // Strength + Metcon path (unchanged)
+                                val coreType = slotToWorkoutType(slot, epochDay)
+                                val metconPlanId = withContext(Dispatchers.IO) {
+                                    planner.pickMetconPlanIdForFocus(coreType, eq, epochDay)
+                                }
+                                if (metconPlanId != null) {
+                                    withContext(Dispatchers.IO) {
+                                        planner.regenerateDateWithMetcon(
+                                            epochDay = epochDay,
+                                            focus = coreType,
+                                            availableEq = eq,
+                                            metconPlanId = metconPlanId
+                                        )
+                                    }
+                                }
+                                // Optional: Skill
+                                val skillPlanId = pickSkillPlanIdFor(profile, epochDay)
+                                if (skillPlanId != null) {
+                                    withContext(Dispatchers.IO) {
+                                        planner.persistSkillPlanToDate(
+                                            epochDay = epochDay,
+                                            planId = skillPlanId,
+                                            replaceExisting = false,
+                                            required = true
+                                        )
+                                    }
+                                }
                             }
                         }
-                        val skillPlanId = pickSkillPlanIdFor(profile, epochDay)
-                        if (skillPlanId != null) {
-                            planner.persistSkillPlanToDate(epochDay, skillPlanId, replaceExisting = true, required = true)
-                        }
-
                     }
-
-                    Snackbar.make(findViewById(android.R.id.content),
+                    Snackbar.make(
+                        findViewById(android.R.id.content),
                         "Programme generated for ${allDates.size} session(s).",
                         Snackbar.LENGTH_LONG
                     ).show()
@@ -350,13 +426,26 @@ class MainActivity : AppCompatActivity() {
     private suspend fun pickEnginePlanIdFor(profile: UserProfile, epochDay: Long): Long? =
         withContext(Dispatchers.IO) {
             val db = AppDatabase.get(this@MainActivity)
-            var plans = db.enginePlanDao().getPlans() // returns List<EnginePlanEntity>
-            // If user specified modes (RUN/ROW/BIKE), filter
-            val modes = profile.engineModesCsv?.split(',')?.map { it.trim().uppercase() }?.toSet().orEmpty()
-            if (modes.isNotEmpty()) plans = plans.filter { it.mode?.uppercase() in modes }
-            if (plans.isEmpty()) return@withContext null
-            val idx = (kotlin.math.abs(epochDay) % plans.size).toInt()
-            plans[idx].id
+            val all = db.enginePlanDao().getPlans() // List<EnginePlanEntity>
+
+            if (all.isEmpty()) return@withContext null
+
+            val modes = profile.engineModesCsv
+                ?.split(',')
+                ?.map { it.trim().uppercase() }
+                ?.filter { it.isNotEmpty() }
+                ?.toSet()
+                ?: emptySet()
+
+            // Try filtering by selected modes first
+            val filtered = if (modes.isEmpty()) all else all.filter { p ->
+                p.mode?.uppercase() in modes
+            }
+
+            val pool = if (filtered.isNotEmpty()) filtered else all // Fallback if nothing matched
+
+            val idx = (kotlin.math.abs(epochDay) % pool.size).toInt()
+            pool[idx].id
         }
 
     /** Deterministic Skill pick based on preferred skills + date. */
@@ -370,13 +459,6 @@ class MainActivity : AppCompatActivity() {
             val idx = (kotlin.math.abs(epochDay + 13) % plans.size).toInt() // offset so it doesn't mirror engine
             plans[idx].id
         }
-
-    private val focusCycle: List<com.example.safitness.core.WorkoutType> =
-        listOf(
-            com.example.safitness.core.WorkoutType.PUSH,
-            com.example.safitness.core.WorkoutType.PULL,
-            com.example.safitness.core.WorkoutType.LEGS_CORE
-        )
 
     private fun parseEquipmentCsv(csv: String?): List<Equipment> {
         if (csv.isNullOrBlank()) return emptyList()
