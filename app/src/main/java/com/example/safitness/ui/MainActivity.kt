@@ -11,14 +11,25 @@ import androidx.cardview.widget.CardView
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.example.safitness.R
+import com.example.safitness.core.Equipment
+import com.example.safitness.core.Modality
+import com.example.safitness.core.WorkoutFocus
+import com.example.safitness.core.WorkoutType
+import com.example.safitness.ml.ExperienceLevel
+import com.example.safitness.ml.GenerateRequest
+import com.example.safitness.ml.Goal
+import com.example.safitness.ml.UserContext
 import com.google.android.material.datepicker.MaterialDatePicker
 import com.google.android.material.snackbar.Snackbar
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-import java.time.format.TextStyle
-import java.util.Locale
+import com.example.safitness.data.repo.Repos
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : AppCompatActivity() {
 
@@ -32,6 +43,8 @@ class MainActivity : AppCompatActivity() {
         const val EXTRA_DATE_EPOCH_DAY = "DATE_EPOCH_DAY"
         const val EXTRA_WORKOUT_NAME = "WORKOUT_NAME"
     }
+
+    private var generating = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -69,7 +82,9 @@ class MainActivity : AppCompatActivity() {
 
         // Generate Program (placeholder)
         findViewById<CardView>(R.id.cardGenerateProgram).setOnClickListener {
-            Toast.makeText(this, "Program generation coming next.", Toast.LENGTH_SHORT).show()
+            if (generating) return@setOnClickListener
+            generating = true
+            runMlAndPersist(LocalDate.now())
         }
 
         // Personal Records
@@ -127,4 +142,112 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
+    /** Kick off ML generation, persist to the plan for [date], and navigate there. */
+    private fun runMlAndPersist(date: LocalDate, navigate: Boolean = true) {
+        val root = findViewById<android.view.View>(R.id.rootScroll)
+        val epochDay = date.toEpochDay()
+
+        fun defaultFocusFor(d: LocalDate): WorkoutFocus =
+            when (d.dayOfWeek) {
+                java.time.DayOfWeek.MONDAY    -> WorkoutFocus.PUSH
+                java.time.DayOfWeek.TUESDAY   -> WorkoutFocus.PULL
+                java.time.DayOfWeek.WEDNESDAY -> WorkoutFocus.LEGS
+                java.time.DayOfWeek.THURSDAY  -> WorkoutFocus.UPPER
+                java.time.DayOfWeek.FRIDAY    -> WorkoutFocus.LOWER
+                java.time.DayOfWeek.SATURDAY  -> WorkoutFocus.FULL_BODY
+                java.time.DayOfWeek.SUNDAY    -> WorkoutFocus.CONDITIONING
+            }
+
+        // Map ML focus to your existing core.WorkoutType
+        fun toCoreType(f: WorkoutFocus): WorkoutType =
+            when (f) {
+                WorkoutFocus.PUSH          -> WorkoutType.PUSH
+                WorkoutFocus.PULL          -> WorkoutType.PULL
+                WorkoutFocus.LEGS          -> WorkoutType.LEGS_CORE
+                WorkoutFocus.UPPER         -> WorkoutType.PULL
+                WorkoutFocus.LOWER         -> WorkoutType.LEGS_CORE
+                WorkoutFocus.FULL_BODY     -> WorkoutType.LEGS_CORE
+                WorkoutFocus.CORE          -> WorkoutType.LEGS_CORE
+                WorkoutFocus.CONDITIONING  -> WorkoutType.LEGS_CORE
+            }
+
+        val focus = defaultFocusFor(date)
+        val user = com.example.safitness.ml.UserContext(
+            goal = com.example.safitness.ml.Goal.GENERAL_FITNESS,
+            experience = com.example.safitness.ml.ExperienceLevel.INTERMEDIATE,
+            availableEquipment = listOf(
+                com.example.safitness.core.Equipment.BARBELL,
+                com.example.safitness.core.Equipment.DUMBBELL,
+                com.example.safitness.core.Equipment.BODYWEIGHT
+            ),
+            sessionMinutes = 45,
+            daysPerWeek = 5
+        )
+
+        lifecycleScope.launch {
+            try {
+                val ml = Repos.mlService(this@MainActivity)
+                val baseReq = com.example.safitness.ml.GenerateRequest(
+                    date = date.toString(),
+                    focus = focus,
+                    modality = com.example.safitness.core.Modality.STRENGTH,
+                    user = user
+                )
+                // Generate strength and metcon, then merge
+                val strengthResp = withContext(Dispatchers.IO) {
+                    ml.generate(baseReq.copy(modality = com.example.safitness.core.Modality.STRENGTH))
+                }
+                val metconResp = withContext(Dispatchers.IO) {
+                    ml.generate(baseReq.copy(modality = com.example.safitness.core.Modality.METCON))
+                }
+                val merged = strengthResp.copy(metcon = metconResp.metcon)
+
+                // Persist the generated plan for the date
+                withContext(Dispatchers.IO) {
+                    val planner = Repos.plannerRepository(this@MainActivity)
+                    planner.applyMlToDate(
+                        epochDay = epochDay,
+                        resp = merged,
+                        focus = toCoreType(focus),
+                        availableEq = user.availableEquipment,
+                        replaceStrength = true,   // overwrite strength for the day
+                        replaceMetcon = false     // keep existing metcon if present
+                    )
+                }
+
+                Toast.makeText(
+                    this@MainActivity,
+                    "Workout generated for ${date.format(DateTimeFormatter.ofPattern("EEE d MMM"))}.",
+                    Toast.LENGTH_LONG
+                ).show()
+                if (navigate) openForDate(date)
+            } catch (t: Throwable) {
+                Snackbar.make(root, "Couldn’t generate workout: ${t.message}", Snackbar.LENGTH_LONG).show()
+            } finally {
+                generating = false
+            }
+        }
+    }
+    private fun generateWeek(start: LocalDate = LocalDate.now()) {
+        if (generating) return
+        generating = true
+        lifecycleScope.launch {
+            try {
+                // Generate 7 consecutive days without opening each date
+                for (i in 0..6) {
+                    runMlAndPersist(start.plusDays(i.toLong()), navigate = false)
+                }
+                Toast.makeText(
+                    this@MainActivity,
+                    "Generated a 7-day block from ${start.format(DateTimeFormatter.ofPattern("EEE d MMM"))}.",
+                    Toast.LENGTH_LONG
+                ).show()
+                openForDate(start)
+            } finally {
+                generating = false
+            }
+        }
+    }
+
 }
+
