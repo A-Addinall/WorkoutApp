@@ -13,7 +13,9 @@ data class UserProfile(
     val daysPerWeek: Int = 3,
     val sessionMinutes: Int = 45,
     val equipmentCsv: String = "BODYWEIGHT",
-    val programWeeks: Int = 4// store as CSV for simplicity
+    val programWeeks: Int = 4, // store as CSV for simplicity
+    val workoutDaysCsv: String? = null
+
 )
 
 /** simple helpers to convert a Set<Equipment> <-> CSV */

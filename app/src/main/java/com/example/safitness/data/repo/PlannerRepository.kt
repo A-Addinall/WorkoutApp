@@ -150,6 +150,68 @@ class PlannerRepository(
             )
         )
     }
+    suspend fun applyMlToDate(
+        epochDay: Long,
+        resp: com.example.safitness.ml.GenerateResponse,
+        focus: com.example.safitness.core.WorkoutType,
+        availableEq: List<com.example.safitness.core.Equipment>,
+        replaceStrength: Boolean = false,
+        replaceMetcon: Boolean = false
+    ) = withContext(Dispatchers.IO) {
+        val dayPlanId = ensurePlanForDate(epochDay) ?: return@withContext
+
+        // ---------- Strength ----------
+        if (replaceStrength) {
+            planDao.clearStrength(dayPlanId)
+        }
+        var nextOrder = planDao.nextStrengthSortOrder(dayPlanId)
+        val toInsert = mutableListOf<DayItemEntity>()
+
+        resp.strength.forEach { spec ->
+            val exId = spec.exerciseId
+            val exists = planDao.strengthItemCount(dayPlanId, exId) > 0
+            // Snap target reps to your allowed buckets
+            val target = run {
+                val buckets = intArrayOf(3, 5, 8, 10, 12, 15)
+                buckets.minBy { kotlin.math.abs(it - spec.targetReps) }
+            }
+
+            if (exists) {
+                planDao.updateStrengthTargetReps(dayPlanId, exId, target)
+                planDao.updateStrengthRequired(dayPlanId, exId, true)
+            } else {
+                toInsert += DayItemEntity(
+                    id = 0L,
+                    dayPlanId = dayPlanId,
+                    itemType = "STRENGTH",
+                    refId = exId,
+                    required = true,
+                    sortOrder = nextOrder++,
+                    targetReps = target,
+                    prescriptionJson = null
+                )
+            }
+        }
+        if (toInsert.isNotEmpty()) planDao.insertItems(toInsert)
+
+        // ---------- Metcon ----------
+        resp.metcon?.let { m ->
+            // Prefer to *choose* an existing plan that matches focus & block type
+            val preferredBlock = when (m.blockType) {
+                com.example.safitness.core.BlockType.EMOM     -> com.example.safitness.core.BlockType.EMOM
+                com.example.safitness.core.BlockType.AMRAP    -> com.example.safitness.core.BlockType.AMRAP
+                com.example.safitness.core.BlockType.FOR_TIME -> com.example.safitness.core.BlockType.FOR_TIME
+                else -> null
+            }
+            val planId = pickMetconPlanIdForFocus(focus, availableEq, preferredBlock)
+            if (planId != null) {
+                persistMetconPlanToDate(epochDay, planId, replaceMetcon = replaceMetcon, required = true)
+            }
+            // If no plan matched, we silently skip metcon (keeps UX predictable).
+        }
+    }
+
+
 
     private fun focusMovementsFor(type: WorkoutType): List<MovementPattern> = when (type) {
         WorkoutType.PUSH -> listOf(

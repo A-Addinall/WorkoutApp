@@ -30,8 +30,9 @@ import com.example.safitness.ui.engine.SkillForTimeActivity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import android.view.View
-import com.example.safitness.ui.ExerciseLibraryActivity
+import com.google.android.material.datepicker.MaterialDatePicker
+import java.time.Instant
+import java.time.ZoneId
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import com.example.safitness.ui.MainActivity.Companion.EXTRA_DATE_EPOCH_DAY
@@ -78,6 +79,25 @@ class WorkoutActivity : AppCompatActivity() {
         val prettyTitle: String = intent.getStringExtra(EXTRA_WORKOUT_NAME)
             ?: selectedDate.format(DateTimeFormatter.ofPattern("EEE d MMM, yyyy"))
         tvWorkoutTitle.text = prettyTitle
+// Open date picker from title or calendar icon
+        val openPicker: (Unit) -> Unit = {
+            val picker = MaterialDatePicker.Builder
+                .datePicker()
+                .setTitleText("Select a date")
+                .setSelection(MaterialDatePicker.todayInUtcMilliseconds())
+                .build()
+
+            picker.addOnPositiveButtonClickListener { utcMillis ->
+                val selected = Instant.ofEpochMilli(utcMillis)
+                    .atZone(ZoneId.systemDefault())
+                    .toLocalDate()
+                openWorkoutForDate(selected)
+            }
+
+            picker.show(supportFragmentManager, "date_picker")
+        }
+        tvWorkoutTitle.setOnClickListener { openPicker(Unit) }
+        findViewById<ImageView?>(R.id.ivCalendar)?.setOnClickListener { openPicker(Unit) }
 
         findViewById<ImageView?>(R.id.ivBack)?.setOnClickListener { finish() }
 
@@ -129,6 +149,18 @@ class WorkoutActivity : AppCompatActivity() {
             }
 
         // (No need to call vm.setDay(...) any more; everything is date-first here.)
+    }
+    /** Re-open this screen for the chosen date (same behaviour as MainActivity.openForDate). */
+    private fun openWorkoutForDate(date: java.time.LocalDate) {
+        val pretty = date.format(java.time.format.DateTimeFormatter.ofPattern("EEE d MMM, yyyy"))
+        val i = Intent(this, WorkoutActivity::class.java).apply {
+            putExtra(MainActivity.EXTRA_DATE_EPOCH_DAY, date.toEpochDay())
+            putExtra(MainActivity.EXTRA_WORKOUT_NAME, pretty)
+            // Keep sending a benign legacy index so older flows don't break.
+            putExtra(MainActivity.EXTRA_DAY_INDEX, 1)
+        }
+        startActivity(i)
+        finish() // close the old date instance
     }
 
     /** Rebuild the whole list with collapsible sections. */
