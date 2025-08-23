@@ -42,14 +42,12 @@ class WorkoutRepository(
 
     suspend fun countExercises() = libraryDao.countExercises()
 
-    /** UTC “today” epochDay used for writes that default to “now”. */
+    /** UTC “today” epochDay used for default writes. */
     val date: Long = LocalDate.now(ZoneOffset.UTC).toEpochDay()
 
     /* =========================================================
-       STRENGTH — DATE-FIRST (no weekday/day-index anywhere)
+       STRENGTH — DATE-FIRST
        ========================================================= */
-
-    /** Read strength items scheduled for a concrete calendar date. */
     fun programForDate(epochDay: Long): Flow<List<ExerciseWithSelection>> =
         planDao.flowPlanIdByDate(epochDay).flatMapLatest { dayPlanId ->
             if (dayPlanId != null) {
@@ -68,7 +66,6 @@ class WorkoutRepository(
             }
         }
 
-    /** Add or upsert a strength item for a date. Returns false if the date isn’t attached to a plan. */
     suspend fun addStrengthToDate(
         epochDay: Long,
         exercise: Exercise,
@@ -82,12 +79,14 @@ class WorkoutRepository(
             planDao.insertItems(
                 listOf(
                     DayItemEntity(
+                        id = 0L,
                         dayPlanId = dayPlanId,
                         itemType = "STRENGTH",
                         refId = exercise.id,
                         required = required,
                         sortOrder = order,
-                        targetReps = targetReps
+                        targetReps = targetReps,
+                        prescriptionJson = null
                     )
                 )
             )
@@ -129,11 +128,14 @@ class WorkoutRepository(
     }
 
     /* =========================================================
-       SESSIONS / LOGGING
+       SESSIONS / LOGGING — DATE-FIRST
        ========================================================= */
+    suspend fun startSessionForDate(epochDay: Long): Long =
+        sessionDao.insertSession(WorkoutSessionEntity(dateEpochDay = epochDay))
 
+    @Deprecated("Use startSessionForDate(epochDay)", level = DeprecationLevel.ERROR)
     suspend fun startSession(@Suppress("UNUSED_PARAMETER") day: Int): Long =
-        sessionDao.insertSession(WorkoutSessionEntity(dateEpochDay = date))
+        startSessionForDate(date)
 
     suspend fun logStrengthSet(
         sessionId: Long, exerciseId: Long, equipment: Equipment,
@@ -158,21 +160,64 @@ class WorkoutRepository(
         )
     )
 
-    suspend fun logMetcon(day: Int, seconds: Int, result: MetconResult) {
-        val sessionId = startSession(day)
-        sessionDao.insertSet(
-            SetLog(
-                sessionId = sessionId, exerciseId = 0L, equipment = Equipment.BODYWEIGHT,
-                setNumber = 1, reps = 0, weight = null, timeSeconds = seconds,
-                rpe = null, success = null, notes = null, metconResult = result
-            )
+    suspend fun logMetconForTimeForDate(epochDay: Long, planId: Long, timeSeconds: Int, result: MetconResult) {
+        val log = MetconLog(
+            dayIndex = 0,
+            planId = planId,
+            type = "FOR_TIME",
+            durationSeconds = 0,
+            timeSeconds = timeSeconds,
+            rounds = null,
+            extraReps = null,
+            intervalsCompleted = null,
+            result = result.name,
+            dateEpochDay = epochDay
         )
+        metconDao.insertLog(log)
     }
+
+    suspend fun logMetconAmrapForDate(
+        epochDay: Long, planId: Long, durationSeconds: Int, rounds: Int, extraReps: Int, result: MetconResult
+    ) {
+        val log = MetconLog(
+            dayIndex = 0,
+            planId = planId,
+            type = "AMRAP",
+            durationSeconds = durationSeconds,
+            timeSeconds = null,
+            rounds = rounds,
+            extraReps = extraReps,
+            intervalsCompleted = null,
+            result = result.name,
+            dateEpochDay = epochDay
+        )
+        metconDao.insertLog(log)
+    }
+
+    suspend fun logMetconEmomForDate(
+        epochDay: Long, planId: Long, durationSeconds: Int, intervalsCompleted: Int?, result: MetconResult
+    ) {
+        val log = MetconLog(
+            dayIndex = 0,
+            planId = planId,
+            type = "EMOM",
+            durationSeconds = durationSeconds,
+            timeSeconds = null,
+            rounds = null,
+            extraReps = null,
+            intervalsCompleted = intervalsCompleted,
+            result = result.name,
+            dateEpochDay = epochDay
+        )
+        metconDao.insertLog(log)
+    }
+
+    @Deprecated("Use logMetcon*ForDate(...)", level = DeprecationLevel.ERROR)
+    suspend fun logMetcon(day: Int, seconds: Int, result: MetconResult) { /* removed */ }
 
     /* =========================================================
        PR / SUGGESTIONS
        ========================================================= */
-
     suspend fun bestE1RM(exerciseId: Long, equipment: Equipment): Double? =
         prDao.bestEstimated1RM(exerciseId, equipment)
 
@@ -236,13 +281,13 @@ class WorkoutRepository(
             prevE1rmKg = prevSoftE1rm
         )
     }
+
     suspend fun previewPrEvent(
         exerciseId: Long,
         equipment: com.example.safitness.core.Equipment,
         reps: Int,
         weightKg: Double
     ): com.example.safitness.core.PrCelebrationEvent? {
-        // Guardrails (as if success == true)
         if (reps <= 0 || reps > 12) return null
 
         val prevHardKg = prDao.bestWeightAtReps(exerciseId, equipment, reps)
@@ -270,6 +315,7 @@ class WorkoutRepository(
             prevE1rmKg = prevSoftE1rm
         )
     }
+
     private fun equipmentMinIncrementKg(equipment: Equipment): Double = when (equipment) {
         Equipment.BARBELL -> 2.5
         Equipment.DUMBBELL -> 1.0
@@ -280,7 +326,6 @@ class WorkoutRepository(
     /* =========================================================
        METCONS — DATE-FIRST
        ========================================================= */
-
     fun metconPlans(): Flow<List<MetconPlan>> = metconDao.getAllPlans()
 
     fun metconsForDate(epochDay: Long): Flow<List<SelectionWithPlanAndComponents>> =
@@ -294,12 +339,10 @@ class WorkoutRepository(
                             metconDao.getPlanWithComponents(row.planId).map { pwc ->
                                 SelectionWithPlanAndComponents(
                                     selection = ProgramMetconSelection(
-                                        id = 0L,
-                                        dayIndex = 0, // legacy field not used
+                                        dateEpochDay = epochDay,
                                         planId = row.planId,
                                         required = row.required,
-                                        displayOrder = row.sortOrder,
-                                        dateEpochDay = epochDay
+                                        displayOrder = row.sortOrder
                                     ),
                                     planWithComponents = pwc
                                 )
@@ -311,65 +354,12 @@ class WorkoutRepository(
             }
         }
 
-    /** Write metcon for a date: prefer day-item; else date-keyed legacy selection (still epoch-based). */
-    suspend fun addMetconToDate(epochDay: Long, planId: Long, required: Boolean, orderInDay: Int): Boolean {
-        val dayPlanId = planDao.getPlanIdByDate(epochDay)
-        return if (dayPlanId == null) {
-            metconDao.upsertSelection(
-                ProgramMetconSelection(
-                    dayIndex = 0,
-                    planId = planId,
-                    required = required,
-                    displayOrder = orderInDay,
-                    dateEpochDay = epochDay
-                )
-            )
-            true
-        } else {
-            if (planDao.metconItemCount(dayPlanId, planId) == 0) {
-                planDao.insertItems(
-                    listOf(
-                        DayItemEntity(
-                            dayPlanId = dayPlanId,
-                            itemType = "METCON",
-                            refId = planId,
-                            required = required,
-                            sortOrder = orderInDay
-                        )
-                    )
-                )
-            }
-            true
-        }
-    }
-
-    suspend fun removeMetconFromDate(epochDay: Long, planId: Long): Boolean {
-        val dayPlanId = planDao.getPlanIdByDate(epochDay)
-        if (dayPlanId == null) metconDao.removeSelectionByDate(epochDay, planId)
-        else planDao.deleteMetconItem(dayPlanId, planId)
-        return true
-    }
-
-    suspend fun setMetconRequiredForDate(epochDay: Long, planId: Long, required: Boolean): Boolean {
-        val dayPlanId = planDao.getPlanIdByDate(epochDay)
-        if (dayPlanId == null) metconDao.setRequiredByDate(epochDay, planId, required)
-        else planDao.updateMetconRequired(dayPlanId, planId, required)
-        return true
-    }
-
-    suspend fun setMetconOrderForDate(epochDay: Long, planId: Long, orderInDay: Int): Boolean {
-        val dayPlanId = planDao.getPlanIdByDate(epochDay)
-        if (dayPlanId == null) metconDao.setDisplayOrderByDate(epochDay, planId, orderInDay)
-        else planDao.updateMetconOrder(dayPlanId, planId, orderInDay)
-        return true
-    }
-    fun planWithComponents(planId: Long): kotlinx.coroutines.flow.Flow<com.example.safitness.data.dao.PlanWithComponents> =
+    fun planWithComponents(planId: Long): Flow<PlanWithComponents> =
         metconDao.getPlanWithComponents(planId)
 
     fun lastMetconDisplayForDate(epochDay: Long): Flow<MetconDisplay?> =
         metconDao.lastForDate(epochDay).flatMapLatest { log ->
             if (log != null) {
-                // Make the flow nullable-typed explicitly
                 flowOf<MetconDisplay?>(
                     MetconDisplay(
                         type = log.type,
@@ -404,42 +394,90 @@ class WorkoutRepository(
     fun lastMetconForPlan(planId: Long): Flow<MetconLog?> =
         metconDao.lastForPlan(planId)
 
-    suspend fun logMetconForTime(day: Int, planId: Long, timeSeconds: Int, result: MetconResult) {
-        val log = MetconLog(
-            dayIndex = 0, planId = planId, type = "FOR_TIME",
-            durationSeconds = 0, timeSeconds = timeSeconds, rounds = null, extraReps = null,
-            intervalsCompleted = null, result = result.name, dateEpochDay = date
-        )
-        metconDao.insertLog(log)
+    // --- METCON mutations (date-first) ---
+
+    suspend fun addMetconToDate(
+        epochDay: Long,
+        planId: Long,
+        required: Boolean,
+        orderInDay: Int
+    ): Boolean {
+        val dayPlanId = planDao.getPlanIdByDate(epochDay)
+        return if (dayPlanId == null) {
+            // No plan row for the date yet — store in per-date selections
+            metconDao.upsertSelection(
+                ProgramMetconSelection(
+                    dateEpochDay = epochDay,
+                    planId = planId,
+                    required = required,
+                    displayOrder = orderInDay
+                )
+            )
+            true
+        } else {
+            // Plan exists — mirror Engine/Skill behaviour using day items
+            if (planDao.metconItemCount(dayPlanId, planId) == 0) {
+                planDao.insertItems(
+                    listOf(
+                        DayItemEntity(
+                            id = 0L,
+                            dayPlanId = dayPlanId,
+                            itemType = "METCON",
+                            refId = planId,
+                            required = required,
+                            sortOrder = orderInDay,
+                            targetReps = null,
+                            prescriptionJson = null
+                        )
+                    )
+                )
+            } else {
+                planDao.updateMetconRequired(dayPlanId, planId, required)
+                planDao.updateMetconOrder(dayPlanId, planId, orderInDay)
+            }
+            true
+        }
     }
 
-    suspend fun logMetconAmrap(
-        day: Int, planId: Long, durationSeconds: Int, rounds: Int, extraReps: Int, result: MetconResult
-    ) {
-        val log = MetconLog(
-            dayIndex = 0, planId = planId, type = "AMRAP",
-            durationSeconds = durationSeconds, timeSeconds = null,
-            rounds = rounds, extraReps = extraReps, intervalsCompleted = null,
-            result = result.name, dateEpochDay = date
-        )
-        metconDao.insertLog(log)
+    suspend fun removeMetconFromDate(epochDay: Long, planId: Long): Boolean {
+        val dayPlanId = planDao.getPlanIdByDate(epochDay)
+        return if (dayPlanId == null) {
+            metconDao.removeSelectionByDate(epochDay, planId); true
+        } else {
+            planDao.deleteMetconItem(dayPlanId, planId); true
+        }
     }
 
-    suspend fun logMetconEmom(
-        day: Int, planId: Long, durationSeconds: Int, intervalsCompleted: Int?, result: MetconResult
-    ) {
-        val log = MetconLog(
-            dayIndex = 0, planId = planId, type = "EMOM",
-            durationSeconds = durationSeconds, timeSeconds = null, rounds = null, extraReps = null,
-            intervalsCompleted = intervalsCompleted, result = result.name, dateEpochDay = date
-        )
-        metconDao.insertLog(log)
+    suspend fun setMetconRequiredForDate(
+        epochDay: Long,
+        planId: Long,
+        required: Boolean
+    ): Boolean {
+        val dayPlanId = planDao.getPlanIdByDate(epochDay)
+        return if (dayPlanId == null) {
+            metconDao.setRequiredByDate(epochDay, planId, required); true
+        } else {
+            planDao.updateMetconRequired(dayPlanId, planId, required); true
+        }
     }
+
+    suspend fun setMetconOrderForDate(
+        epochDay: Long,
+        planId: Long,
+        orderInDay: Int
+    ): Boolean {
+        val dayPlanId = planDao.getPlanIdByDate(epochDay)
+        return if (dayPlanId == null) {
+            metconDao.setDisplayOrderByDate(epochDay, planId, orderInDay); true
+        } else {
+            planDao.updateMetconOrder(dayPlanId, planId, orderInDay); true
+        }
+    }
+
 
     /* =========================================================
        ENGINE / SKILLS — DATE-FIRST
        ========================================================= */
-
     fun enginePlanIdsForDate(epochDay: Long): Flow<Set<Long>> =
         planDao.flowPlanIdByDate(epochDay).flatMapLatest { dayPlanId ->
             if (dayPlanId == null) flowOf(emptySet())
@@ -458,11 +496,14 @@ class WorkoutRepository(
             planDao.insertItems(
                 listOf(
                     DayItemEntity(
+                        id = 0L,
                         dayPlanId = dayPlanId,
                         itemType = "ENGINE",
                         refId = planId,
                         required = required,
-                        sortOrder = orderInDay
+                        sortOrder = orderInDay,
+                        prescriptionJson = null,
+                        targetReps = null
                     )
                 )
             )
@@ -491,11 +532,14 @@ class WorkoutRepository(
             planDao.insertItems(
                 listOf(
                     DayItemEntity(
+                        id = 0L,
                         dayPlanId = dayPlanId,
                         itemType = "SKILL",
                         refId = planId,
                         required = required,
-                        sortOrder = orderInDay
+                        sortOrder = orderInDay,
+                        prescriptionJson = null,
+                        targetReps = null
                     )
                 )
             )
@@ -521,7 +565,6 @@ class WorkoutRepository(
     /* =========================================================
        PHASE / CALENDAR HELPERS
        ========================================================= */
-
     suspend fun getPlanFor(phaseId: Long, week: Int, day: Int): WeekDayPlanEntity? =
         planDao.getPlan(phaseId, week, day)
 
@@ -537,7 +580,6 @@ class WorkoutRepository(
     }
 
     /* ---------- Rest timer (unchanged) ---------- */
-
     data class RestState(
         val sessionId: Long,
         val exerciseId: Long,
@@ -579,5 +621,4 @@ class WorkoutRepository(
             }
         }
     }
-
 }

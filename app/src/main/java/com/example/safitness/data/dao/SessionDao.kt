@@ -40,34 +40,7 @@ interface SessionDao {
         reps: Int? = null
     ): List<SetLog>
 
-    // Legacy seconds-only helper.
-    @Query(
-        """
-        SELECT sl.timeSeconds FROM SetLog sl
-        JOIN workout_session ws ON ws.id = sl.sessionId
-        WHERE ws.dayIndex = :day
-          AND sl.timeSeconds IS NOT NULL
-        ORDER BY sl.id DESC
-        LIMIT 1
-        """
-    )
-    suspend fun lastMetconSecondsForDay(day: Int): Int?
-
-    // New summary; metconResult is NULL until schema adds that column.
-    @Query(
-        """
-        SELECT 
-            sl.timeSeconds AS timeSeconds,
-            NULL AS metconResult
-        FROM SetLog sl
-        JOIN workout_session ws ON ws.id = sl.sessionId
-        WHERE ws.dayIndex = :day
-          AND sl.timeSeconds IS NOT NULL
-        ORDER BY sl.id DESC
-        LIMIT 1
-        """
-    )
-    suspend fun lastMetconForDay(day: Int): MetconSummary?
+    /* ---- Date-first only ---- */
 
     @Query("""
     SELECT sl.timeSeconds FROM SetLog sl
@@ -82,7 +55,7 @@ interface SessionDao {
     @Query("""
     SELECT 
         sl.timeSeconds AS timeSeconds,
-        NULL AS metconResult  -- keep until you add the column
+        NULL AS metconResult  -- until you add the column to SetLog
     FROM SetLog sl
     JOIN workout_session ws ON ws.id = sl.sessionId
     WHERE ws.dateEpochDay = :epochDay
@@ -91,5 +64,4 @@ interface SessionDao {
     LIMIT 1
 """)
     suspend fun lastMetconForDate(epochDay: Long): MetconSummary?
-
 }

@@ -3,6 +3,7 @@ package com.example.safitness.data.repo
 import com.example.safitness.core.Equipment
 import com.example.safitness.core.WorkoutType
 import com.example.safitness.data.dao.LibraryDao
+import com.example.safitness.data.dao.MetconDao
 import com.example.safitness.data.dao.PlanDao
 import com.example.safitness.data.entities.DayItemEntity
 import com.example.safitness.data.entities.PhaseEntity
@@ -15,7 +16,6 @@ import kotlin.math.abs
 import java.time.LocalDate
 import com.example.safitness.core.BlockType
 import com.example.safitness.core.MovementPattern
-import com.example.safitness.data.dao.MetconDao
 
 class PlannerRepository(
     private val planDao: PlanDao,
@@ -25,8 +25,8 @@ class PlannerRepository(
     private val planner = SimplePlanner(libraryDao)
     private val allowedRepBuckets = intArrayOf(3, 5, 8, 10, 12, 15)
 
-    suspend fun generateSuggestionsForDay(
-        dayIndex: Int,
+    /** Pure suggestion generation (date-agnostic). */
+    suspend fun generateSuggestions(
         focus: WorkoutType,
         availableEq: List<Equipment>
     ): List<Suggestion> = planner.suggestFor(
@@ -34,31 +34,16 @@ class PlannerRepository(
         availableEq = availableEq
     )
 
-    suspend fun persistSuggestionsToDay(
-        dayIndex: Int,
+    /** Persist strength suggestions for a concrete calendar date. */
+    suspend fun persistSuggestionsToDate(
+        epochDay: Long,
         suggestions: List<Suggestion>,
         replaceStrength: Boolean = false
     ) = withContext(Dispatchers.IO) {
-        val phaseId = ensurePhaseAndWeek()
-        var dayPlanId = planDao.getPlanId(phaseId, week = 1, day = dayIndex)
-        if (dayPlanId == null) {
-            planDao.insertWeekPlans(
-                listOf(
-                    WeekDayPlanEntity(
-                        id = 0L,
-                        phaseId = phaseId,
-                        weekIndex = 1,
-                        dayIndex = dayIndex,
-                        dateEpochDay = null
-                    )
-                )
-            )
-            dayPlanId = planDao.getPlanId(phaseId, week = 1, day = dayIndex)
-        }
-        if (dayPlanId == null) return@withContext
+        val dayPlanId = ensurePlanForDate(epochDay) ?: return@withContext
 
         if (replaceStrength) {
-            planDao.clearStrength(dayPlanId) // requires the DAO method above
+            planDao.clearStrength(dayPlanId)
         }
 
         var nextOrder = planDao.nextStrengthSortOrder(dayPlanId)
@@ -67,11 +52,11 @@ class PlannerRepository(
         suggestions.forEach { s ->
             val exerciseId = s.exercise.id
             val exists = planDao.strengthItemCount(dayPlanId, exerciseId) > 0
-
             val target = pickTargetReps(s.repsMin, s.repsMax)
 
             if (exists) {
                 planDao.updateStrengthTargetReps(dayPlanId, exerciseId, target)
+                planDao.updateStrengthRequired(dayPlanId, exerciseId, true)
             } else {
                 toInsert += DayItemEntity(
                     id = 0L,
@@ -91,59 +76,14 @@ class PlannerRepository(
         }
     }
 
-    private suspend fun ensurePhaseAndWeek(): Long {
-        planDao.currentPhaseId()?.let { return it }
-
-        // create a default phase (fix: compute epoch inline)
-        val phaseId = planDao.insertPhase(
-            PhaseEntity(
-                id = 0L,
-                name = "Auto Phase",
-                startDateEpochDay = LocalDate.now().toEpochDay(),
-                weeks = 4
-            )
-        )
-
-        // create week 1 (days 1..5)
-        val weekPlans = (1..5).map { day ->
-            WeekDayPlanEntity(
-                id = 0L,
-                phaseId = phaseId,
-                weekIndex = 1,
-                dayIndex = day,
-                dateEpochDay = null
-            )
-        }
-        planDao.insertWeekPlans(weekPlans)
-
-        return phaseId
-    }
-
-    // In PlannerRepository.kt
-
-    suspend fun persistMetconPlanToDay(
-        dayIndex: Int,
+    /** Attach/replace metcon plan for a concrete calendar date. */
+    suspend fun persistMetconPlanToDate(
+        epochDay: Long,
         planId: Long,
         replaceMetcon: Boolean = false,
         required: Boolean = true
     ) = withContext(Dispatchers.IO) {
-        val phaseId = ensurePhaseAndWeek()
-        var dayPlanId = planDao.getPlanId(phaseId, week = 1, day = dayIndex)
-        if (dayPlanId == null) {
-            planDao.insertWeekPlans(
-                listOf(
-                    WeekDayPlanEntity(
-                        id = 0L,
-                        phaseId = phaseId,
-                        weekIndex = 1,
-                        dayIndex = dayIndex,
-                        dateEpochDay = null
-                    )
-                )
-            )
-            dayPlanId = planDao.getPlanId(phaseId, week = 1, day = dayIndex)
-        }
-        if (dayPlanId == null) return@withContext
+        val dayPlanId = ensurePlanForDate(epochDay) ?: return@withContext
 
         if (replaceMetcon) {
             planDao.clearMetcon(dayPlanId)
@@ -171,6 +111,46 @@ class PlannerRepository(
         }
     }
 
+    /** One-shot convenience: (re)build a date with strength + metcon. */
+    suspend fun regenerateDateWithMetcon(
+        epochDay: Long,
+        focus: WorkoutType,
+        availableEq: List<Equipment>,
+        metconPlanId: Long
+    ) = withContext(Dispatchers.IO) {
+        val suggestions = generateSuggestions(focus, availableEq)
+        persistSuggestionsToDate(epochDay, suggestions, replaceStrength = true)
+        persistMetconPlanToDate(epochDay, metconPlanId, replaceMetcon = true, required = true)
+    }
+
+    private suspend fun ensurePlanForDate(epochDay: Long): Long? {
+        planDao.getPlanIdByDate(epochDay)?.let { return it }
+
+        val phaseId = ensurePhase()
+        // Minimal week/day placeholders; dateEpochDay is canonical.
+        val row = WeekDayPlanEntity(
+            id = 0L,
+            phaseId = phaseId,
+            weekIndex = 1,
+            dayIndex = 1,
+            dateEpochDay = epochDay
+        )
+        planDao.insertWeekPlans(listOf(row))
+        return planDao.getPlanIdByDate(epochDay)
+    }
+
+    private suspend fun ensurePhase(): Long {
+        planDao.currentPhaseId()?.let { return it }
+        return planDao.insertPhase(
+            PhaseEntity(
+                id = 0L,
+                name = "Auto Phase",
+                startDateEpochDay = LocalDate.now().toEpochDay(),
+                weeks = 4
+            )
+        )
+    }
+
     private fun focusMovementsFor(type: WorkoutType): List<MovementPattern> = when (type) {
         WorkoutType.PUSH -> listOf(
             MovementPattern.HORIZONTAL_PUSH,
@@ -187,6 +167,7 @@ class PlannerRepository(
         )
         else -> emptyList()
     }
+
     suspend fun pickMetconPlanIdForFocus(
         focus: WorkoutType,
         availableEq: List<com.example.safitness.core.Equipment>,
@@ -207,18 +188,6 @@ class PlannerRepository(
         )
         return hits.firstOrNull()?.planId
     }
-
-    suspend fun regenerateDayWithMetcon(
-        dayIndex: Int,
-        focus: WorkoutType,
-        availableEq: List<Equipment>,
-        metconPlanId: Long
-    ) = withContext(Dispatchers.IO) {
-        val suggestions = generateSuggestionsForDay(dayIndex, focus, availableEq)
-        persistSuggestionsToDay(dayIndex, suggestions, replaceStrength = true)
-        persistMetconPlanToDay(dayIndex, metconPlanId, replaceMetcon = true, required = true)
-    }
-
 
     private fun pickTargetReps(min: Int, max: Int): Int {
         allowedRepBuckets.firstOrNull { it in min..max }?.let { return it }

@@ -55,52 +55,19 @@ interface MetconDao {
     @Query("SELECT COUNT(*) FROM metcon_plan")
     suspend fun countPlans(): Int
 
-    /* ----- Program selections (legacy table) ----- */
+    /* ----- Program selections (date-first only) ----- */
 
-    // Day-index legacy reads (kept for compatibility, repository no longer calls these)
-    @Transaction
-    @Query("""
-        SELECT * FROM program_metcon_selection
-        WHERE dayIndex = :day
-        ORDER BY displayOrder ASC, id ASC
-    """)
-    @Deprecated("Use PlanDao day-item APIs via epochDay")
-    fun getMetconsForDay(day: Int): Flow<List<SelectionWithPlanAndComponents>>
-
-    // Date-first reads (new)
     @Transaction
     @Query("""
         SELECT * FROM program_metcon_selection
         WHERE dateEpochDay = :epochDay
-        ORDER BY displayOrder ASC, id ASC
+        ORDER BY displayOrder ASC
     """)
     fun getMetconsForDate(epochDay: Long): Flow<List<SelectionWithPlanAndComponents>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertSelection(selection: ProgramMetconSelection): Long
 
-    // Day-index legacy mutators (kept but repository avoids them now)
-    @Query("DELETE FROM program_metcon_selection WHERE dayIndex = :day AND planId = :planId")
-    @Deprecated("Use PlanDao day-item APIs via epochDay")
-    suspend fun removeSelection(day: Int, planId: Long)
-
-    @Query("""
-        UPDATE program_metcon_selection
-        SET required = :required
-        WHERE dayIndex = :day AND planId = :planId
-    """)
-    @Deprecated("Use PlanDao day-item APIs via epochDay")
-    suspend fun setRequired(day: Int, planId: Long, required: Boolean)
-
-    @Query("""
-        UPDATE program_metcon_selection
-        SET displayOrder = :orderInDay
-        WHERE dayIndex = :day AND planId = :planId
-    """)
-    @Deprecated("Use PlanDao day-item APIs via epochDay")
-    suspend fun setDisplayOrder(day: Int, planId: Long, orderInDay: Int)
-
-    // Date-first mutators (new)
     @Query("DELETE FROM program_metcon_selection WHERE dateEpochDay = :epochDay AND planId = :planId")
     suspend fun removeSelectionByDate(epochDay: Long, planId: Long)
 
@@ -130,15 +97,6 @@ interface MetconDao {
         LIMIT 1
     """)
     fun lastForPlan(planId: Long): Flow<MetconLog?>
-
-    @Query("""
-        SELECT * FROM metcon_log
-        WHERE dayIndex = :day
-        ORDER BY createdAt DESC
-        LIMIT 1
-    """)
-    @Deprecated("Use PlanDao day-item APIs via epochDay")
-    fun lastForDay(day: Int): Flow<MetconLog?>
 
     @Query("""
         SELECT * FROM metcon_log
@@ -224,7 +182,7 @@ interface MetconDao {
         intensityValue: Float?
     ): Int
 
-    /* ----- Focus ranking (FIXED return type) ----- */
+    /* ----- Focus ranking (unchanged) ----- */
 
     data class MetconPlanHit(
         val planId: Long,

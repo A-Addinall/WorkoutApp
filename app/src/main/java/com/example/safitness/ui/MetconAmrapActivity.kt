@@ -290,9 +290,16 @@ class MetconAmrapActivity : AppCompatActivity() {
             return
         }
 
+        // NEW: read epochDay at the point of logging (no field/import churn)
+        val epochDay = intent.getLongExtra(
+            MainActivity.EXTRA_DATE_EPOCH_DAY,
+            java.time.LocalDate.now().toEpochDay()
+        )
+
         lifecycleScope.launch {
-            vm.logMetconAmrap(
-                day = dayIndex,
+            // CHANGED: date-first logging
+            vm.logMetconAmrapForDate(
+                epochDay = epochDay,
                 planId = planId,
                 durationSeconds = durationSeconds,
                 rounds = rounds,
@@ -308,6 +315,7 @@ class MetconAmrapActivity : AppCompatActivity() {
             finish()
         }
     }
+
 
     private fun hideKeyboard(view: View) {
         val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager

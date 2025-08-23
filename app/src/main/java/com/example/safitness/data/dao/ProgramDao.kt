@@ -18,51 +18,7 @@ data class ExerciseWithSelection(
 @Dao
 interface ProgramDao {
 
-    @Transaction
-    @Query("""
-        SELECT e.*, ps.required, ps.preferredEquipment, ps.targetReps
-        FROM Exercise e
-        JOIN ProgramSelection ps ON ps.exerciseId = e.id
-        WHERE ps.dayIndex = :day
-        ORDER BY ps.required DESC, e.name ASC
-    """)
-    fun getProgramForDay(day: Int): Flow<List<ExerciseWithSelection>>
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun upsert(selection: ProgramSelection)
-
-    @Query("DELETE FROM ProgramSelection WHERE dayIndex = :day AND exerciseId = :exerciseId")
-    suspend fun remove(day: Int, exerciseId: Long)
-
-    @Query("UPDATE ProgramSelection SET required = :required WHERE dayIndex = :day AND exerciseId = :exerciseId")
-    suspend fun setRequired(day: Int, exerciseId: Long, required: Boolean)
-
-    @Query("UPDATE ProgramSelection SET preferredEquipment = :preferred WHERE dayIndex = :day AND exerciseId = :exerciseId")
-    suspend fun setPreferred(day: Int, exerciseId: Long, preferred: Equipment?)
-
-    @Query("UPDATE ProgramSelection SET targetReps = :reps WHERE dayIndex = :day AND exerciseId = :exerciseId")
-    suspend fun setTargetReps(day: Int, exerciseId: Long, reps: Int?)
-
-    /* --- used by Library row state --- */
-    @Query("SELECT COUNT(*) FROM ProgramSelection WHERE dayIndex = :day AND exerciseId = :exerciseId")
-    suspend fun exists(day: Int, exerciseId: Long): Int
-
-    @Query("SELECT targetReps FROM ProgramSelection WHERE dayIndex = :day AND exerciseId = :exerciseId LIMIT 1")
-    suspend fun getTargetReps(day: Int, exerciseId: Long): Int?
-
-    @Query("SELECT required FROM ProgramSelection WHERE dayIndex = :day AND exerciseId = :exerciseId LIMIT 1")
-    suspend fun getRequired(day: Int, exerciseId: Long): Boolean?
-
-    /* --- for main-day card label --- */
-    @Query("""
-        SELECT DISTINCT e.workoutType
-        FROM Exercise e
-        JOIN ProgramSelection ps ON ps.exerciseId = e.id
-        WHERE ps.dayIndex = :day
-    """)
-    suspend fun distinctTypesForDay(day: Int): List<WorkoutType>
-
-    // -------- Date-first mirrors (additive) --------
+    /* -------- Date-first only -------- */
 
     @Transaction
     @Query("""
@@ -72,7 +28,10 @@ interface ProgramDao {
     WHERE ps.dateEpochDay = :epochDay
     ORDER BY ps.required DESC, e.name ASC
 """)
-    fun getProgramForDate(epochDay: Long): kotlinx.coroutines.flow.Flow<List<ExerciseWithSelection>>
+    fun getProgramForDate(epochDay: Long): Flow<List<ExerciseWithSelection>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(selection: ProgramSelection)
 
     @Query("DELETE FROM ProgramSelection WHERE dateEpochDay = :epochDay AND exerciseId = :exerciseId")
     suspend fun removeByDate(epochDay: Long, exerciseId: Long)
@@ -102,5 +61,4 @@ interface ProgramDao {
     WHERE ps.dateEpochDay = :epochDay
 """)
     suspend fun distinctTypesForDate(epochDay: Long): List<com.example.safitness.core.WorkoutType>
-
 }

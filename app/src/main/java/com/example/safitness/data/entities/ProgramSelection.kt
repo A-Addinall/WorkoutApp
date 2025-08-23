@@ -3,20 +3,24 @@ package com.example.safitness.data.entities
 
 import androidx.room.Entity
 import androidx.room.Index
+import com.example.safitness.core.Equipment
 
+/**
+ * Strength exercise selections scheduled for a concrete date.
+ * Uniqueness is per (dateEpochDay, exerciseId).
+ */
 @Entity(
     tableName = "ProgramSelection",
-    primaryKeys = ["dayIndex", "exerciseId"],  // keep the legacy PK
+    primaryKeys = ["dateEpochDay", "exerciseId"],
     indices = [
-        Index("dateEpochDay"),                 // allow fast date queries
-        Index(value = ["dateEpochDay", "exerciseId"], unique = false) // optional helper
+        Index("dateEpochDay"),
+        Index("exerciseId")
     ]
 )
 data class ProgramSelection(
-    val dayIndex: Int,                         // legacy PK part
-    val exerciseId: Long,                      // legacy PK part
-    val dateEpochDay: Long?,                   // NEW: nullable during migration
+    val dateEpochDay: Long,
+    val exerciseId: Long,
     val required: Boolean,
-    val preferredEquipment: com.example.safitness.core.Equipment?,
+    val preferredEquipment: Equipment?,
     val targetReps: Int?
 )

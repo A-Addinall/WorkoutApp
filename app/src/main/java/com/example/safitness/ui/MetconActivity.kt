@@ -293,7 +293,8 @@ class MetconActivity : AppCompatActivity() {
         }
 
         lifecycleScope.launch {
-            vm.logMetconForTime(dayIndex, planId, totalSeconds, result)
+            // CHANGED: date-first logging
+            vm.logMetconForTimeForDate(epochDay, planId, totalSeconds, result)
             beeper.finalBuzz()
             Toast.makeText(
                 this@MetconActivity,
@@ -303,6 +304,7 @@ class MetconActivity : AppCompatActivity() {
             finish()
         }
     }
+
 
     override fun onDestroy() {
         super.onDestroy()

@@ -108,15 +108,34 @@ class WorkoutViewModel(private val repo: WorkoutRepository) : ViewModel() {
     fun lastMetconForPlan(planId: Long): LiveData<MetconLog?> =
         repo.lastMetconForPlan(planId).asLiveData()
 
-    fun logMetconForTime(day: Int, planId: Long, timeSeconds: Int, result: MetconResult) =
-        viewModelScope.launch { repo.logMetconForTime(day, planId, timeSeconds, result) }
+    suspend fun logMetconForTimeForDate(
+        epochDay: Long,
+        planId: Long,
+        timeSeconds: Int,
+        result: MetconResult
+    ) {
+        repo.logMetconForTimeForDate(epochDay, planId, timeSeconds, result)
+    }
+    suspend fun logMetconAmrapForDate(
+        epochDay: Long,
+        planId: Long,
+        durationSeconds: Int,
+        rounds: Int,
+        extraReps: Int,
+        result: MetconResult
+    ) {
+        repo.logMetconAmrapForDate(epochDay, planId, durationSeconds, rounds, extraReps, result)
+    }
 
-    fun logMetconAmrap(day: Int, planId: Long, durationSeconds: Int, rounds: Int, extraReps: Int, result: MetconResult) =
-        viewModelScope.launch { repo.logMetconAmrap(day, planId, durationSeconds, rounds, extraReps, result) }
-
-    fun logMetconEmom(day: Int, planId: Long, durationSeconds: Int, intervalsCompleted: Int?, result: MetconResult) =
-        viewModelScope.launch { repo.logMetconEmom(day, planId, durationSeconds, intervalsCompleted, result) }
-
+    suspend fun logMetconEmomForDate(
+        epochDay: Long,
+        planId: Long,
+        durationSeconds: Int,
+        intervalsCompleted: Int,
+        result: MetconResult
+    ) {
+        repo.logMetconEmomForDate(epochDay, planId, durationSeconds, intervalsCompleted, result)
+    }
     /* ---------------- Day subtitle (date-first) ---------------- */
 
     data class DaySummary(val subtitle: String)
