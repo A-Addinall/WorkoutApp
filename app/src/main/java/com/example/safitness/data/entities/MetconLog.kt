@@ -11,30 +11,20 @@ import androidx.room.PrimaryKey
  */
 @Entity(
     tableName = "metcon_log",
-    indices = [Index("planId"), Index("dayIndex")]
+    indices = [Index("dateEpochDay"), Index("planId")]
 )
 data class MetconLog(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
-    val dayIndex: Int,
-    val planId: Long,
+    val dayIndex: Int? = null,           // legacy
+    val planId: Long? = null,            // plan-scoped logs
+    val dateEpochDay: Long,              // new: enable date queries
     val type: String,
-
-    /** Programmed duration in seconds (AMRAP/EMOM use this; For Time can be 0). */
     val durationSeconds: Int,
-
-    /** For FOR_TIME only. Nullable for other modes. */
-    val timeSeconds: Int? = null,
-
-    /** For AMRAP only. Nullable for other modes. */
-    val rounds: Int? = null,
-    val extraReps: Int? = null,
-
-    /** For EMOM only (e.g. minutes/intervals completed). Nullable for others. */
-    val intervalsCompleted: Int? = null,
-
-    /** "RX" or "SCALED" */
-    val result: String,
-
-    val createdAt: Long = System.currentTimeMillis(),
-    val notes: String? = null
+    val timeSeconds: Int?,
+    val rounds: Int?,
+    val extraReps: Int?,
+    val intervalsCompleted: Int?,
+    val result: String?,
+    val createdAt: Long = System.currentTimeMillis()
 )
+

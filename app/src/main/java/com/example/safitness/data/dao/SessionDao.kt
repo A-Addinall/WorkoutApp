@@ -7,7 +7,7 @@ import androidx.room.Query
 import com.example.safitness.core.Equipment
 import com.example.safitness.core.MetconResult
 import com.example.safitness.data.entities.SetLog
-import com.example.safitness.data.entities.WorkoutSession
+import com.example.safitness.data.entities.WorkoutSessionEntity
 
 // Top-level so other packages can import it directly.
 data class MetconSummary(
@@ -18,7 +18,7 @@ data class MetconSummary(
 @Dao
 interface SessionDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertSession(session: WorkoutSession): Long
+    suspend fun insertSession(session: WorkoutSessionEntity): Long
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSet(set: SetLog): Long
@@ -40,32 +40,28 @@ interface SessionDao {
         reps: Int? = null
     ): List<SetLog>
 
-    // Legacy seconds-only helper.
-    @Query(
-        """
-        SELECT sl.timeSeconds FROM SetLog sl
-        JOIN WorkoutSession ws ON ws.id = sl.sessionId
-        WHERE ws.dayIndex = :day
-          AND sl.timeSeconds IS NOT NULL
-        ORDER BY sl.id DESC
-        LIMIT 1
-        """
-    )
-    suspend fun lastMetconSecondsForDay(day: Int): Int?
+    /* ---- Date-first only ---- */
 
-    // New summary; metconResult is NULL until schema adds that column.
-    @Query(
-        """
-        SELECT 
-            sl.timeSeconds AS timeSeconds,
-            NULL AS metconResult
-        FROM SetLog sl
-        JOIN WorkoutSession ws ON ws.id = sl.sessionId
-        WHERE ws.dayIndex = :day
-          AND sl.timeSeconds IS NOT NULL
-        ORDER BY sl.id DESC
-        LIMIT 1
-        """
-    )
-    suspend fun lastMetconForDay(day: Int): MetconSummary?
+    @Query("""
+    SELECT sl.timeSeconds FROM SetLog sl
+    JOIN workout_session ws ON ws.id = sl.sessionId
+    WHERE ws.dateEpochDay = :epochDay
+      AND sl.timeSeconds IS NOT NULL
+    ORDER BY sl.id DESC
+    LIMIT 1
+""")
+    suspend fun lastMetconSecondsForDate(epochDay: Long): Int?
+
+    @Query("""
+    SELECT 
+        sl.timeSeconds AS timeSeconds,
+        NULL AS metconResult  -- until you add the column to SetLog
+    FROM SetLog sl
+    JOIN workout_session ws ON ws.id = sl.sessionId
+    WHERE ws.dateEpochDay = :epochDay
+      AND sl.timeSeconds IS NOT NULL
+    ORDER BY sl.id DESC
+    LIMIT 1
+""")
+    suspend fun lastMetconForDate(epochDay: Long): MetconSummary?
 }

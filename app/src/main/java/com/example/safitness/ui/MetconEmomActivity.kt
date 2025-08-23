@@ -236,9 +236,17 @@ class MetconEmomActivity : AppCompatActivity() {
             Toast.makeText(this, "Please select RX or Scaled.", Toast.LENGTH_SHORT).show()
             return
         }
+
+        // NEW: read epochDay on demand
+        val epochDay = intent.getLongExtra(
+            MainActivity.EXTRA_DATE_EPOCH_DAY,
+            java.time.LocalDate.now().toEpochDay()
+        )
+
         lifecycleScope.launch {
-            vm.logMetconEmom(
-                day = dayIndex,
+            // CHANGED: date-first logging
+            vm.logMetconEmomForDate(
+                epochDay = epochDay,
                 planId = planId,
                 durationSeconds = durationSeconds,
                 intervalsCompleted = durationSeconds / 60,
@@ -249,6 +257,7 @@ class MetconEmomActivity : AppCompatActivity() {
             finish()
         }
     }
+
 
     override fun onDestroy() {
         super.onDestroy()

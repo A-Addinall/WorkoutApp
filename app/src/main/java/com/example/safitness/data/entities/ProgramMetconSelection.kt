@@ -2,16 +2,22 @@ package com.example.safitness.data.entities
 
 import androidx.room.Entity
 import androidx.room.Index
-import androidx.room.PrimaryKey
 
+/**
+ * Metcon selections scheduled for a concrete date.
+ * Uniqueness is per (dateEpochDay, planId).
+ */
 @Entity(
     tableName = "program_metcon_selection",
-    indices = [Index(value = ["dayIndex"]), Index(value = ["planId"])]
+    primaryKeys = ["dateEpochDay", "planId"],
+    indices = [
+        Index("dateEpochDay"),
+        Index("planId")
+    ]
 )
 data class ProgramMetconSelection(
-    @PrimaryKey(autoGenerate = true) val id: Long = 0L,
-    val dayIndex: Int,          // 1..5
-    val planId: Long,           // FK to MetconPlan.id
-    val required: Boolean,      // mirror strength "required/optional"
-    val displayOrder: Int = 0   // ordering within the day
+    val dateEpochDay: Long,
+    val planId: Long,
+    val required: Boolean,
+    val displayOrder: Int
 )

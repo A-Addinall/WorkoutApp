@@ -12,6 +12,7 @@ import com.example.safitness.core.MetconResult
 import com.example.safitness.core.Modality
 import com.example.safitness.data.repo.Repos
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 
 class MetconActivity : AppCompatActivity() {
 
@@ -41,6 +42,7 @@ class MetconActivity : AppCompatActivity() {
 
     // Intent args
     private var dayIndex: Int = 1
+    private var epochDay: Long = LocalDate.now().toEpochDay()
     private var workoutName: String = "Metcon"
     private var planId: Long = -1L
 
@@ -60,9 +62,10 @@ class MetconActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_metcon)
 
-        dayIndex   = intent.getIntExtra("DAY_INDEX", 1).coerceIn(1, 5)
+        dayIndex    = intent.getIntExtra("DAY_INDEX", 1).coerceIn(1, 5)
         workoutName = intent.getStringExtra("WORKOUT_NAME") ?: "Day $dayIndex"
-        planId     = intent.getLongExtra("PLAN_ID", -1L)
+        planId      = intent.getLongExtra("PLAN_ID", -1L)
+        epochDay    = intent.getLongExtra("DATE_EPOCH_DAY", LocalDate.now().toEpochDay())
 
         bindViews()
 
@@ -71,7 +74,7 @@ class MetconActivity : AppCompatActivity() {
 
         findViewById<ImageView>(R.id.ivBack).setOnClickListener { finish() }
 
-        vm.setDay(dayIndex)
+        vm.setDate(epochDay)
 
         if (planId > 0L) {
             vm.planWithComponents(planId).observe(this) { pwc ->
@@ -116,7 +119,8 @@ class MetconActivity : AppCompatActivity() {
             }
 
         } else {
-            vm.programForDay.observe(this) { items ->
+            // Epoch-day based programme view
+            vm.programForDate.observe(this) { items ->
                 val metconItems = items.filter { it.exercise.modality == Modality.METCON }
                 if (cardComponents != null) {
                     cardTitle?.text = "Metcon"
@@ -218,7 +222,7 @@ class MetconActivity : AppCompatActivity() {
         preTimer?.cancel()
         isCountdown = false
         btnStartStop.text = "START"
-        updateTimerDisplay() // restore current elapsed
+        updateTimerDisplay()
     }
 
     /* ---------------------------- Main timer (count-up) ---------------------------- */
@@ -289,7 +293,8 @@ class MetconActivity : AppCompatActivity() {
         }
 
         lifecycleScope.launch {
-            vm.logMetconForTime(dayIndex, planId, totalSeconds, result)
+            // CHANGED: date-first logging
+            vm.logMetconForTimeForDate(epochDay, planId, totalSeconds, result)
             beeper.finalBuzz()
             Toast.makeText(
                 this@MetconActivity,
@@ -299,6 +304,7 @@ class MetconActivity : AppCompatActivity() {
             finish()
         }
     }
+
 
     override fun onDestroy() {
         super.onDestroy()

@@ -28,13 +28,13 @@ import com.example.safitness.data.entities.SkillLogEntity
 
 
 @Database(
-    version = 9,                 // bump for new tables
+    version = 10,                 // bump for new tables
     exportSchema = false,        // fine for dev; turn on for prod
     entities = [
         // legacy
         Exercise::class,
         ProgramSelection::class,
-        WorkoutSession::class,
+        WorkoutSessionEntity::class,
         SetLog::class,
         PersonalRecord::class,
         UserSettings::class,

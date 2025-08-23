@@ -5,19 +5,20 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 
 /**
- * One row per (phase, weekIndex 1..N, dayIndex 1..7).
- * We’ll still *use only 1..5* days in UI for now.
+ * One row per (phase, concrete calendar day).
+ * weekIndex/dayIndex are retained for legacy displays but dateEpochDay is canonical.
  */
 @Entity(
     tableName = "week_day_plan",
-    indices = [Index(value = ["phaseId", "weekIndex", "dayIndex"], unique = true)]
+    indices = [
+        Index("dateEpochDay"),
+        Index(value = ["phaseId", "dateEpochDay"], unique = true)
+    ]
 )
 data class WeekDayPlanEntity(
-    @PrimaryKey(autoGenerate = true) val id: Long = 0L,
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val phaseId: Long,
     val weekIndex: Int,
-    val dayIndex: Int, // 1..7; current UI cares about 1..5
-    val displayName: String? = null, // optional “Week 1 Day 1: Lower”
-    // NEW: date attachment (nullable until user picks a start date)
-    val dateEpochDay: Long? = null
+    val dayIndex: Int,
+    val dateEpochDay: Long
 )

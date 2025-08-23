@@ -24,10 +24,12 @@ object DatabaseSeeder {
         val hasPlans = planDao.countPlans() > 0
         if (hasPhase || hasPlans) return@withContext
 
+        // Anchor the phase to "today" and seed concrete dates (epoch-day) for 4 weeks × 5 days.
+        val startDate = LocalDate.now()
         val phaseId = planDao.insertPhase(
             PhaseEntity(
                 name = "Phase 1",
-                startDateEpochDay = LocalDate.now().toEpochDay(),
+                startDateEpochDay = startDate.toEpochDay(),
                 weeks = 4
             )
         )
@@ -35,12 +37,13 @@ object DatabaseSeeder {
         val plans = buildList {
             for (w in 1..4) {
                 for (d in 1..5) {
+                    val offsetDays = ((w - 1) * 7 + (d - 1)).toLong()
                     add(
                         WeekDayPlanEntity(
                             phaseId = phaseId,
                             weekIndex = w,
                             dayIndex = d,
-                            displayName = "Week $w Day $d"
+                            dateEpochDay = startDate.plusDays(offsetDays).toEpochDay()
                         )
                     )
                 }
