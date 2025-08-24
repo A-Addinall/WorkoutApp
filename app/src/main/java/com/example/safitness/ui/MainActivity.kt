@@ -465,27 +465,55 @@ class MainActivity : AppCompatActivity() {
     private suspend fun pickEnginePlanIdFor(profile: UserProfile, epochDay: Long): Long? =
         withContext(Dispatchers.IO) {
             val db = AppDatabase.get(this@MainActivity)
-            val all = db.enginePlanDao().getPlans() // List<EnginePlanEntity>
-
+            val all = db.enginePlanDao().getPlans()
             if (all.isEmpty()) return@withContext null
 
+            // Modes selected by the user (RUN, BIKE, ROW, …)
             val modes = profile.engineModesCsv
                 ?.split(',')
                 ?.map { it.trim().uppercase() }
                 ?.filter { it.isNotEmpty() }
                 ?.toSet()
-                ?: emptySet()
+                .orEmpty()
 
-            // Try filtering by selected modes first
-            val filtered = if (modes.isEmpty()) all else all.filter { p ->
-                p.mode?.uppercase() in modes
+            // Experience-based caps (tightened by sessionMinutes)
+            data class Limits(val maxMinutes: Int)
+            val base = when (profile.experience) {
+                ExperienceLevel.BEGINNER     -> Limits(30)
+                ExperienceLevel.INTERMEDIATE -> Limits(45)
+                ExperienceLevel.ADVANCED     -> Limits(60)
+            }
+            val limits = base.copy(maxMinutes = minOf(base.maxMinutes, profile.sessionMinutes))
+
+            // Helpers to parse from the title when fields aren’t present
+            fun parseMinutesFromTitle(t: String?): Int? {
+                if (t.isNullOrBlank()) return null
+                val re = Regex("""(\d+)\s*(min|mins|minutes)""", RegexOption.IGNORE_CASE)
+                return re.find(t)?.groupValues?.getOrNull(1)?.toIntOrNull()
+            }
+            fun parseKmFromTitle(t: String?): Int? {
+                if (t.isNullOrBlank()) return null
+                val re = Regex("""(\d+)\s*(km|kilometers?)""", RegexOption.IGNORE_CASE)
+                return re.find(t)?.groupValues?.getOrNull(1)?.toIntOrNull()
             }
 
-            val pool = if (filtered.isNotEmpty()) filtered else all // Fallback if nothing matched
+            // 1) Filter by chosen modes first (fallback to all)
+            val byMode = if (modes.isEmpty()) all else all.filter { p -> p.mode?.uppercase() in modes }
+            val pool0 = if (byMode.isNotEmpty()) byMode else all
 
+            // 2) Cap by experience/time: use programDurationSeconds when present, else parse from title
+            val pool = pool0.filter { p ->
+                val minutes = p.programDurationSeconds?.div(60)
+                    ?: parseMinutesFromTitle(p.title)
+                    ?: 0 // unknown -> allow
+                minutes <= limits.maxMinutes
+            }.ifEmpty { pool0 }
+
+            // Deterministic pick
             val idx = (kotlin.math.abs(epochDay) % pool.size).toInt()
             pool[idx].id
         }
+
 
     /** Deterministic Skill pick based on preferred skills + date. */
     private suspend fun pickSkillPlanIdFor(profile: UserProfile, epochDay: Long): Long? =

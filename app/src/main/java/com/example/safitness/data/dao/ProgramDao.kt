@@ -12,8 +12,10 @@ data class ExerciseWithSelection(
     @Embedded val exercise: Exercise,
     val required: Boolean,
     val preferredEquipment: Equipment?,
-    val targetReps: Int?
+    val targetReps: Int?,
+    val targetSets: Int? = null        // <-- NEW (default keeps old call sites compiling)
 )
+
 
 @Dao
 interface ProgramDao {
