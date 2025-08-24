@@ -29,6 +29,8 @@ class ExerciseDetailActivity : AppCompatActivity() {
     }
     private val repo by lazy { Repos.workoutRepository(this) }
 
+    private var targetSets: Int? = null
+
     private val beeper by lazy { TimerBeeper() }
     private var lastPippedSecond: Long = -1L
     private var lastRemainingMs: Long? = null
@@ -75,6 +77,8 @@ class ExerciseDetailActivity : AppCompatActivity() {
         equipmentName = intent.getStringExtra("EQUIPMENT") ?: "BARBELL"
         targetReps = if (intent.hasExtra("TARGET_REPS"))
             intent.getIntExtra("TARGET_REPS", 0).takeIf { it > 0 } else null
+        targetSets = if (intent.hasExtra("TARGET_SETS"))
+            intent.getIntExtra("TARGET_SETS", 0).takeIf { it > 0 } else null
 
         bindViews()
 
@@ -85,7 +89,10 @@ class ExerciseDetailActivity : AppCompatActivity() {
         ensureBannerInflated()
         findViewById<View>(R.id.restTimerContainer)?.bringToFront()
 
-        addNewSet()
+        // PRE-POPULATE planned number of sets here (default 1 if no plan)
+        val planned = (targetSets ?: 1).coerceAtLeast(1)
+        repeat(planned) { addNewSet() }
+
         btnAddSet.setOnClickListener { addNewSet() }
         btnCompleteExercise.setOnClickListener { onCompleteExercise() }
 

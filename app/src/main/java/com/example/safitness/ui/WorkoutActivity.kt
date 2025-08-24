@@ -113,10 +113,18 @@ class WorkoutActivity : AppCompatActivity() {
         // Start a session (repository records the actual date internally)
         lifecycleScope.launch(Dispatchers.IO) {
             if (sessionId == 0L) {
-                sessionId = Repos.workoutRepository(this@WorkoutActivity)
-                    .startSessionForDate(epochDay)
+                val repo = Repos.workoutRepository(this@WorkoutActivity)
+                sessionId = repo.startSessionForDate(epochDay)
+
+                // Pre-create the planned sets so they’re visible immediately
+                repo.ensureDefaultStrengthSetsForSession(
+                    sessionId = sessionId,
+                    epochDay = epochDay
+                )
             }
         }
+
+
 
         // ---------- DATE-FIRST DATA SOURCES ----------
         // Strength (by date, falls back to legacy weekday if no day plan exists)
@@ -254,14 +262,20 @@ class WorkoutActivity : AppCompatActivity() {
             setTypeface(typeface, Typeface.BOLD)
         }
 
+        val sets = item.targetSets
         val reps = item.targetReps
-        val meta = TextView(this).apply {
+        val rxText = when {
+            sets != null && reps != null -> "Target: $sets × $reps"
+            reps != null                 -> "Target reps: $reps"
+            else                         -> "Target: —"
+        }
+        val tvRx = TextView(this).apply {
+            text = rxText
             textSize = 14f
-            text = reps?.let { "Target: ${it} reps" } ?: ""
         }
 
         card.addView(title)
-        if (reps != null && reps > 0) card.addView(meta)
+        if (reps != null && reps > 0) card.addView(tvRx)
 
         card.setOnClickListener {
             val equip = (item.preferredEquipment ?: item.exercise.primaryEquipment).name
@@ -271,6 +285,8 @@ class WorkoutActivity : AppCompatActivity() {
                 putExtra("EXERCISE_NAME", item.exercise.name)
                 putExtra("EQUIPMENT", equip)
                 putExtra("TARGET_REPS", reps ?: -1)
+                putExtra("TARGET_SETS", item.targetSets)
+
             })
         }
 

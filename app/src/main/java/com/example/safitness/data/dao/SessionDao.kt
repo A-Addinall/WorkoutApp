@@ -64,4 +64,8 @@ interface SessionDao {
     LIMIT 1
 """)
     suspend fun lastMetconForDate(epochDay: Long): MetconSummary?
+
+    @Query("SELECT COUNT(*) FROM SetLog WHERE sessionId = :sessionId AND exerciseId = :exerciseId")
+    suspend fun countSetsFor(sessionId: Long, exerciseId: Long): Int
+
 }

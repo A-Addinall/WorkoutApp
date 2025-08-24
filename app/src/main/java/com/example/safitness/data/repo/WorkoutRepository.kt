@@ -53,13 +53,20 @@ class WorkoutRepository(
             if (dayPlanId != null) {
                 planDao.flowDayStrengthFor(dayPlanId).map { rows ->
                     rows.map { r ->
+                        val setsFromJson: Int? = runCatching {
+                            if (r.prescriptionJson.isNullOrBlank()) null
+                            else org.json.JSONObject(r.prescriptionJson).optInt("sets").takeIf { it > 0 }
+                        }.getOrNull()
+
                         ExerciseWithSelection(
                             exercise = r.exercise,
                             required = r.required,
                             preferredEquipment = null,
-                            targetReps = r.targetReps
+                            targetReps = r.targetReps,
+                            targetSets = setsFromJson
                         )
                     }
+
                 }
             } else {
                 flowOf(emptyList())
@@ -131,6 +138,49 @@ class WorkoutRepository(
     /* =========================================================
        SESSIONS / LOGGING — DATE-FIRST
        ========================================================= */
+    suspend fun ensureDefaultStrengthSetsForSession(sessionId: Long, epochDay: Long) =
+        withContext(Dispatchers.IO) {
+            val dayPlanId = planDao.getPlanIdByDate(epochDay) ?: return@withContext
+            val rows = planDao.listStrengthPlanRows(dayPlanId)
+
+            rows.forEachIndexed { idx, r ->
+                // If any set rows already exist for this exercise in this session, leave them alone.
+                val existing = sessionDao.countSetsFor(sessionId, r.exerciseId)
+                if (existing > 0) return@forEachIndexed
+
+                // Read sets + reps from prescriptionJson (written by PlannerRepository.applyMlToDate)
+                val (setsFromJson, repsFromJson) = runCatching {
+                    if (r.prescriptionJson.isNullOrBlank()) 0 to 0 else {
+                        val obj = org.json.JSONObject(r.prescriptionJson)
+                        obj.optInt("sets") to obj.optInt("reps")
+                    }
+                }.getOrDefault(0 to 0)
+
+                val targetSets = if (setsFromJson > 0) setsFromJson else 3      // safe default
+                val targetReps = r.targetReps ?: if (repsFromJson > 0) repsFromJson else 8
+
+                val eq = r.primaryEquipment ?: com.example.safitness.core.Equipment.BODYWEIGHT
+
+                // Pre-create blank set rows 1..targetSets
+                repeat(targetSets) { i ->
+                    sessionDao.insertSet(
+                        com.example.safitness.data.entities.SetLog(
+                            sessionId = sessionId,
+                            exerciseId = r.exerciseId,
+                            equipment = eq,
+                            setNumber = i + 1,
+                            reps = targetReps,
+                            weight = null,
+                            timeSeconds = null,
+                            rpe = null,
+                            success = null,          // if your SetLog.success is non-nullable, use false
+                            notes = null
+                        )
+                    )
+                }
+            }
+        }
+
     suspend fun startSessionForDate(epochDay: Long): Long =
         sessionDao.insertSession(WorkoutSessionEntity(dateEpochDay = epochDay))
 

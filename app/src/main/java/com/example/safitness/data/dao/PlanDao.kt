@@ -10,8 +10,10 @@ data class DayStrengthRow(
     @Embedded val exercise: Exercise,
     val required: Boolean,
     val targetReps: Int?,
-    val sortOrder: Int
+    val sortOrder: Int,
+    val prescriptionJson: String?   // <-- ensure this exists
 )
+
 
 data class DayMetconSelectionRow(
     val planId: Long,
@@ -85,13 +87,37 @@ interface PlanDao {
     suspend fun countItemsForDay(dayPlanId: Long): Int
 
     @Query("""
-        SELECT e.*, di.required AS required, di.targetReps AS targetReps, di.sortOrder AS sortOrder
-        FROM day_item di
-        JOIN exercise e ON e.id = di.refId
-        WHERE di.dayPlanId = :dayPlanId AND di.itemType = 'STRENGTH'
-        ORDER BY di.sortOrder ASC, di.id ASC
-    """)
+    SELECT e.*,
+           di.required              AS required,
+           di.targetReps            AS targetReps,
+           di.sortOrder             AS sortOrder,
+           di.prescriptionJson      AS prescriptionJson    -- NEW
+    FROM day_item di
+    JOIN exercise e ON e.id = di.refId
+    WHERE di.dayPlanId = :dayPlanId AND di.itemType = 'STRENGTH'
+    ORDER BY di.sortOrder ASC, di.id ASC
+""")
     fun flowDayStrengthFor(dayPlanId: Long): Flow<List<DayStrengthRow>>
+    // Minimal row to pre-create set logs from the plan
+    data class StrengthPlanMinRow(
+        val exerciseId: Long,
+        val targetReps: Int?,
+        val prescriptionJson: String?,
+        val primaryEquipment: com.example.safitness.core.Equipment?
+    )
+
+    @Query("""
+SELECT 
+  di.refId              AS exerciseId,
+  di.targetReps         AS targetReps,
+  di.prescriptionJson   AS prescriptionJson,
+  e.primaryEquipment    AS primaryEquipment
+FROM day_item di
+JOIN exercise e ON e.id = di.refId
+WHERE di.dayPlanId = :dayPlanId AND di.itemType = 'STRENGTH'
+ORDER BY di.sortOrder ASC, di.id ASC
+""")
+    suspend fun listStrengthPlanRows(dayPlanId: Long): List<StrengthPlanMinRow>
 
     @Query("""
         SELECT di.refId AS planId, di.required AS required, di.sortOrder AS sortOrder
@@ -308,5 +334,28 @@ WHERE di.itemType = 'STRENGTH'
   AND wdp.dateEpochDay BETWEEN :fromEpochDay AND :toEpochDay
 """)
     suspend fun strengthIdsBetween(fromEpochDay: Long, toEpochDay: Long): List<Long>
+    @Query("SELECT id, name FROM exercise WHERE id IN (:ids)")
+    suspend fun rawNamesByIds(ids: List<Long>): List<ExerciseIdName>
+
+    data class ExerciseIdName(
+        val id: Long,
+        val name: String
+    )
+
+    // Convenience
+    suspend fun exerciseNamesByIds(ids: List<Long>): Map<Long, String> =
+        rawNamesByIds(ids).associate { it.id to it.name }
+    @Query("""
+    UPDATE day_item SET prescriptionJson = :json
+    WHERE dayPlanId = :dayPlanId AND itemType = 'STRENGTH' AND refId = :exerciseId
+""")
+    suspend fun updateStrengthPrescription(dayPlanId: Long, exerciseId: Long, json: String)
+
+    @Query("""
+    UPDATE day_item SET sortOrder = :sortOrder
+    WHERE dayPlanId = :dayPlanId AND itemType = 'STRENGTH' AND refId = :exerciseId
+""")
+    suspend fun updateStrengthSortOrder(dayPlanId: Long, exerciseId: Long, sortOrder: Int)
+
 
 }

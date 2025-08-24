@@ -7,15 +7,9 @@ import com.example.safitness.data.dao.PlanDao
 import kotlinx.coroutines.flow.first
 import java.time.LocalDate
 import java.util.Collections
-import com.example.safitness.domain.planner.Suggestion
+
 import com.example.safitness.data.entities.Exercise   // harmless even if not used elsewhere
 
-
-
-/**
- * Minimal stub that just returns 2-3 sensible specs so you can wire UI/DB without waiting on a real model.
- * Replace with a network client later.
- */
 class LocalMLStub(
     private val planDao: PlanDao,
     private val libraryDao: LibraryDao
@@ -29,29 +23,28 @@ class LocalMLStub(
         val date = runCatching { LocalDate.parse(req.date) }.getOrElse { LocalDate.now() }
         val daySeed: Long = date.toEpochDay()
         val shuffleSeed: Int = daySeed.toInt()
+        val isoWeek = java.time.temporal.WeekFields.ISO.weekOfWeekBasedYear()
+        val micro = ((date.get(isoWeek) % 3) + 3) % 3 // 0,1,2 cycle for progression
 
-        // Week window (Mon..Sun) for the *target* date
+        // Avoid repeats within the Mon..Sun of this date
         val weekStart = date.with(java.time.DayOfWeek.MONDAY).toEpochDay()
-        val weekEnd = weekStart + 6
+        val weekEnd   = weekStart + 6
         val plannedThisWeek: Set<Long> = planDao.strengthIdsBetween(weekStart, weekEnd).toSet()
 
         fun mapFocusToType(f: WorkoutFocus): WorkoutType = when (f) {
-            WorkoutFocus.PUSH -> WorkoutType.PUSH
-            WorkoutFocus.PULL -> WorkoutType.PULL
+            WorkoutFocus.PUSH          -> WorkoutType.PUSH
+            WorkoutFocus.PULL          -> WorkoutType.PULL
             WorkoutFocus.LEGS, WorkoutFocus.LOWER -> WorkoutType.LEGS_CORE
-            WorkoutFocus.UPPER -> if (daySeed % 2L == 0L) WorkoutType.PUSH else WorkoutType.PULL
-            WorkoutFocus.FULL_BODY -> if (daySeed % 2L == 0L) WorkoutType.PUSH else WorkoutType.PULL
-            WorkoutFocus.CORE -> WorkoutType.LEGS_CORE
-            WorkoutFocus.CONDITIONING -> when ((daySeed % 3L).toInt()) {
-                0 -> WorkoutType.PUSH
-                1 -> WorkoutType.PULL
-                else -> WorkoutType.LEGS_CORE
+            WorkoutFocus.UPPER, WorkoutFocus.FULL_BODY ->
+                if (daySeed % 2L == 0L) WorkoutType.PUSH else WorkoutType.PULL
+            WorkoutFocus.CORE          -> WorkoutType.LEGS_CORE
+            WorkoutFocus.CONDITIONING  -> when ((daySeed % 3L).toInt()) {
+                0 -> WorkoutType.PUSH; 1 -> WorkoutType.PULL; else -> WorkoutType.LEGS_CORE
             }
         }
-
         val focusType = mapFocusToType(req.focus)
 
-        // METCON path unchanged
+        // Early Metcon path unchanged
         if (req.modality == Modality.METCON) {
             val targetMin = (req.user.sessionMinutes.coerceIn(20, 90) / 4).coerceIn(12, 16)
             val metcon = MetconSpec(
@@ -59,138 +52,139 @@ class LocalMLStub(
                 durationSec = targetMin * 60,
                 intervalSec = null,
                 components = listOf(
-                    MetconComponentSpec(
-                        "10 Push-ups",
-                        10,
-                        MovementPattern.HORIZONTAL_PUSH,
-                        listOf(Equipment.BODYWEIGHT)
-                    ),
-                    MetconComponentSpec(
-                        "15 Air Squats",
-                        15,
-                        MovementPattern.SQUAT,
-                        listOf(Equipment.BODYWEIGHT)
-                    ),
-                    MetconComponentSpec(
-                        "10 DB Row / side",
-                        10,
-                        MovementPattern.HORIZONTAL_PULL,
-                        listOf(Equipment.DUMBBELL)
-                    )
+                    MetconComponentSpec("10 Push-ups", 10, MovementPattern.HORIZONTAL_PUSH, listOf(Equipment.BODYWEIGHT)),
+                    MetconComponentSpec("15 Air Squats", 15, MovementPattern.SQUAT,           listOf(Equipment.BODYWEIGHT)),
+                    MetconComponentSpec("10 DB Row / side", 10, MovementPattern.HORIZONTAL_PULL, listOf(Equipment.DUMBBELL))
                 )
             )
             return GenerateResponse(strength = emptyList(), metcon = metcon)
         }
 
-        // ---- Build pools (type-aware, equipment-filtered), excluding this week's picks ----
-        val typedRaw = libraryDao.getExercises(type = focusType, eq = null).first()
+        data class Want(val movement: MovementPattern?, val muscles: List<MuscleGroup>)
+
+        // Blueprint: main + supporting muscles per focus
+        val wantsBase: List<Want> = when (focusType) {
+            WorkoutType.PUSH -> listOf(
+                Want(MovementPattern.HORIZONTAL_PUSH, listOf(MuscleGroup.CHEST, MuscleGroup.TRICEPS)),
+                Want(MovementPattern.VERTICAL_PUSH,   listOf(MuscleGroup.DELTS_MED, MuscleGroup.DELTS_ANT)),
+                Want(null,                            listOf(MuscleGroup.TRICEPS))
+            )
+            WorkoutType.PULL -> listOf(
+                Want(MovementPattern.HORIZONTAL_PULL, listOf(MuscleGroup.BACK, MuscleGroup.BICEPS, MuscleGroup.LATS)),
+                Want(MovementPattern.VERTICAL_PULL,   listOf(MuscleGroup.LATS, MuscleGroup.BACK)),
+                Want(null,                            listOf(MuscleGroup.BICEPS))
+            )
+            WorkoutType.LEGS_CORE -> if (daySeed % 2L == 0L) {
+                listOf(
+                    Want(MovementPattern.SQUAT, listOf(MuscleGroup.QUADS, MuscleGroup.GLUTES)),
+                    Want(MovementPattern.HINGE, listOf(MuscleGroup.HAMSTRINGS, MuscleGroup.GLUTES)),
+                    Want(null,                  listOf(MuscleGroup.ABS, MuscleGroup.OBLIQUES))
+                )
+            } else {
+                listOf(
+                    Want(MovementPattern.HINGE, listOf(MuscleGroup.HAMSTRINGS, MuscleGroup.GLUTES)),
+                    Want(MovementPattern.SQUAT, listOf(MuscleGroup.QUADS, MuscleGroup.GLUTES)),
+                    Want(null,                  listOf(MuscleGroup.ABS, MuscleGroup.OBLIQUES))
+                )
+            }
+            else -> emptyList()
+        }
+
+        // For INT/ADV, add an extra accessory slot per cycle: push (fly/isol.), pull (rear-delt/isol.), legs (unilateral)
+        val extraWants: List<Want> = when (focusType) {
+            WorkoutType.PUSH -> listOf(Want(null, listOf(MuscleGroup.CHEST)))          // e.g., fly/pec-deck
+            WorkoutType.PULL -> listOf(Want(null, listOf(MuscleGroup.REAR_DELTS)))     // e.g., rear-delt row/raise
+            WorkoutType.LEGS_CORE -> listOf(Want(MovementPattern.LUNGE, listOf(MuscleGroup.QUADS, MuscleGroup.GLUTES)))
+            else -> emptyList()
+        }
+
+        val targetAccessories = when (req.user.experience) {
+            ExperienceLevel.BEGINNER     -> 2  // total 3
+            ExperienceLevel.INTERMEDIATE -> 3  // total 4
+            ExperienceLevel.ADVANCED     -> 4  // total 5
+        }
+        val wants = wantsBase + extraWants.take(maxOf(0, targetAccessories - 2))
+
+        val typedPool = libraryDao.getExercises(type = focusType, eq = null).first()
             .filter { it.primaryEquipment in eqPool }
-
-        // Try to exclude week-duplicates; if that makes the pool too small, fall back to raw
-        val typed = typedRaw.filter { it.id !in plannedThisWeek }.ifEmpty { typedRaw }
-
-        fun isPull(e: Exercise) =
-            e.movement == MovementPattern.HORIZONTAL_PULL || e.movement == MovementPattern.VERTICAL_PULL
-
-        fun isPush(e: Exercise) =
-            e.movement == MovementPattern.HORIZONTAL_PUSH || e.movement == MovementPattern.VERTICAL_PUSH
-
-        fun isLegsCore(e: Exercise) =
-            e.movement == MovementPattern.SQUAT || e.movement == MovementPattern.HINGE || e.movement == MovementPattern.LUNGE
 
         fun stableShuffle(xs: List<Exercise>): List<Exercise> =
             xs.sortedBy { ((it.id.toInt() shl 3) xor shuffleSeed) }
 
-        // Partition into main vs accessory (heuristic)
-        fun isAccessoryForFocus(e: Exercise): Boolean = when (focusType) {
-            WorkoutType.PULL -> !isPull(e) || (e.primaryEquipment != Equipment.BARBELL && e.primaryEquipment != Equipment.BODYWEIGHT)
-            WorkoutType.PUSH -> !isPush(e) || (e.primaryEquipment != Equipment.BARBELL && e.primaryEquipment != Equipment.BODYWEIGHT)
-            WorkoutType.LEGS_CORE -> !isLegsCore(e) || (e.primaryEquipment != Equipment.BARBELL && e.primaryEquipment != Equipment.BODYWEIGHT)
-            else -> true
-        }
+        suspend fun poolFor(w: Want): List<Exercise> {
+            val meta = libraryDao.filterExercises(
+                movement = w.movement,
+                muscles = w.muscles,
+                equipment = eqPool,
+                musclesEmpty = if (w.muscles.isEmpty()) 1 else 0,
+                equipmentEmpty = if (eqPool.isEmpty()) 1 else 0
+            ).filter { it.id !in plannedThisWeek }
+            if (meta.isNotEmpty()) return meta
 
-        val (mainPrim, accPrim) = when (focusType) {
-            WorkoutType.PULL -> typed.partition(::isPull)
-            WorkoutType.PUSH -> typed.partition(::isPush)
-            WorkoutType.LEGS_CORE -> typed.partition(::isLegsCore)
-            else -> typed to emptyList()
-        }
+            val byType = typedPool.filter { it.id !in plannedThisWeek }
+            if (byType.isNotEmpty()) return byType
 
-        // If still thin, widen to any type (still filtered by equipment), also excluding week dupes if possible
-        val widenedAnyRaw = if (typed.size < 3) {
-            libraryDao.getExercises(type = null, eq = null).first()
+            return libraryDao.getExercises(type = null, eq = null).first()
                 .filter { it.primaryEquipment in eqPool }
-        } else emptyList()
-        val widenedAny =
-            widenedAnyRaw.filter { it.id !in plannedThisWeek }.ifEmpty { widenedAnyRaw }
+        }
 
-        val mainPool = (mainPrim + widenedAny.filter {
-            when (focusType) {
-                WorkoutType.PULL -> isPull(it)
-                WorkoutType.PUSH -> isPush(it)
-                WorkoutType.LEGS_CORE -> isLegsCore(it)
-                else -> true
-            }
-        }).distinctBy { it.id }
-
-        val accPool =
-            (accPrim + typed.filter(::isAccessoryForFocus) + widenedAny.filter(::isAccessoryForFocus))
-                .distinctBy { it.id }
-                .filter { it.id !in mainPool.map { m -> m.id }.toSet() }
-
-        // ---- Pick 3: 1 main + 2 accessories (prefer different movement families) ----
-        val picks = mutableListOf<Exercise>()
-        stableShuffle(mainPool).firstOrNull()?.let { picks += it }
-
-        fun movementFamily(e: Exercise): String = when (e.movement) {
-            MovementPattern.HORIZONTAL_PULL, MovementPattern.VERTICAL_PULL -> "PULL"
-            MovementPattern.HORIZONTAL_PUSH, MovementPattern.VERTICAL_PUSH -> "PUSH"
+        fun fam(e: Exercise): String = when (e.movement) {
+            MovementPattern.HORIZONTAL_PUSH, MovementPattern.VERTICAL_PUSH   -> "PUSH"
+            MovementPattern.HORIZONTAL_PULL, MovementPattern.VERTICAL_PULL   -> "PULL"
             MovementPattern.SQUAT, MovementPattern.HINGE, MovementPattern.LUNGE -> "LEGS"
             else -> "OTHER"
         }
 
-        val mainFam = picks.firstOrNull()?.let(::movementFamily)
-
-        val acc1 = stableShuffle(accPool).firstOrNull { a ->
-            a.id !in picks.asSequence().map { it.id }.toSet() && (mainFam == null || movementFamily(
-                a
-            ) != mainFam)
+        val used = mutableSetOf<Long>()
+        val picks = mutableListOf<Exercise>()
+        wants.forEachIndexed { idx, want ->
+            val pool = stableShuffle(poolFor(want)).filter { it.id !in used }
+            val candidate = if (idx == 0) {
+                // main
+                pool.firstOrNull()
+            } else {
+                val mainFam = picks.firstOrNull()?.let(::fam)
+                pool.firstOrNull { e -> mainFam == null || fam(e) != mainFam } ?: pool.firstOrNull()
+            }
+            if (candidate != null) {
+                used += candidate.id
+                picks += candidate
+            }
+            if (picks.size >= (1 + targetAccessories)) return@forEachIndexed
         }
-        if (acc1 != null) picks += acc1
 
-        val acc2 = stableShuffle(accPool).firstOrNull { a ->
-            a.id !in picks.asSequence().map { it.id }.toSet() && (mainFam == null || movementFamily(
-                a
-            ) != mainFam)
-        } ?: stableShuffle(accPool).firstOrNull { a ->
-            a.id !in picks.asSequence().map { it.id }.toSet()
+        // Ensure we hit target count by widening if needed
+        if (picks.size < (1 + targetAccessories)) {
+            val widen = (typedPool + libraryDao.getExercises(type = null, eq = null).first()
+                .filter { it.primaryEquipment in eqPool })
+                .distinctBy { it.id }
+                .filter { it.id !in used && it.id !in plannedThisWeek }
+            picks += stableShuffle(widen).take(1 + targetAccessories - picks.size)
         }
-        if (acc2 != null) picks += acc2
 
-        val finalPicks = picks.distinctBy { it.id }.take(3)
-
-        // Schemes by experience
+        // --- Progression: 3-week undulating on the main; modest tweaks on accessories
         data class Scheme(val sets: Int, val reps: Int)
+        fun mainScheme(exp: ExperienceLevel, micro: Int): Scheme = when (exp) {
+            ExperienceLevel.BEGINNER -> listOf(Scheme(4,5), Scheme(3,8), Scheme(5,3))[micro]
+            ExperienceLevel.INTERMEDIATE -> listOf(Scheme(5,5), Scheme(4,8), Scheme(5,3))[micro]
+            ExperienceLevel.ADVANCED -> listOf(Scheme(5,3), Scheme(6,4), Scheme(5,2))[micro]
+        }
+        fun secScheme(exp: ExperienceLevel, micro: Int): Scheme = when (exp) {
+            ExperienceLevel.BEGINNER -> listOf(Scheme(3,8), Scheme(3,10), Scheme(3,8))[micro]
+            ExperienceLevel.INTERMEDIATE -> listOf(Scheme(3,10), Scheme(4,8), Scheme(3,12))[micro]
+            ExperienceLevel.ADVANCED -> listOf(Scheme(4,8), Scheme(4,10), Scheme(4,8))[micro]
+        }
+        fun accScheme(exp: ExperienceLevel, micro: Int): Scheme = when (exp) {
+            ExperienceLevel.BEGINNER -> listOf(Scheme(2,12), Scheme(2,15), Scheme(2,12))[micro]
+            ExperienceLevel.INTERMEDIATE -> listOf(Scheme(3,12), Scheme(3,15), Scheme(3,12))[micro]
+            ExperienceLevel.ADVANCED -> listOf(Scheme(3,12), Scheme(3,15), Scheme(4,10))[micro]
+        }
 
-        val mainScheme = when (req.user.experience) {
-            ExperienceLevel.BEGINNER -> Scheme(4, 5)
-            ExperienceLevel.INTERMEDIATE -> Scheme(5, 5)
-            ExperienceLevel.ADVANCED -> Scheme(5, 3)
-        }
-        val secScheme = when (req.user.experience) {
-            ExperienceLevel.BEGINNER -> Scheme(3, 8)
-            ExperienceLevel.INTERMEDIATE -> Scheme(3, 10)
-            ExperienceLevel.ADVANCED -> Scheme(4, 8)
-        }
-        val accScheme = when (req.user.experience) {
-            ExperienceLevel.BEGINNER -> Scheme(2, 12)
-            ExperienceLevel.INTERMEDIATE -> Scheme(3, 12)
-            ExperienceLevel.ADVANCED -> Scheme(3, 12)
-        }
-
-        val strength = finalPicks.mapIndexed { idx, e ->
+        val strength = picks.mapIndexed { idx, e ->
             val sch = when (idx) {
-                0 -> mainScheme; 1 -> secScheme; else -> accScheme
+                0 -> mainScheme(req.user.experience, micro)
+                1 -> secScheme(req.user.experience, micro)
+                else -> accScheme(req.user.experience, micro)
             }
             ExerciseSpec(
                 exerciseId = e.id,
