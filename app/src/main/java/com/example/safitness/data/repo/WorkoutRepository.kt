@@ -383,6 +383,8 @@ class WorkoutRepository(
     /* =========================================================
        METCONS — DATE-FIRST
        ========================================================= */
+
+    // Map strength "focus" to movement patterns to filter metcons
     fun metconPlans(): Flow<List<MetconPlan>> = metconDao.getAllPlans()
 
     fun metconsForDate(epochDay: Long): Flow<List<SelectionWithPlanAndComponents>> =
@@ -614,6 +616,43 @@ class WorkoutRepository(
         }
         return true
     }
+    // --- Metcon focus → component movement filter ---------------------------------
+
+    private fun movementNamesFor(focus: com.example.safitness.core.WorkoutType): List<String> = when (focus) {
+        com.example.safitness.core.WorkoutType.PUSH -> listOf(
+            com.example.safitness.core.MovementPattern.HORIZONTAL_PUSH.name,
+            com.example.safitness.core.MovementPattern.VERTICAL_PUSH.name
+        )
+        com.example.safitness.core.WorkoutType.PULL -> listOf(
+            com.example.safitness.core.MovementPattern.HORIZONTAL_PULL.name,
+            com.example.safitness.core.MovementPattern.VERTICAL_PULL.name
+        )
+        com.example.safitness.core.WorkoutType.LEGS_CORE -> listOf(
+            com.example.safitness.core.MovementPattern.SQUAT.name,
+            com.example.safitness.core.MovementPattern.HINGE.name,
+            com.example.safitness.core.MovementPattern.LUNGE.name,
+            com.example.safitness.core.MovementPattern.CORE.name
+        )
+        // Make the when exhaustive
+        com.example.safitness.core.WorkoutType.FULL -> listOf(
+            com.example.safitness.core.MovementPattern.HORIZONTAL_PUSH.name,
+            com.example.safitness.core.MovementPattern.VERTICAL_PUSH.name,
+            com.example.safitness.core.MovementPattern.HORIZONTAL_PULL.name,
+            com.example.safitness.core.MovementPattern.VERTICAL_PULL.name,
+            com.example.safitness.core.MovementPattern.SQUAT.name,
+            com.example.safitness.core.MovementPattern.HINGE.name,
+            com.example.safitness.core.MovementPattern.LUNGE.name,
+            com.example.safitness.core.MovementPattern.CORE.name
+        )
+    }
+
+    /** IDs of metcon plans that contain any component matching the focus’ movements. */
+    suspend fun metconPlanIdsForFocus(focus: com.example.safitness.core.WorkoutType): Set<Long> {
+        val names = movementNamesFor(focus)
+        val ids = metconDao.planIdsHavingAnyMovement(names) // List<Long>
+        return ids.toSet()
+    }
+
     private suspend fun ensurePlanForDate(epochDay: Long): Long? {
         planDao.getPlanIdByDate(epochDay)?.let { return it }
 

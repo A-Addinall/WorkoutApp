@@ -233,4 +233,12 @@ interface MetconDao {
         muscles: List<com.example.safitness.core.MuscleGroup>,
         equipment: List<com.example.safitness.core.Equipment>
     ): List<MetconComponent>
+
+    @Query("""
+    SELECT DISTINCT planId
+    FROM metcon_component
+    WHERE movement IN (:movementNames)
+""")
+    suspend fun planIdsHavingAnyMovement(movementNames: List<String>): List<Long>
+
 }

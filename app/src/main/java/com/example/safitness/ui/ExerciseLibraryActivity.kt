@@ -6,7 +6,6 @@ import android.widget.*
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.asLiveData
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -37,14 +36,16 @@ class ExerciseLibraryActivity : AppCompatActivity() {
         }
     }
 
+    // Modes
     private enum class Mode { STRENGTH, METCON, ENGINE, SKILLS }
+    private var mode: Mode = Mode.STRENGTH
 
     /** Concrete date this screen edits. */
     private var epochDay: Long = LocalDate.now().toEpochDay()
 
     // UI
-    private lateinit var spinnerType: Spinner
-    private lateinit var spinnerEqOrDuration: Spinner
+    private lateinit var spinnerType: Spinner               // Strength: Type | Metcon: Focus
+    private lateinit var spinnerEqOrDuration: Spinner       // Strength: Eq   | Metcon: Duration
     private lateinit var listLibrary: ListView
     private lateinit var emptyText: TextView
     private lateinit var btnClearFilters: Button
@@ -59,22 +60,27 @@ class ExerciseLibraryActivity : AppCompatActivity() {
     private lateinit var engineAdapter: EnginePlanAdapter
     private lateinit var skillAdapter: SkillPlanAdapter
 
-    // State
-    private var mode: Mode = Mode.STRENGTH
-
     // Strength state
     private val currentReps = mutableMapOf<Long, Int?>()
     private val addedStrength = mutableMapOf<Long, Boolean>()
 
-    // Metcon state
+    // Metcon state (backing data + filters)
     private var allMetconPlans: List<MetconPlan> = emptyList()
     private var metconAddedIds: Set<Long> = emptySet()
-    private var metconTypeFilter: String? = null
-    private var metconDurationFilter: IntRange? = null
-    private val metconTypeLabels = arrayOf("All", "For time", "AMRAP", "EMOM")
-    private val metconTypeMap = arrayOf<String?>(null, "FOR_TIME", "AMRAP", "EMOM")
+
+    // Focus (spinnerType)
+    private var metconFocusPos: Int = 0
+    private var metconFocusFilter: com.example.safitness.core.WorkoutType? = null
+
+    // Duration (spinnerEqOrDuration)
     private val metconDurationLabels = arrayOf("All", "≤10 min", "11–20 min", "21–30 min", ">30 min")
     private val metconDurationRanges = arrayOf<IntRange?>(null, 0..10, 11..20, 21..30, 31..Int.MAX_VALUE)
+    private var metconDurPos = 0
+    private var metconDurationFilter: IntRange? = null
+
+    // Type (optional third spinner with id spinnerMetconType)
+    private var metconTypePos = 0
+    private var metconTypeFilterEnum: com.example.safitness.core.MetconType? = null
 
     // Engine / Skill state
     private var engineRows: List<EngineRow> = emptyList()
@@ -82,11 +88,9 @@ class ExerciseLibraryActivity : AppCompatActivity() {
     private var engineAddedIds: Set<Long> = emptySet()
     private var skillAddedIds: Set<Long> = emptySet()
 
-    // Remember spinner positions
+    // Remember strength spinner positions
     private var strengthTypePos = 0
     private var strengthEqPos = 0
-    private var metconTypePos = 0
-    private var metconDurPos = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -94,6 +98,9 @@ class ExerciseLibraryActivity : AppCompatActivity() {
 
         epochDay = intent.getLongExtra(MainActivity.EXTRA_DATE_EPOCH_DAY, LocalDate.now().toEpochDay())
         vm.setTargetDate(epochDay)
+// Optional third spinner (Metcon Type). Hide by default.
+        val spinnerMetconType = findViewById<Spinner?>(R.id.spinnerMetconType)
+        spinnerMetconType?.visibility = View.GONE
 
         // Bind views
         spinnerType = findViewById(R.id.spinnerType)
@@ -111,8 +118,18 @@ class ExerciseLibraryActivity : AppCompatActivity() {
         // Listeners
         btnClearFilters.setOnClickListener {
             when (mode) {
-                Mode.STRENGTH -> { strengthTypePos = 0; strengthEqPos = 0; configureSpinnersForMode(Mode.STRENGTH) }
-                Mode.METCON   -> { metconTypePos = 0; metconDurPos = 0; configureSpinnersForMode(Mode.METCON); applyMetconFiltersAndSubmit() }
+                Mode.STRENGTH -> {
+                    strengthTypePos = 0; strengthEqPos = 0
+                    configureSpinnersForMode(Mode.STRENGTH)
+                }
+                Mode.METCON -> {
+                    metconFocusPos = 0; metconDurPos = 0; metconTypePos = 0
+                    metconFocusFilter = null
+                    metconDurationFilter = null
+                    metconTypeFilterEnum = null
+                    configureSpinnersForMode(Mode.METCON)
+                    applyMetconFiltersAndSubmit()
+                }
                 Mode.ENGINE, Mode.SKILLS -> Unit
             }
         }
@@ -390,6 +407,7 @@ class ExerciseLibraryActivity : AppCompatActivity() {
     /* ---------------- Spinner wiring ---------------- */
 
     private fun configureSpinnersForMode(newMode: Mode) {
+        val spinnerMetconType = findViewById<Spinner?>(R.id.spinnerMetconType)
         when (newMode) {
             Mode.STRENGTH -> {
                 spinnerType.adapter = ArrayAdapter(
@@ -416,34 +434,89 @@ class ExerciseLibraryActivity : AppCompatActivity() {
 
                 spinnerType.isEnabled = true
                 spinnerEqOrDuration.isEnabled = true
-            }
-            Mode.METCON -> {
-                spinnerType.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, metconTypeLabels)
-                spinnerEqOrDuration.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, metconDurationLabels)
-                spinnerType.setSelection(metconTypePos, false)
-                spinnerEqOrDuration.setSelection(metconDurPos, false)
 
+                spinnerMetconType?.apply {
+                    onItemSelectedListener = null
+                    visibility = View.GONE
+                }
+                metconTypePos = 0
+                metconTypeFilterEnum = null
+            }
+
+            Mode.METCON -> {
+                // Spinner 1: Focus
+                val metconFocusLabels = arrayOf("All", "Push", "Pull", "Legs/Core", "Full")
+                val metconFocusMap = arrayOf<com.example.safitness.core.WorkoutType?>(
+                    null,
+                    com.example.safitness.core.WorkoutType.PUSH,
+                    com.example.safitness.core.WorkoutType.PULL,
+                    com.example.safitness.core.WorkoutType.LEGS_CORE,
+                    com.example.safitness.core.WorkoutType.FULL
+                )
+                spinnerType.adapter = ArrayAdapter(
+                    this, android.R.layout.simple_spinner_dropdown_item, metconFocusLabels
+                )
+                spinnerType.setSelection(metconFocusPos, false)
                 spinnerType.onItemSelectedListener = onSel { pos ->
-                    metconTypePos = pos
-                    metconTypeFilter = metconTypeMap[pos]
+                    metconFocusPos = pos
+                    metconFocusFilter = metconFocusMap[pos]
                     applyMetconFiltersAndSubmit()
                 }
+
+                // Spinner 2: Duration
+                spinnerEqOrDuration.adapter = ArrayAdapter(
+                    this, android.R.layout.simple_spinner_dropdown_item, metconDurationLabels
+                )
+                spinnerEqOrDuration.setSelection(metconDurPos, false)
                 spinnerEqOrDuration.onItemSelectedListener = onSel { pos ->
                     metconDurPos = pos
                     metconDurationFilter = metconDurationRanges[pos]
                     applyMetconFiltersAndSubmit()
                 }
 
+                // Spinner 3: Type (optional)
+                val spinnerMetconType = findViewById<Spinner?>(R.id.spinnerMetconType)
+                val typeLabels = arrayOf("All", "For time", "AMRAP", "EMOM")
+                val typeEnums = arrayOf<com.example.safitness.core.MetconType?>(
+                    null,
+                    com.example.safitness.core.MetconType.FOR_TIME,
+                    com.example.safitness.core.MetconType.AMRAP,
+                    com.example.safitness.core.MetconType.EMOM
+                )
+                spinnerMetconType?.apply {
+                    adapter = ArrayAdapter(this@ExerciseLibraryActivity,
+                        android.R.layout.simple_spinner_dropdown_item, typeLabels)
+                    setSelection(metconTypePos, false)
+                    onItemSelectedListener = onSel { pos ->
+                        metconTypePos = pos
+                        metconTypeFilterEnum = typeEnums[pos]
+                        applyMetconFiltersAndSubmit()
+                    }
+                    visibility = View.VISIBLE
+                }
+
                 spinnerType.isEnabled = true
                 spinnerEqOrDuration.isEnabled = true
             }
+
             Mode.ENGINE, Mode.SKILLS -> {
-                spinnerType.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, arrayOf("—"))
-                spinnerEqOrDuration.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, arrayOf("—"))
+                spinnerType.adapter = ArrayAdapter(
+                    this, android.R.layout.simple_spinner_dropdown_item, arrayOf("—")
+                )
+                spinnerEqOrDuration.adapter = ArrayAdapter(
+                    this, android.R.layout.simple_spinner_dropdown_item, arrayOf("—")
+                )
                 spinnerType.onItemSelectedListener = null
                 spinnerEqOrDuration.onItemSelectedListener = null
                 spinnerType.isEnabled = false
                 spinnerEqOrDuration.isEnabled = false
+                spinnerMetconType?.apply {
+                    onItemSelectedListener = null
+                    visibility = View.GONE
+                }
+                metconTypePos = 0
+                metconTypeFilterEnum = null
+
             }
         }
     }
@@ -454,24 +527,7 @@ class ExerciseLibraryActivity : AppCompatActivity() {
             override fun onNothingSelected(parent: AdapterView<*>) {}
         }
 
-    private fun applyMetconFiltersAndSubmit() {
-        val type = metconTypeFilter
-        val range = metconDurationFilter
-        val filtered = allMetconPlans.asSequence()
-            .filter { plan -> type == null || plan.type.name == type }
-            .filter { plan ->
-                val minutes = plan.durationMinutes ?: 0
-                range == null || minutes in range
-            }
-            .sortedBy { it.title }
-            .toList()
-        rvPlans.adapter = metconAdapter
-        metconAdapter.submit(filtered, metconAddedIds)
-        emptyText.visibility = if (filtered.isEmpty()) View.VISIBLE else View.GONE
-    }
-
     /* ---------------- Inline Metcon Adapter ---------------- */
-
     private class MetconPlanAdapter(
         private val onPrimary: (MetconPlan, Boolean) -> Unit
     ) : RecyclerView.Adapter<MetconPlanAdapter.VH>() {
@@ -494,7 +550,7 @@ class ExerciseLibraryActivity : AppCompatActivity() {
             val v = LayoutInflater.from(parent.context)
                 .inflate(R.layout.item_metcon_plan_row, parent, false)
             val title = v.findViewById<TextView>(R.id.tvPlanTitle)
-            val subtitle = v.findViewById<TextView>(R.id.tvPlanMeta)  // adjust if your ID differs
+            val subtitle = v.findViewById<TextView>(R.id.tvPlanMeta)
             val btn = v.findViewById<Button>(R.id.btnPlanPrimary)
             return VH(v, title, subtitle, btn)
         }
@@ -513,7 +569,6 @@ class ExerciseLibraryActivity : AppCompatActivity() {
             holder.btn.setOnClickListener { onPrimary(plan, isAdded) }
         }
 
-
         override fun getItemCount(): Int = items.size
 
         class VH(
@@ -522,5 +577,40 @@ class ExerciseLibraryActivity : AppCompatActivity() {
             val subtitle: TextView,
             val btn: Button
         ) : RecyclerView.ViewHolder(view)
+    }
+    private fun applyMetconFiltersAndSubmit() {
+        if (mode != Mode.METCON) return
+        lifecycleScope.launch {
+            var filtered = allMetconPlans
+
+            // Focus → movement-based narrowing via repo
+            metconFocusFilter?.let { focus ->
+                val repo = Repos.workoutRepository(this@ExerciseLibraryActivity)
+                val allowedIds = withContext(Dispatchers.IO) { repo.metconPlanIdsForFocus(focus) }
+                filtered = filtered.filter { it.id in allowedIds }
+            }
+
+            // Type
+            metconTypeFilterEnum?.let { t ->
+                filtered = filtered.filter { it.type == t }
+            }
+
+            // Duration
+            metconDurationFilter?.let { range ->
+                filtered = filtered.filter { (it.durationMinutes ?: 0) in range }
+            }
+
+            metconAdapter.submit(filtered, metconAddedIds)
+            emptyText.visibility = if (filtered.isEmpty()) View.VISIBLE else View.GONE
+
+            // Focus → movement-based narrowing via repo
+            metconFocusFilter?.let { focus ->
+                val repo =
+                    com.example.safitness.data.repo.Repos.workoutRepository(this@ExerciseLibraryActivity)
+                val allowedIds: Set<Long> =
+                    withContext(Dispatchers.IO) { repo.metconPlanIdsForFocus(focus) }
+                filtered = filtered.filter { plan -> allowedIds.contains(plan.id) }
+            }
+        }
     }
 }
