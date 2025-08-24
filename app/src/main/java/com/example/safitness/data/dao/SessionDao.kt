@@ -68,4 +68,28 @@ interface SessionDao {
     @Query("SELECT COUNT(*) FROM SetLog WHERE sessionId = :sessionId AND exerciseId = :exerciseId")
     suspend fun countSetsFor(sessionId: Long, exerciseId: Long): Int
 
+    data class ExerciseSetCount(
+        val exerciseId: Long,
+        val cnt: Int
+    )
+
+    @Query("""
+    SELECT exerciseId, COUNT(*) AS cnt
+    FROM SetLog
+    WHERE sessionId = :sessionId
+    GROUP BY exerciseId
+""")
+    suspend fun countsByExercise(sessionId: Long): List<ExerciseSetCount>
+
+    @Query("""
+    SELECT *
+    FROM SetLog
+    WHERE sessionId = :sessionId AND exerciseId = :exerciseId
+    ORDER BY setNumber ASC
+""")
+    suspend fun setsForSessionExercise(sessionId: Long, exerciseId: Long): List<SetLog>
+
+    @Query("SELECT id FROM workout_session WHERE dateEpochDay = :epochDay ORDER BY id DESC LIMIT 1")
+    suspend fun latestSessionIdForDate(epochDay: Long): Long?
+
 }

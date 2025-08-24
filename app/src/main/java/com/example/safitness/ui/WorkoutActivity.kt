@@ -44,6 +44,7 @@ class WorkoutActivity : AppCompatActivity() {
     private val vm: WorkoutViewModel by viewModels {
         WorkoutViewModelFactory(Repos.workoutRepository(this))
     }
+    private var loggedCounts: Map<Long, Int> = emptyMap()
 
     private lateinit var tvWorkoutTitle: TextView
     private lateinit var layoutExercises: LinearLayout
@@ -115,12 +116,7 @@ class WorkoutActivity : AppCompatActivity() {
             if (sessionId == 0L) {
                 val repo = Repos.workoutRepository(this@WorkoutActivity)
                 sessionId = repo.startSessionForDate(epochDay)
-
-                // Pre-create the planned sets so they’re visible immediately
-                repo.ensureDefaultStrengthSetsForSession(
-                    sessionId = sessionId,
-                    epochDay = epochDay
-                )
+                refreshLoggedCounts()
             }
         }
 
@@ -158,6 +154,10 @@ class WorkoutActivity : AppCompatActivity() {
 
         // (No need to call vm.setDay(...) any more; everything is date-first here.)
     }
+    override fun onResume() {
+        super.onResume()
+        refreshLoggedCounts()
+    }
     /** Re-open this screen for the chosen date (same behaviour as MainActivity.openForDate). */
     private fun openWorkoutForDate(date: java.time.LocalDate) {
         val pretty = date.format(java.time.format.DateTimeFormatter.ofPattern("EEE d MMM, yyyy"))
@@ -169,6 +169,18 @@ class WorkoutActivity : AppCompatActivity() {
         }
         startActivity(i)
         finish() // close the old date instance
+    }
+    private fun refreshLoggedCounts() {
+        val currentSessionId = sessionId
+        if (currentSessionId == 0L) return
+        lifecycleScope.launch(Dispatchers.IO) {
+            val counts = Repos.workoutRepository(this@WorkoutActivity)
+                .loggedSetCountsForSession(currentSessionId)   // repo function below
+            withContext(Dispatchers.Main) {
+                loggedCounts = counts
+                rebuildWorkoutUi()
+            }
+        }
     }
 
     /** Rebuild the whole list with collapsible sections. */
@@ -182,8 +194,12 @@ class WorkoutActivity : AppCompatActivity() {
         }
         if (!collapseStrength) {
             val strength = lastProgramItems.filter { it.exercise.modality != Modality.METCON }
-            strength.forEach { addStrengthCard(it) }
+            val incomplete = strength.filter { (loggedCounts[it.exercise.id] ?: 0) == 0 }
+            val complete   = strength.filter { (loggedCounts[it.exercise.id] ?: 0) > 0 }
+
+            (incomplete + complete).forEach { addStrengthCard(it) }
             if (strength.isEmpty()) addEmptyLine("No strength programmed.")
+
         }
 
         // --- Metcon ---
@@ -247,6 +263,7 @@ class WorkoutActivity : AppCompatActivity() {
 
     /** ---- Strength (your proven-good UI) ---- */
     private fun addStrengthCard(item: ExerciseWithSelection) {
+        val logged = loggedCounts[item.exercise.id] ?: 0
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundResource(R.drawable.bg_metcon_card)
@@ -273,6 +290,12 @@ class WorkoutActivity : AppCompatActivity() {
             text = rxText
             textSize = 14f
         }
+        val tvStatus = TextView(this).apply {
+            text = if (logged > 0) "✔ $logged set(s) logged" else "Not started"
+            textSize = 12f
+            setTextColor(android.graphics.Color.GRAY)
+        }
+        card.addView(tvStatus)
 
         card.addView(title)
         if (reps != null && reps > 0) card.addView(tvRx)
