@@ -142,7 +142,87 @@ object ExerciseSeed {
         ids["Russian Twist"]?.let { id ->
             equipment += ExerciseEquipment(exerciseId = id, equipment = Equipment.DUMBBELL)
         }
+        // ---------- PUSH (Chest / Delts / Triceps) ----------
+        ids["Barbell Bench Press"]?.let { id ->
+            muscles += ExerciseMuscle(exerciseId = id, muscle = MuscleGroup.CHEST,   role = "PRIMARY")
+            muscles += ExerciseMuscle(exerciseId = id, muscle = MuscleGroup.TRICEPS, role = "SECONDARY")
+            equipment += ExerciseEquipment(exerciseId = id, equipment = Equipment.BARBELL)
+        }
+        ids["Incline Dumbbell Press"]?.let { id ->
+            muscles += ExerciseMuscle(exerciseId = id, muscle = MuscleGroup.CHEST,     role = "PRIMARY")
+            muscles += ExerciseMuscle(exerciseId = id, muscle = MuscleGroup.DELTS_ANT, role = "SECONDARY")
+            equipment += ExerciseEquipment(exerciseId = id, equipment = Equipment.DUMBBELL)
+        }
+        ids["Overhead Press"]?.let { id ->
+            muscles += ExerciseMuscle(exerciseId = id, muscle = MuscleGroup.DELTS_ANT, role = "PRIMARY")
+            muscles += ExerciseMuscle(exerciseId = id, muscle = MuscleGroup.TRICEPS,   role = "SECONDARY")
+            equipment += ExerciseEquipment(exerciseId = id, equipment = Equipment.BARBELL)
+        }
+        ids["Dumbbell Shoulder Press"]?.let { id ->
+            muscles += ExerciseMuscle(exerciseId = id, muscle = MuscleGroup.DELTS_ANT, role = "PRIMARY")
+            muscles += ExerciseMuscle(exerciseId = id, muscle = MuscleGroup.TRICEPS,   role = "SECONDARY")
+            equipment += ExerciseEquipment(exerciseId = id, equipment = Equipment.DUMBBELL)
+        }
+        ids["Dips"]?.let { id ->
+            muscles += ExerciseMuscle(exerciseId = id, muscle = MuscleGroup.CHEST,   role = "PRIMARY")
+            muscles += ExerciseMuscle(exerciseId = id, muscle = MuscleGroup.TRICEPS, role = "SECONDARY")
+            equipment += ExerciseEquipment(exerciseId = id, equipment = Equipment.BODYWEIGHT)
+        }
+        ids["Push-up"]?.let { id ->
+            muscles += ExerciseMuscle(exerciseId = id, muscle = MuscleGroup.CHEST, role = "PRIMARY")
+            equipment += ExerciseEquipment(exerciseId = id, equipment = Equipment.BODYWEIGHT)
+        }
+        ids["Cable Fly"]?.let { id ->
+            muscles += ExerciseMuscle(exerciseId = id, muscle = MuscleGroup.CHEST, role = "PRIMARY")
+            equipment += ExerciseEquipment(exerciseId = id, equipment = Equipment.CABLE)
+        }
+        ids["Dumbbell Fly"]?.let { id ->
+            muscles += ExerciseMuscle(exerciseId = id, muscle = MuscleGroup.CHEST, role = "PRIMARY")
+            equipment += ExerciseEquipment(exerciseId = id, equipment = Equipment.DUMBBELL)
+        }
+        ids["Triceps Pushdown"]?.let { id ->
+            muscles += ExerciseMuscle(exerciseId = id, muscle = MuscleGroup.TRICEPS, role = "PRIMARY")
+            equipment += ExerciseEquipment(exerciseId = id, equipment = Equipment.CABLE)
+        }
 
+// ---------- PULL (Lats / Upper back / Biceps / Rear delts) ----------
+        ids["Pull-up"]?.let { id ->
+            muscles += ExerciseMuscle(exerciseId = id, muscle = MuscleGroup.LATS,   role = "PRIMARY")
+            muscles += ExerciseMuscle(exerciseId = id, muscle = MuscleGroup.BICEPS, role = "SECONDARY")
+            equipment += ExerciseEquipment(exerciseId = id, equipment = Equipment.BODYWEIGHT)
+        }
+        ids["Lat Pulldown"]?.let { id ->
+            muscles += ExerciseMuscle(exerciseId = id, muscle = MuscleGroup.LATS,   role = "PRIMARY")
+            muscles += ExerciseMuscle(exerciseId = id, muscle = MuscleGroup.BICEPS, role = "SECONDARY")
+            equipment += ExerciseEquipment(exerciseId = id, equipment = Equipment.MACHINE)
+        }
+        ids["Barbell Bent-over Row"]?.let { id ->
+            muscles += ExerciseMuscle(exerciseId = id, muscle = MuscleGroup.UPPER_BACK, role = "PRIMARY")
+            muscles += ExerciseMuscle(exerciseId = id, muscle = MuscleGroup.LATS,       role = "SECONDARY")
+            equipment += ExerciseEquipment(exerciseId = id, equipment = Equipment.BARBELL)
+        }
+        ids["Dumbbell Row"]?.let { id ->
+            muscles += ExerciseMuscle(exerciseId = id, muscle = MuscleGroup.LATS,   role = "PRIMARY")
+            muscles += ExerciseMuscle(exerciseId = id, muscle = MuscleGroup.BICEPS, role = "SECONDARY")
+            equipment += ExerciseEquipment(exerciseId = id, equipment = Equipment.DUMBBELL)
+        }
+        ids["Seated Cable Row"]?.let { id ->
+            muscles += ExerciseMuscle(exerciseId = id, muscle = MuscleGroup.LATS,       role = "PRIMARY")
+            muscles += ExerciseMuscle(exerciseId = id, muscle = MuscleGroup.UPPER_BACK, role = "SECONDARY")
+            equipment += ExerciseEquipment(exerciseId = id, equipment = Equipment.CABLE)
+        }
+        ids["Face Pull"]?.let { id ->
+            muscles += ExerciseMuscle(exerciseId = id, muscle = MuscleGroup.REAR_DELTS, role = "PRIMARY")
+            equipment += ExerciseEquipment(exerciseId = id, equipment = Equipment.CABLE)
+        }
+        ids["Barbell Curl"]?.let { id ->
+            muscles += ExerciseMuscle(exerciseId = id, muscle = MuscleGroup.BICEPS, role = "PRIMARY")
+            equipment += ExerciseEquipment(exerciseId = id, equipment = Equipment.BARBELL)
+        }
+        ids["Dumbbell Curl"]?.let { id ->
+            muscles += ExerciseMuscle(exerciseId = id, muscle = MuscleGroup.BICEPS, role = "PRIMARY")
+            equipment += ExerciseEquipment(exerciseId = id, equipment = Equipment.DUMBBELL)
+        }
         metaDao.insertAllMuscles(muscles)
         metaDao.insertAllEquipment(equipment)
     }

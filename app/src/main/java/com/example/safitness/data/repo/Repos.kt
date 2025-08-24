@@ -24,9 +24,12 @@ object Repos {
     fun userProfileDao(context: Context) = AppDatabase.get(context).userProfileDao()
     fun mlService(ctx: android.content.Context): com.example.safitness.ml.MLService {
         val db = com.example.safitness.data.db.AppDatabase.get(ctx)
-        // Local stub for now; you can later swap this to a network-backed implementation.
-        return com.example.safitness.ml.LocalMLStub(db.libraryDao())
+        return com.example.safitness.ml.LocalMLStub(
+            libraryDao = db.libraryDao(),
+            planDao = db.planDao()
+        )
     }
+
 
     fun plannerRepository(ctx: android.content.Context): com.example.safitness.data.repo.PlannerRepository {
         val db = com.example.safitness.data.db.AppDatabase.get(ctx)

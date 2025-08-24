@@ -39,6 +39,7 @@ class PlannerRepository(
     )
 
     /** Persist strength suggestions for a concrete calendar date. */
+    /** Persist strength suggestions for a concrete calendar date. */
     suspend fun persistSuggestionsToDate(
         epochDay: Long,
         suggestions: List<Suggestion>,
@@ -50,23 +51,41 @@ class PlannerRepository(
             planDao.clearStrength(dayPlanId)
         }
 
+        // Normalise names so two DB rows that look the same to the user count as duplicates.
+        fun canonical(name: String) =
+            name.trim().lowercase().replace("\\s+".toRegex(), " ")
+
+        // 1) de-dupe by id, then by normalised name; 2) cap at main+2 accessories
+        val unique = suggestions
+            .asSequence()
+            .filter { it.exercise.id != 0L }
+            .distinctBy { it.exercise.id }
+            .distinctBy { canonical(it.exercise.name) }
+            .take(3)
+            .toList()
+
+        // Protect against any last-mile duplication on this day
+        val seenIds = mutableSetOf<Long>()
         var nextOrder = planDao.nextStrengthSortOrder(dayPlanId)
         val toInsert = mutableListOf<DayItemEntity>()
 
-        suggestions.forEach { s ->
-            val exerciseId = s.exercise.id
-            val exists = planDao.strengthItemCount(dayPlanId, exerciseId) > 0
-            val target = pickTargetReps(s.repsMin, s.repsMax)
+        unique.forEach { spec ->
+            val exId = spec.exercise.id
+            if (!seenIds.add(exId)) return@forEach  // already queued this exercise
+
+            val exists = planDao.strengthItemCount(dayPlanId, exId) > 0
+            val target = pickTargetReps(spec.repsMin, spec.repsMax)
 
             if (exists) {
-                planDao.updateStrengthTargetReps(dayPlanId, exerciseId, target)
-                planDao.updateStrengthRequired(dayPlanId, exerciseId, true)
+                // Update target / required in place
+                planDao.updateStrengthTargetReps(dayPlanId, exId, target)
+                planDao.updateStrengthRequired(dayPlanId, exId, true)
             } else {
                 toInsert += DayItemEntity(
                     id = 0L,
                     dayPlanId = dayPlanId,
                     itemType = "STRENGTH",
-                    refId = exerciseId,
+                    refId = exId,
                     required = true,
                     sortOrder = nextOrder++,
                     targetReps = target,
@@ -79,6 +98,8 @@ class PlannerRepository(
             planDao.insertItems(toInsert)
         }
     }
+
+
 
     /** Attach/replace metcon plan for a concrete calendar date. */
     suspend fun persistMetconPlanToDate(
@@ -115,25 +136,24 @@ class PlannerRepository(
         }
     }
     /** Attach/replace a SKILL plan for a concrete calendar date. */
+    /** Attach (or update) a Skill plan for a date. Default is additive, not replacing others. */
     suspend fun persistSkillPlanToDate(
         epochDay: Long,
         planId: Long,
         replaceExisting: Boolean = false,
         required: Boolean = true
     ) = withContext(Dispatchers.IO) {
-        val phaseId = planDao.currentPhaseId() ?: return@withContext
-        val dayPlanId = planDao.getPlanIdByDateInPhase(phaseId, epochDay)
-            ?: planDao.getPlanIdByDate(epochDay)
-            ?: return@withContext
+        val dayPlanId = ensurePlanForDate(epochDay) ?: return@withContext
 
         if (replaceExisting) {
-            planDao.skillItemIdsForDay(dayPlanId).forEach { existing ->
-                planDao.deleteSkillItem(dayPlanId, existing)
-            }
+            val existing = planDao.skillItemIdsForDay(dayPlanId)
+            for (ref in existing) planDao.deleteSkillItem(dayPlanId, ref)
         }
 
-        val already = planDao.existsDayItem(dayPlanId, "SKILL", planId) > 0
-        if (!already) {
+        val exists = planDao.skillItemCount(dayPlanId, planId) > 0
+        if (exists) {
+            planDao.updateSkillRequired(dayPlanId, planId, required)
+        } else {
             val order = planDao.nextSortOrder(dayPlanId)
             planDao.insertItems(
                 listOf(
@@ -144,14 +164,14 @@ class PlannerRepository(
                         refId = planId,
                         required = required,
                         sortOrder = order,
+                        targetReps = null,
                         prescriptionJson = null
                     )
                 )
             )
-        } else {
-            planDao.updateSkillRequired(dayPlanId, planId, required)
         }
     }
+
     suspend fun clearStrengthAndMetconForDate(epochDay: Long) = withContext(Dispatchers.IO) {
         val phaseId = planDao.currentPhaseId() ?: return@withContext
         val dayPlanId = planDao.getPlanIdByDateInPhase(phaseId, epochDay)
@@ -161,27 +181,25 @@ class PlannerRepository(
         planDao.clearMetcon(dayPlanId)
     }
     /** Attach/replace an ENGINE plan for a concrete calendar date. */
+    /** Attach/replace Engine plan for a concrete calendar date. */
     suspend fun persistEnginePlanToDate(
         epochDay: Long,
         planId: Long,
-        replaceExisting: Boolean = false,
+        replaceExisting: Boolean = true,
         required: Boolean = true
     ) = withContext(Dispatchers.IO) {
-        val phaseId = planDao.currentPhaseId() ?: return@withContext
-        val dayPlanId = planDao.getPlanIdByDateInPhase(phaseId, epochDay)
-            ?: planDao.getPlanIdByDate(epochDay)    // fallback if your dates are globally unique
-            ?: return@withContext // No scaffold for this date -> skip silently (or log)
+        val dayPlanId = ensurePlanForDate(epochDay) ?: return@withContext
 
         if (replaceExisting) {
-            // Clear all existing ENGINE items with the tools you already have
-            planDao.engineItemIdsForDay(dayPlanId).forEach { existing ->
-                planDao.deleteEngineItem(dayPlanId, existing)
-            }
+            // No clearEngine() in DAO, so remove any existing ENGINE items explicitly
+            val existing = planDao.engineItemIdsForDay(dayPlanId)
+            for (ref in existing) planDao.deleteEngineItem(dayPlanId, ref)
         }
 
-        // Avoid duplicate insertion
-        val already = planDao.existsDayItem(dayPlanId, "ENGINE", planId) > 0
-        if (!already) {
+        val exists = planDao.engineItemCount(dayPlanId, planId) > 0
+        if (exists) {
+            planDao.updateEngineRequired(dayPlanId, planId, required)
+        } else {
             val order = planDao.nextSortOrder(dayPlanId)
             planDao.insertItems(
                 listOf(
@@ -192,14 +210,14 @@ class PlannerRepository(
                         refId = planId,
                         required = required,
                         sortOrder = order,
+                        targetReps = null,
                         prescriptionJson = null
                     )
                 )
             )
-        } else {
-            planDao.updateEngineRequired(dayPlanId, planId, required)
         }
     }
+
 
     /** One-shot convenience: (re)build a date with strength + metcon. */
     suspend fun regenerateDateWithMetcon(
@@ -208,17 +226,20 @@ class PlannerRepository(
         availableEq: List<Equipment>,
         metconPlanId: Long
     ) = withContext(Dispatchers.IO) {
-        // Strength variety is already handled inside generateSuggestions -> planner.suggestFor(epochDay)
-        val suggestions = generateSuggestions(
-            focus = focus,
-            availableEq = availableEq,
-            epochDay = epochDay
-        )
+        // Pull suggestions with epochDay seed (variety across dates)
+        val raw = generateSuggestions(focus = focus, availableEq = availableEq, epochDay = epochDay)
 
-        // Persist strength (replace) then metcon (replace)
+        // 1) De-dupe by exercise id
+        val dedup = raw.distinctBy { it.exercise.id }
+
+        // 2) Keep a sensible cap (main + up to 2 accessories)
+        val suggestions = if (dedup.size <= 3) dedup else dedup.take(3)
+
+        // Persist — strength first (replace), then the chosen metcon (replace)
         persistSuggestionsToDate(epochDay, suggestions, replaceStrength = true)
         persistMetconPlanToDate(epochDay, metconPlanId, replaceMetcon = true, required = true)
     }
+
 
 
     private suspend fun ensurePlanForDate(epochDay: Long): Long? {
@@ -258,17 +279,28 @@ class PlannerRepository(
     ) = withContext(Dispatchers.IO) {
         val dayPlanId = ensurePlanForDate(epochDay) ?: return@withContext
 
+        if (replaceStrength) planDao.clearStrength(dayPlanId)
+
+        fun canonical(name: String) =
+            name.trim().lowercase().replace("\\s+".toRegex(), " ")
+
         // ---------- Strength ----------
-        if (replaceStrength) {
-            planDao.clearStrength(dayPlanId)
-        }
         var nextOrder = planDao.nextStrengthSortOrder(dayPlanId)
         val toInsert = mutableListOf<DayItemEntity>()
+        val seenIds = mutableSetOf<Long>()
+        val seenNames = mutableSetOf<String>()
 
-        resp.strength.forEach { spec ->
+        // De-dupe by exerciseId and also by normalised name
+        val strength = resp.strength
+            .asSequence()
+            .filter { it.exerciseId != 0L }
+            .filter { seenIds.add(it.exerciseId) }
+            .toList()
+
+        strength.forEach { spec ->
             val exId = spec.exerciseId
             val exists = planDao.strengthItemCount(dayPlanId, exId) > 0
-            // Snap target reps to your allowed buckets
+
             val target = run {
                 val buckets = intArrayOf(3, 5, 8, 10, 12, 15)
                 buckets.minBy { kotlin.math.abs(it - spec.targetReps) }
@@ -290,21 +322,22 @@ class PlannerRepository(
                 )
             }
         }
-        if (toInsert.isNotEmpty()) planDao.insertItems(toInsert)
 
-        // ---------- Metcon ----------
+        if (toInsert.isNotEmpty()) {
+            planDao.insertItems(toInsert)
+        }
+
         // ---------- Metcon ----------
         resp.metcon?.let {
             val planId = pickMetconPlanIdForFocus(
                 focus = focus,
                 availableEq = availableEq,
-                epochDay = epochDay            // << use date to make deterministic variety
+                epochDay = epochDay            // deterministic variety by date
             )
             if (planId != null) {
                 persistMetconPlanToDate(epochDay, planId, replaceMetcon = replaceMetcon, required = true)
             }
         }
-
     }
 
 

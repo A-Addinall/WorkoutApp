@@ -2,46 +2,63 @@ package com.example.safitness.ml
 
 import com.example.safitness.core.*
 import com.example.safitness.data.dao.LibraryDao
+import com.example.safitness.data.dao.PlanDao
+
 import kotlinx.coroutines.flow.first
 import java.time.LocalDate
+import java.util.Collections
+import com.example.safitness.domain.planner.Suggestion
+import com.example.safitness.data.entities.Exercise   // harmless even if not used elsewhere
+
+
 
 /**
  * Minimal stub that just returns 2-3 sensible specs so you can wire UI/DB without waiting on a real model.
  * Replace with a network client later.
  */
 class LocalMLStub(
+    private val planDao: PlanDao,
     private val libraryDao: LibraryDao
 ) : MLService {
     override suspend fun generate(req: GenerateRequest): GenerateResponse {
-        // ---------- 0) Normalise inputs ----------
-        val userEq: List<Equipment> =
+        val eqPool: List<Equipment> =
             if (req.user.availableEquipment.isEmpty())
                 listOf(Equipment.DUMBBELL, Equipment.BARBELL, Equipment.BODYWEIGHT)
             else req.user.availableEquipment
 
-        // Map the focus you already use in MainActivity -> your legacy WorkoutType buckets
+        val date = runCatching { LocalDate.parse(req.date) }.getOrElse { LocalDate.now() }
+        val daySeed: Long = date.toEpochDay()
+        val shuffleSeed: Int = daySeed.toInt()
+
+        // Week window (Mon..Sun) for the *target* date
+        val weekStart = date.with(java.time.DayOfWeek.MONDAY).toEpochDay()
+        val weekEnd = weekStart + 6
+        val plannedThisWeek: Set<Long> = planDao.strengthIdsBetween(weekStart, weekEnd).toSet()
+
         fun mapFocusToType(f: WorkoutFocus): WorkoutType = when (f) {
             WorkoutFocus.PUSH -> WorkoutType.PUSH
             WorkoutFocus.PULL -> WorkoutType.PULL
-            WorkoutFocus.LEGS,
-            WorkoutFocus.LOWER -> WorkoutType.LEGS_CORE
-
-            WorkoutFocus.UPPER -> WorkoutType.PULL     // balances the week vs PUSH
-            WorkoutFocus.FULL_BODY -> WorkoutType.LEGS_CORE
-            WorkoutFocus.CORE,
-            WorkoutFocus.CONDITIONING -> WorkoutType.LEGS_CORE
+            WorkoutFocus.LEGS, WorkoutFocus.LOWER -> WorkoutType.LEGS_CORE
+            WorkoutFocus.UPPER -> if (daySeed % 2L == 0L) WorkoutType.PUSH else WorkoutType.PULL
+            WorkoutFocus.FULL_BODY -> if (daySeed % 2L == 0L) WorkoutType.PUSH else WorkoutType.PULL
+            WorkoutFocus.CORE -> WorkoutType.LEGS_CORE
+            WorkoutFocus.CONDITIONING -> when ((daySeed % 3L).toInt()) {
+                0 -> WorkoutType.PUSH
+                1 -> WorkoutType.PULL
+                else -> WorkoutType.LEGS_CORE
+            }
         }
 
-        // ---------- 1) METCON path (kept simple, deterministic) ----------
+        val focusType = mapFocusToType(req.focus)
+
+        // METCON path unchanged
         if (req.modality == Modality.METCON) {
-            // 12–16 min AMRAP scaled by session length
             val targetMin = (req.user.sessionMinutes.coerceIn(20, 90) / 4).coerceIn(12, 16)
             val metcon = MetconSpec(
                 blockType = BlockType.AMRAP,
                 durationSec = targetMin * 60,
                 intervalSec = null,
                 components = listOf(
-                    // Keep components generic; UI shows note + pattern + allowed equipment
                     MetconComponentSpec(
                         "10 Push-ups",
                         10,
@@ -65,97 +82,124 @@ class LocalMLStub(
             return GenerateResponse(strength = emptyList(), metcon = metcon)
         }
 
-        // ---------- 2) STRENGTH path ----------
-        // 2a) Choose exercises using your SimplePlanner for variety + equipment constraints
-        val planner = com.example.safitness.domain.planner.SimplePlanner(libraryDao)
-        val type = mapFocusToType(req.focus)
+        // ---- Build pools (type-aware, equipment-filtered), excluding this week's picks ----
+        val typedRaw = libraryDao.getExercises(type = focusType, eq = null).first()
+            .filter { it.primaryEquipment in eqPool }
 
-        // Ask the planner for a reasonable pool; we'll then trim/cap to the budget
-        val pool = planner
-            .suggestFor(focus = type, availableEq = userEq)
-            .distinctBy { it.exercise.id }        // kill dupes
-            .toMutableList()
-        if (pool.isNotEmpty()) {
-            val seed = LocalDate.now().toEpochDay().toInt()
-            val off = kotlin.math.abs(seed) % pool.size
-            java.util.Collections.rotate(pool, -off)
-        }
-        if (pool.isEmpty()) {
-            // Fallback: return something harmless if the library has no match
-            val metcon = MetconSpec(
-                blockType = BlockType.AMRAP,
-                durationSec = 12 * 60,
-                intervalSec = null,
-                components = listOf(
-                    MetconComponentSpec(
-                        "10 Push-ups",
-                        10,
-                        MovementPattern.HORIZONTAL_PUSH,
-                        listOf(Equipment.BODYWEIGHT)
-                    ),
-                    MetconComponentSpec(
-                        "15 Air Squats",
-                        15,
-                        MovementPattern.SQUAT,
-                        listOf(Equipment.BODYWEIGHT)
-                    )
-                )
-            )
-            return GenerateResponse(strength = emptyList(), metcon = metcon)
+        // Try to exclude week-duplicates; if that makes the pool too small, fall back to raw
+        val typed = typedRaw.filter { it.id !in plannedThisWeek }.ifEmpty { typedRaw }
+
+        fun isPull(e: Exercise) =
+            e.movement == MovementPattern.HORIZONTAL_PULL || e.movement == MovementPattern.VERTICAL_PULL
+
+        fun isPush(e: Exercise) =
+            e.movement == MovementPattern.HORIZONTAL_PUSH || e.movement == MovementPattern.VERTICAL_PUSH
+
+        fun isLegsCore(e: Exercise) =
+            e.movement == MovementPattern.SQUAT || e.movement == MovementPattern.HINGE || e.movement == MovementPattern.LUNGE
+
+        fun stableShuffle(xs: List<Exercise>): List<Exercise> =
+            xs.sortedBy { ((it.id.toInt() shl 3) xor shuffleSeed) }
+
+        // Partition into main vs accessory (heuristic)
+        fun isAccessoryForFocus(e: Exercise): Boolean = when (focusType) {
+            WorkoutType.PULL -> !isPull(e) || (e.primaryEquipment != Equipment.BARBELL && e.primaryEquipment != Equipment.BODYWEIGHT)
+            WorkoutType.PUSH -> !isPush(e) || (e.primaryEquipment != Equipment.BARBELL && e.primaryEquipment != Equipment.BODYWEIGHT)
+            WorkoutType.LEGS_CORE -> !isLegsCore(e) || (e.primaryEquipment != Equipment.BARBELL && e.primaryEquipment != Equipment.BODYWEIGHT)
+            else -> true
         }
 
-        // 2b) Volume budget by experience + session length (rough rule of thumb)
-        val minutes = req.user.sessionMinutes.coerceIn(20, 120)
-        val setsBudget = when (req.user.experience) {
-            ExperienceLevel.BEGINNER -> (minutes / 10.0).toInt().coerceIn(8, 14)
-            ExperienceLevel.INTERMEDIATE -> (minutes / 8.0).toInt().coerceIn(10, 18)
-            ExperienceLevel.ADVANCED -> (minutes / 7.0).toInt().coerceIn(12, 20)
+        val (mainPrim, accPrim) = when (focusType) {
+            WorkoutType.PULL -> typed.partition(::isPull)
+            WorkoutType.PUSH -> typed.partition(::isPush)
+            WorkoutType.LEGS_CORE -> typed.partition(::isLegsCore)
+            else -> typed to emptyList()
         }
 
-        // 2c) Pick 1 main + up to 2 accessories under the budget
-        val picks = mutableListOf<com.example.safitness.domain.planner.Suggestion>()
-        val main = pool.removeAt(0)              // the planner tends to put a sensible main first
-        picks += main
+        // If still thin, widen to any type (still filtered by equipment), also excluding week dupes if possible
+        val widenedAnyRaw = if (typed.size < 3) {
+            libraryDao.getExercises(type = null, eq = null).first()
+                .filter { it.primaryEquipment in eqPool }
+        } else emptyList()
+        val widenedAny =
+            widenedAnyRaw.filter { it.id !in plannedThisWeek }.ifEmpty { widenedAnyRaw }
 
-        // Prefer accessories from different patterns if available
-        for (cand in pool) {
-            if (picks.size >= 3) break
-            val already = picks.any { it.exercise.id == cand.exercise.id }
-            if (!already) picks += cand
+        val mainPool = (mainPrim + widenedAny.filter {
+            when (focusType) {
+                WorkoutType.PULL -> isPull(it)
+                WorkoutType.PUSH -> isPush(it)
+                WorkoutType.LEGS_CORE -> isLegsCore(it)
+                else -> true
+            }
+        }).distinctBy { it.id }
+
+        val accPool =
+            (accPrim + typed.filter(::isAccessoryForFocus) + widenedAny.filter(::isAccessoryForFocus))
+                .distinctBy { it.id }
+                .filter { it.id !in mainPool.map { m -> m.id }.toSet() }
+
+        // ---- Pick 3: 1 main + 2 accessories (prefer different movement families) ----
+        val picks = mutableListOf<Exercise>()
+        stableShuffle(mainPool).firstOrNull()?.let { picks += it }
+
+        fun movementFamily(e: Exercise): String = when (e.movement) {
+            MovementPattern.HORIZONTAL_PULL, MovementPattern.VERTICAL_PULL -> "PULL"
+            MovementPattern.HORIZONTAL_PUSH, MovementPattern.VERTICAL_PUSH -> "PUSH"
+            MovementPattern.SQUAT, MovementPattern.HINGE, MovementPattern.LUNGE -> "LEGS"
+            else -> "OTHER"
         }
 
-        // 2d) Rep schemes by goal (simple periodisation)
-        data class Scheme(val mainSets: Int, val mainReps: Int, val accSets: Int, val accReps: Int)
+        val mainFam = picks.firstOrNull()?.let(::movementFamily)
 
-        val scheme = when (req.user.goal) {
-            Goal.STRENGTH -> Scheme(mainSets = 5, mainReps = 5, accSets = 3, accReps = 8)
-            Goal.HYPERTROPHY, Goal.RECOMP, Goal.GENERAL_FITNESS ->
-                Scheme(mainSets = 4, mainReps = 8, accSets = 3, accReps = 12)
+        val acc1 = stableShuffle(accPool).firstOrNull { a ->
+            a.id !in picks.asSequence().map { it.id }.toSet() && (mainFam == null || movementFamily(
+                a
+            ) != mainFam)
+        }
+        if (acc1 != null) picks += acc1
 
-            Goal.ENDURANCE -> Scheme(mainSets = 4, mainReps = 12, accSets = 3, accReps = 15)
+        val acc2 = stableShuffle(accPool).firstOrNull { a ->
+            a.id !in picks.asSequence().map { it.id }.toSet() && (mainFam == null || movementFamily(
+                a
+            ) != mainFam)
+        } ?: stableShuffle(accPool).firstOrNull { a ->
+            a.id !in picks.asSequence().map { it.id }.toSet()
+        }
+        if (acc2 != null) picks += acc2
+
+        val finalPicks = picks.distinctBy { it.id }.take(3)
+
+        // Schemes by experience
+        data class Scheme(val sets: Int, val reps: Int)
+
+        val mainScheme = when (req.user.experience) {
+            ExperienceLevel.BEGINNER -> Scheme(4, 5)
+            ExperienceLevel.INTERMEDIATE -> Scheme(5, 5)
+            ExperienceLevel.ADVANCED -> Scheme(5, 3)
+        }
+        val secScheme = when (req.user.experience) {
+            ExperienceLevel.BEGINNER -> Scheme(3, 8)
+            ExperienceLevel.INTERMEDIATE -> Scheme(3, 10)
+            ExperienceLevel.ADVANCED -> Scheme(4, 8)
+        }
+        val accScheme = when (req.user.experience) {
+            ExperienceLevel.BEGINNER -> Scheme(2, 12)
+            ExperienceLevel.INTERMEDIATE -> Scheme(3, 12)
+            ExperienceLevel.ADVANCED -> Scheme(3, 12)
         }
 
-        // Distribute sets to respect the volume budget
-        val plannedMainSets = scheme.mainSets
-        val remainingForAcc = (setsBudget - plannedMainSets).coerceAtLeast(0)
-        val accEach = if (picks.size > 1) (remainingForAcc / (picks.size - 1)).coerceIn(
-            2,
-            scheme.accSets
-        ) else 0
-
-        // 2e) Build ExerciseSpec list
-        val strength = picks.mapIndexed { idx, s ->
-            val isMain = idx == 0
+        val strength = finalPicks.mapIndexed { idx, e ->
+            val sch = when (idx) {
+                0 -> mainScheme; 1 -> secScheme; else -> accScheme
+            }
             ExerciseSpec(
-                exerciseId = s.exercise.id,
-                sets = if (isMain) plannedMainSets else accEach,
-                // PlannerRepository.applyMlToDate() will snap these to allowed buckets;
-                // we feed typical targets that map cleanly.
-                targetReps = if (isMain) scheme.mainReps else scheme.accReps,
+                exerciseId = e.id,
+                sets = sch.sets,
+                targetReps = sch.reps,
                 intensityType = null,
                 intensityValue = null
             )
-        }.filter { it.sets > 0 } // don’t emit empty accessories when budget is tiny
+        }
 
         return GenerateResponse(strength = strength, metcon = null)
     }

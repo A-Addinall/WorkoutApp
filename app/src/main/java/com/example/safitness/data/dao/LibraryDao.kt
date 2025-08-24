@@ -42,12 +42,15 @@ WHERE (:movement IS NULL OR e.movement = :movement)
                 WHERE em.exerciseId = e.id
                   AND em.muscle IN (:muscles))
   )
-  AND (
-        :equipmentEmpty = 1
-     OR EXISTS (SELECT 1 FROM exercise_equipment ee
-                WHERE ee.exerciseId = e.id
-                  AND ee.equipment IN (:equipment))
-  )
+AND (
+      :equipmentEmpty = 1
+   OR e.primaryEquipment IN (:equipment)
+   OR EXISTS (
+        SELECT 1 FROM exercise_equipment ee
+        WHERE ee.exerciseId = e.id
+          AND ee.equipment IN (:equipment)
+     )
+)
 ORDER BY COALESCE(e.technicalDemand, 3) ASC, e.name ASC
 """
     )

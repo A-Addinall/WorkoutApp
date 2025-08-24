@@ -299,4 +299,14 @@ interface PlanDao {
     /** Reactive variant (global). */
     @Query("SELECT id FROM week_day_plan WHERE dateEpochDay = :epochDay LIMIT 1")
     fun flowPlanIdByDate(epochDay: Long): Flow<Long?>
+
+    @Query("""
+SELECT DISTINCT di.refId
+FROM day_item di
+JOIN week_day_plan wdp ON wdp.id = di.dayPlanId
+WHERE di.itemType = 'STRENGTH'
+  AND wdp.dateEpochDay BETWEEN :fromEpochDay AND :toEpochDay
+""")
+    suspend fun strengthIdsBetween(fromEpochDay: Long, toEpochDay: Long): List<Long>
+
 }

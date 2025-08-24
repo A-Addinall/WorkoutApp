@@ -1,6 +1,6 @@
 package com.example.safitness.core
 
-enum class WorkoutType { PUSH, PULL, LEGS_CORE }
+enum class WorkoutType { PUSH, PULL, LEGS_CORE, FULL }
 
 enum class Equipment { BARBELL, DUMBBELL, CABLE, BODYWEIGHT, KETTLEBELL,MACHINE, BAND }
 
@@ -29,7 +29,8 @@ enum class MovementPattern {
     SQUAT, HINGE, LUNGE,
     HORIZONTAL_PUSH, VERTICAL_PUSH,
     HORIZONTAL_PULL, VERTICAL_PULL,
-    CARRY, ROTATE, GAIT
+    CARRY, ROTATE, GAIT,
+    CORE
 }
 
 // New: muscle groups (granular but practical)
@@ -38,7 +39,7 @@ enum class MuscleGroup {
     DELTS_ANT, DELTS_MED, DELTS_POST,
     BICEPS, TRICEPS,
     QUADS, HAMSTRINGS, GLUTES, ADDUCTORS, CALVES,
-    ERECTORS, ABS, OBLIQUES
+    ERECTORS, ABS, OBLIQUES, REAR_DELTS, BACK, CORE
 }
 
 // New: intensity prescription
