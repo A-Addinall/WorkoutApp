@@ -347,25 +347,23 @@ class MainActivity : AppCompatActivity() {
             .setPositiveButton("Overwrite & Generate") { _, _ ->
                 lifecycleScope.launch {
                     val planner = com.example.safitness.data.repo.Repos.plannerRepository(this@MainActivity)
+                    val ml = com.example.safitness.data.repo.Repos.mlService(this@MainActivity) // LocalMLStub(libraryDao, planDao)
                     val eq = parseEquipmentCsv(profile.equipmentCsv)
+                    val userCtx = buildUserContext(profile, eq)
 
+                    // IMPORTANT: persist day-by-day in order so the ML can see prior days in the *same week*
                     allDates.forEachIndexed { idx, date ->
                         val epochDay = date.toEpochDay()
                         val slot = slots[idx % slots.size]
-                        val enginePlanId = pickEnginePlanIdFor(profile, epochDay)
-                        Log.d("PLAN", "date=$date slot=$slot epochDay=$epochDay")
+                        android.util.Log.d("PLAN", "date=$date slot=$slot epochDay=$epochDay")
 
                         when (slot) {
                             Slot.ENGINE -> {
-                                withContext(Dispatchers.IO) {
-                                    // Make the day Engine-only
+                                // Engine-only day
+                                withContext(kotlinx.coroutines.Dispatchers.IO) {
                                     planner.clearStrengthAndMetconForDate(epochDay)
-
-                                    // Pick an Engine plan (with your fallback logic inside the picker)
-                                    val engId: Long? = pickEnginePlanIdFor(profile, epochDay)
-                                    Log.d("PLAN", "ENGINE day -> planId=$engId on $date")
-
-                                    // Only persist if we actually found one
+                                    val engId = pickEnginePlanIdFor(profile, epochDay)
+                                    android.util.Log.d("PLAN", "ENGINE day -> planId=$engId on $date")
                                     if (engId != null) {
                                         planner.persistEnginePlanToDate(
                                             epochDay = epochDay,
@@ -373,38 +371,43 @@ class MainActivity : AppCompatActivity() {
                                             replaceExisting = true,
                                             required = true
                                         )
-                                    } else {
-                                        Log.w("PLAN", "No Engine plan available; leaving Engine day empty on $date")
                                     }
                                 }
-                                // (Optionally attach a Skill here)
                             }
 
                             else -> {
+                                // Strength day via ML (no weekly repeats), then attach Metcon
+                                val focus = slot.toWorkoutFocus(epochDay)
+                                val req = com.example.safitness.ml.GenerateRequest(
+                                    date = date.toString(),
+                                    focus = focus,
+                                    modality = com.example.safitness.core.Modality.STRENGTH,
+                                    user = userCtx
+                                )
+                                val resp = withContext(kotlinx.coroutines.Dispatchers.IO) { ml.generate(req) }
 
-                        // Strength + Metcon path (unchanged)
-                                val coreType = slotToWorkoutType(slot, epochDay)
-                                val metconPlanId = withContext(Dispatchers.IO) {
-                                    planner.pickMetconPlanIdForFocus(coreType, eq, epochDay)
-                                }
-                                if (metconPlanId != null) {
-                                    withContext(Dispatchers.IO) {
-                                        planner.regenerateDateWithMetcon(
+                                withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                    // Persist Strength (hardened: de-dupes within the day)
+                                    planner.applyMlToDate(
+                                        epochDay = epochDay,
+                                        resp = resp,
+                                        focus = focus.toWorkoutType(epochDay), // for metcon picker bias
+                                        availableEq = eq,
+                                        replaceStrength = true,
+                                        replaceMetcon = false
+                                    )
+
+                                    // Attach a Metcon plan (same as you did before)
+                                    val metconPlanId = planner.pickMetconPlanIdForFocus(
+                                        focus = focus.toWorkoutType(epochDay),
+                                        availableEq = eq,
+                                        epochDay = epochDay
+                                    )
+                                    if (metconPlanId != null) {
+                                        planner.persistMetconPlanToDate(
                                             epochDay = epochDay,
-                                            focus = coreType,
-                                            availableEq = eq,
-                                            metconPlanId = metconPlanId
-                                        )
-                                    }
-                                }
-                                // Optional: Skill
-                                val skillPlanId = pickSkillPlanIdFor(profile, epochDay)
-                                if (skillPlanId != null) {
-                                    withContext(Dispatchers.IO) {
-                                        planner.persistSkillPlanToDate(
-                                            epochDay = epochDay,
-                                            planId = skillPlanId,
-                                            replaceExisting = false,
+                                            planId = metconPlanId,
+                                            replaceMetcon = true,
                                             required = true
                                         )
                                     }
@@ -412,15 +415,51 @@ class MainActivity : AppCompatActivity() {
                             }
                         }
                     }
-                    Snackbar.make(
-                        findViewById(android.R.id.content),
-                        "Programme generated for ${allDates.size} session(s).",
-                        Snackbar.LENGTH_LONG
-                    ).show()
+
+                    android.widget.Toast.makeText(this@MainActivity, "Programme generated.", android.widget.Toast.LENGTH_SHORT).show()
                 }
             }
             .show()
     }
+
+    private fun Slot.toWorkoutFocus(epochDay: Long): com.example.safitness.core.WorkoutFocus = when (this) {
+        Slot.PULL -> com.example.safitness.core.WorkoutFocus.PULL
+        Slot.PUSH -> com.example.safitness.core.WorkoutFocus.PUSH
+        Slot.LEGS -> com.example.safitness.core.WorkoutFocus.LEGS
+        Slot.FULL -> com.example.safitness.core.WorkoutFocus.FULL_BODY
+        Slot.ENGINE -> com.example.safitness.core.WorkoutFocus.CONDITIONING
+    }
+
+    private fun com.example.safitness.core.WorkoutFocus.toWorkoutType(epochDay: Long): com.example.safitness.core.WorkoutType = when (this) {
+        com.example.safitness.core.WorkoutFocus.PULL -> com.example.safitness.core.WorkoutType.PULL
+        com.example.safitness.core.WorkoutFocus.PUSH -> com.example.safitness.core.WorkoutType.PUSH
+        com.example.safitness.core.WorkoutFocus.LEGS,
+        com.example.safitness.core.WorkoutFocus.LOWER -> com.example.safitness.core.WorkoutType.LEGS_CORE
+        com.example.safitness.core.WorkoutFocus.UPPER ->
+            if (epochDay % 2L == 0L) com.example.safitness.core.WorkoutType.PUSH else com.example.safitness.core.WorkoutType.PULL
+        com.example.safitness.core.WorkoutFocus.FULL_BODY ->
+            if (epochDay % 2L == 0L) com.example.safitness.core.WorkoutType.PUSH else com.example.safitness.core.WorkoutType.PULL
+        com.example.safitness.core.WorkoutFocus.CORE ->
+            com.example.safitness.core.WorkoutType.LEGS_CORE
+        com.example.safitness.core.WorkoutFocus.CONDITIONING ->
+            com.example.safitness.core.WorkoutType.LEGS_CORE // only used to bias metcon selection; strength path won’t be called for ENGINE slots
+    }
+
+    // Put this inside MainActivity (or wherever your previous helper was)
+    private fun buildUserContext(
+        profile: com.example.safitness.data.entities.UserProfile,
+        eq: List<com.example.safitness.core.Equipment>
+    ): com.example.safitness.ml.UserContext {
+        val minutes = profile.sessionMinutes.coerceIn(20, 120)
+        return com.example.safitness.ml.UserContext(
+            goal = profile.goal,                         // ML Goal enum
+            experience = profile.experience,             // ML ExperienceLevel
+            availableEquipment = eq,                     // from parseEquipmentCsv(profile.equipmentCsv)
+            sessionMinutes = minutes,
+            daysPerWeek = profile.daysPerWeek
+        )
+    }
+
 
     /** Deterministic Engine pick based on profile + date. */
     private suspend fun pickEnginePlanIdFor(profile: UserProfile, epochDay: Long): Long? =
