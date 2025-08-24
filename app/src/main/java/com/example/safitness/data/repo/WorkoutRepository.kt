@@ -124,6 +124,11 @@ class WorkoutRepository(
         val dayPlanId = planDao.getPlanIdByDate(epochDay) ?: return false
         return planDao.existsStrength(dayPlanId, exerciseId) > 0
     }
+    suspend fun loggedSetCountsForSession(sessionId: Long): Map<Long, Int> =
+        sessionDao.countsByExercise(sessionId).associate { it.exerciseId to it.cnt }
+
+    suspend fun getLoggedSets(sessionId: Long, exerciseId: Long): List<SetLog> =
+        sessionDao.setsForSessionExercise(sessionId, exerciseId)
 
     suspend fun selectedTargetRepsForDate(epochDay: Long, exerciseId: Long): Int? {
         val dayPlanId = planDao.getPlanIdByDate(epochDay) ?: return null
@@ -182,7 +187,8 @@ class WorkoutRepository(
         }
 
     suspend fun startSessionForDate(epochDay: Long): Long =
-        sessionDao.insertSession(WorkoutSessionEntity(dateEpochDay = epochDay))
+        sessionDao.latestSessionIdForDate(epochDay)
+            ?: sessionDao.insertSession(WorkoutSessionEntity(dateEpochDay = epochDay))
 
     @Deprecated("Use startSessionForDate(epochDay)", level = DeprecationLevel.ERROR)
     suspend fun startSession(@Suppress("UNUSED_PARAMETER") day: Int): Long =

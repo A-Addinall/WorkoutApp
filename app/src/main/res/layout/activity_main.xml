@@ -16,7 +16,7 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         android:layout_marginTop="10dp"
-        android:textColor="@color/purple_700" />/>
+        android:textColor="@color/purple_700" />
 
     <ScrollView
         android:id="@+id/rootScroll"
