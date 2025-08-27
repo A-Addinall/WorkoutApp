@@ -62,9 +62,10 @@ class WorkoutRepository(
                             exercise = r.exercise,
                             required = r.required,
                             preferredEquipment = null,
-                            targetReps = r.targetReps,
+                            targetReps = r.targetReps
+                        ).apply {
                             targetSets = setsFromJson
-                        )
+                        }
                     }
 
                 }
@@ -289,12 +290,86 @@ class WorkoutRepository(
         val recent = sessionDao.lastSets(exerciseId, equipment, 20, reps)
         return recent.firstOrNull { it.success == true && it.weight != null }?.weight
     }
+// WorkoutRepository.kt
+suspend fun suggestFromE1RM(
+    exerciseId: Long,
+    equipment: Equipment,
+    reps: Int
+): Double? = withContext(kotlinx.coroutines.Dispatchers.IO) {
+    val e1 = ensureBestE1RMFromHistory(exerciseId, equipment) ?: return@withContext null
+    val pct = repsToPercentage(reps.coerceIn(1, 12))
+    val raw = e1 * pct
+    val step = when (equipment) {
+        Equipment.BARBELL    -> 2.5
+        Equipment.DUMBBELL   -> 1.0
+        Equipment.KETTLEBELL -> 1.0
+        else                 -> 0.5
+    }
+    roundToIncrement(raw, step)
+}
+
+    suspend fun ensureBestE1RMFromHistory(
+        exerciseId: Long,
+        equipment: Equipment
+    ): Double? = withContext(kotlinx.coroutines.Dispatchers.IO) {
+        val stored = bestE1RM(exerciseId, equipment)
+        val recent = sessionDao.lastSets(exerciseId, equipment, 200, /* reps */ null)
+        val derived = recent
+            .filter { it.success == true && (it.weight ?: 0.0) > 0.0 && (it.reps ?: 0) in 1..12 }
+            .mapNotNull { estimateOneRepMax(it.weight!!, it.reps!!) }
+            .maxOrNull()
+
+        val best = listOfNotNull(stored, derived).maxOrNull()
+
+        // Upsert if we genuinely improved vs stored (≥ 1 kg or 1%)
+        if (best != null && (stored == null ||
+                    (best - stored) >= kotlin.math.max(1.0, stored * 0.01))) {
+            prDao.upsertEstimated1RM(exerciseId, equipment, best, date)
+        }
+        best
+    }
 
     suspend fun suggestNextLoadKg(
         exerciseId: Long,
         equipment: Equipment,
-        reps: Int
-    ): Double? = bestE1RM(exerciseId, equipment)?.let { it * repsToPercentage(reps) }
+        targetReps: Int
+    ): Double? = withContext(kotlinx.coroutines.Dispatchers.IO) {
+        // History
+        val lastAt   = getLastSuccessfulWeight(exerciseId, equipment, targetReps)
+        val bestAt   = bestRMAtReps(exerciseId, equipment, targetReps)
+        val bestE1rm = bestE1RM(exerciseId, equipment)
+
+        // Project from e1RM using our table (conservative if null)
+        val pct = repsToPercentage(targetReps.coerceIn(1, 12))
+        val projectedFromE1 = bestE1rm?.let { it * pct }
+
+        // Base = best of projections/history we have
+        val base = listOfNotNull(projectedFromE1, bestAt, lastAt).maxOrNull()
+            ?: return@withContext null
+
+        // Micro-progression step per equipment
+        val step = when (equipment) {
+            Equipment.BARBELL    -> 2.5
+            Equipment.DUMBBELL   -> 1.0
+            Equipment.KETTLEBELL -> 1.0
+            else                 -> 0.5
+        }
+
+        // Progress at least a micro above a successful target-rep lift if one exists.
+        val progressed = when {
+            bestAt != null -> kotlin.math.max(base, bestAt + step)
+            lastAt != null -> kotlin.math.max(base, lastAt + step)
+            else           -> base * 0.97 // very safe when no target-rep history yet
+        }
+
+        roundToIncrement(progressed, step)
+    }
+
+    private fun roundToIncrement(x: Double, step: Double): Double {
+        if (step <= 0.0) return x
+        return kotlin.math.round(x / step) * step
+    }
+
 
     suspend fun evaluateAndRecordPrIfAny(
         exerciseId: Long,
@@ -314,30 +389,29 @@ class WorkoutRepository(
 
         val hardStep = equipmentMinIncrementKg(equipment)
         val hardImproved = (prevHardKg == null) || ((hardCandidateKg - prevHardKg) >= hardStep)
-
-        val softImproved = if (prevSoftE1rm == null) {
-            true
-        } else {
-            val threshold = max(1.0, prevSoftE1rm * 0.01) // 1 kg or 1%
-            (softCandidateE1rm - prevSoftE1rm) >= threshold
-        }
+        val softImproved = (prevSoftE1rm == null) ||
+                ((softCandidateE1rm - prevSoftE1rm) >= kotlin.math.max(1.0, prevSoftE1rm * 0.01))
 
         if (!hardImproved && !softImproved) return null
 
         if (softImproved) prDao.upsertEstimated1RM(exerciseId, equipment, softCandidateE1rm, date)
         if (hardImproved) prDao.upsertRepMax(exerciseId, equipment, reps, hardCandidateKg, date)
 
+        val celebrateHard = hardImproved
         return PrCelebrationEvent(
             exerciseId = exerciseId,
             equipment = equipment,
-            isHardPr = hardImproved,
-            reps = if (hardImproved) reps else null,
-            newWeightKg = if (hardImproved) hardCandidateKg else null,
-            prevWeightKg = if (hardImproved) prevHardKg else null,
+            isHardPr = celebrateHard,
+            reps = if (celebrateHard) reps else null,
+            newWeightKg = if (celebrateHard) hardCandidateKg else null,
+            prevWeightKg = if (celebrateHard) prevHardKg else null,
             newE1rmKg = softCandidateE1rm,
             prevE1rmKg = prevSoftE1rm
         )
     }
+    suspend fun bestRMAtRepsFromLogs(exerciseId: Long, equipment: Equipment, reps: Int): Double? =
+        sessionDao.maxSuccessfulWeightAtReps(exerciseId, equipment, reps) // or scan recent and take max
+
 
     suspend fun previewPrEvent(
         exerciseId: Long,

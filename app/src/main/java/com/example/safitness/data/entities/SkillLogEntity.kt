@@ -1,9 +1,20 @@
 package com.example.safitness.data.entities
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
-@Entity(tableName = "skill_logs")
+@Entity(
+    tableName = "skill_logs",
+    // EITHER remove indices entirely…
+    // indices = []
+
+    // …or keep useful ones that actually exist:
+    indices = [
+        Index(value = ["skill"]),
+        Index(value = ["dateEpochDay"])
+    ]
+)
 data class SkillLogEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val dateEpochDay: Long,
