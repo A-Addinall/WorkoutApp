@@ -8,6 +8,9 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.example.safitness.R
 import com.example.safitness.data.db.AppDatabase
+import com.example.safitness.ui.TimerBeeper
+import com.example.safitness.audio.CuePlayer
+import com.example.safitness.audio.WorkoutCueScheduler
 import com.google.android.material.textfield.TextInputEditText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -39,11 +42,18 @@ class EngineAccumulationActivity : AppCompatActivity() {
     private var startTime = 0L
     private var timer: CountDownTimer? = null
     private var preTimer: CountDownTimer? = null
-    private val beeper = com.example.safitness.ui.TimerBeeper()
+    private val beeper by lazy { TimerBeeper(this) }
+    private lateinit var cues: com.example.safitness.audio.CuePlayer
+    private lateinit var cueScheduler: com.example.safitness.audio.WorkoutCueScheduler
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_engine_accumulation)
+        cues = CuePlayer(this, preferVoice = true, voiceOnAlarmStream = true, enginePackage = CuePlayer.GOOGLE_ENGINE)
+
+        cueScheduler = WorkoutCueScheduler(lifecycleScope, cues)
+
 
         planId = intent.getLongExtra("PLAN_ID", -1L)
         dayIndex = intent.getIntExtra("DAY_INDEX", 1).coerceIn(1, 5)
@@ -96,6 +106,7 @@ class EngineAccumulationActivity : AppCompatActivity() {
             }
             override fun onFinish() {
                 beeper.finalBuzz()
+                cues.say("Start")
                 isCountdown = false
                 startTimer()
             }
@@ -126,6 +137,8 @@ class EngineAccumulationActivity : AppCompatActivity() {
     private fun stopTimer() {
         if (!isRunning) return
         timer?.cancel()
+        if (this::cueScheduler.isInitialized) cueScheduler.cancel()
+        if (this::cues.isInitialized) cues.release()
         isRunning = false
         btnStartStop.text = "START"
     }
@@ -224,5 +237,7 @@ class EngineAccumulationActivity : AppCompatActivity() {
         preTimer?.cancel(); preTimer = null
         timer?.cancel(); timer = null
         beeper.release()
+        if (this::cueScheduler.isInitialized) cueScheduler.cancel()
+        if (this::cues.isInitialized) cues.release()
     }
 }

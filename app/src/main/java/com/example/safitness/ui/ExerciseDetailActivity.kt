@@ -1,6 +1,5 @@
 package com.example.safitness.ui
 
-import android.annotation.SuppressLint
 import android.content.Context
 import android.os.Bundle
 import android.view.Gravity
@@ -15,12 +14,14 @@ import androidx.lifecycle.lifecycleScope
 import com.example.safitness.R
 import com.example.safitness.core.Equipment
 import com.example.safitness.core.PrCelebrationEvent
+import com.example.safitness.core.estimateOneRepMax
+import com.example.safitness.core.repsToPercentage
+import kotlinx.coroutines.withContext
 import com.example.safitness.data.entities.SetLog
 import com.example.safitness.data.repo.Repos
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.util.Locale
 
 class ExerciseDetailActivity : AppCompatActivity() {
@@ -30,16 +31,25 @@ class ExerciseDetailActivity : AppCompatActivity() {
     }
     private val repo by lazy { Repos.workoutRepository(this) }
 
-    private val beeper by lazy { TimerBeeper() }
+    // Beeper for last 5s countdown
+    private val beeper by lazy { TimerBeeper(this) }
     private var lastPippedSecond: Long = -1L
     private var lastRemainingMs: Long? = null
 
+    // Header views
     private lateinit var tvExerciseName: TextView
+    private lateinit var tvLastSuccessful: TextView
+    private lateinit var tvBestAtReps: TextView
+    private lateinit var tvSuggestedWeight: TextView
+    private lateinit var tvE1rm: TextView
+
+    // Set entry + actions
     private lateinit var layoutSets: LinearLayout
     private lateinit var btnAddSet: Button
     private lateinit var btnCompleteExercise: Button
     private lateinit var etNotes: EditText
 
+    // Args
     private var sessionId: Long = 0L
     private var exerciseId: Long = 0L
     private var exerciseName: String = ""
@@ -59,28 +69,38 @@ class ExerciseDetailActivity : AppCompatActivity() {
         private const val PREFS_NAME = "user_settings"
         private const val KEY_REST_SECONDS = "rest_time_seconds"
         private const val DEFAULT_REST_SECONDS = 120
+        private const val DEFAULT_SUGGESTED_REPS = 5
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_exercise_detail)
 
-        sessionId = intent.getLongExtra("SESSION_ID", 0L)
-        exerciseId = intent.getLongExtra("EXERCISE_ID", 0L)
+        // ----- args -----
+        sessionId    = intent.getLongExtra("SESSION_ID", 0L)
+        exerciseId   = intent.getLongExtra("EXERCISE_ID", 0L)
         exerciseName = intent.getStringExtra("EXERCISE_NAME") ?: ""
         equipmentName = intent.getStringExtra("EQUIPMENT") ?: "BARBELL"
-        targetReps = intent.getIntExtra("TARGET_REPS", 0).takeIf { it > 0 }
-        targetSets = intent.getIntExtra("TARGET_SETS", 0).takeIf { it > 0 }
+        targetReps   = intent.getIntExtra("TARGET_REPS", 0).takeIf { it > 0 }
+        targetSets   = intent.getIntExtra("TARGET_SETS", 0).takeIf { it > 0 }
 
+        // ----- view wiring -----
         bindViews()
-
         tvExerciseName.text = exerciseName
         findViewById<ImageView>(R.id.ivBack).setOnClickListener { finish() }
 
+        // Always bind header stats up-front
+        bindHeaderStats(
+            exerciseId = exerciseId,
+            equipmentFromIntent = runCatching { Equipment.valueOf(equipmentName) }.getOrNull(),
+            targetReps = targetReps
+        )
+
+        // Rest banner
         ensureBannerInflated()
         findViewById<View>(R.id.restTimerContainer)?.bringToFront()
 
-        // If there are existing logs, render them read-only. Otherwise, pre-populate planned rows.
+        // If there are existing logs, render read-only; otherwise pre-populate planned rows
         lifecycleScope.launch {
             val existing = withContext(Dispatchers.IO) {
                 com.example.safitness.data.db.AppDatabase
@@ -102,17 +122,103 @@ class ExerciseDetailActivity : AppCompatActivity() {
         }
 
         bindRestTimerBanner()
+
+        // If a timer is already running, surface it immediately
         repo.restTimerState.value?.let {
             forceShowBanner(it.remainingMs, it.durationMs, it.isRunning)
         }
     }
 
     private fun bindViews() {
-        tvExerciseName = findViewById(R.id.tvExerciseName)
-        layoutSets = findViewById(R.id.layoutSets)
-        btnAddSet = findViewById(R.id.btnAddSet)
-        btnCompleteExercise = findViewById(R.id.btnCompleteExercise)
-        etNotes = findViewById(R.id.etNotes)
+        tvExerciseName     = findViewById(R.id.tvExerciseName)
+        tvLastSuccessful   = findViewById(R.id.tvLastSuccessful)
+        tvBestAtReps       = findViewById(R.id.tvBestAtReps)
+        tvSuggestedWeight  = findViewById(R.id.tvSuggestedWeight)
+        tvE1rm             = findViewById(R.id.tvE1rm)
+
+        layoutSets         = findViewById(R.id.layoutSets)
+        btnAddSet          = findViewById(R.id.btnAddSet)
+        btnCompleteExercise= findViewById(R.id.btnCompleteExercise)
+        etNotes            = findViewById(R.id.etNotes)
+    }
+
+    // ---------- Header stats ----------
+
+    /**
+     * Writes labels + values into the four TextViews. Labels are always shown,
+     * values update as data arrives (so you never see empty cells).
+     */
+    // ExerciseDetailActivity.kt
+
+    private fun bindHeaderStats(
+        exerciseId: Long,
+        equipmentFromIntent: Equipment?,
+        targetReps: Int?
+    ) {
+        fun setLast(x: String)      { tvLastSuccessful.text  = "Last: $x" }
+        fun setBestAt(x: String)    { tvBestAtReps.text      = "Best @${targetReps ?: "-"}: $x" }
+        fun setSuggested(x: String) { tvSuggestedWeight.text = "Suggested: $x" }
+        fun setE1rm(x: String)      { tvE1rm.text            = "Best e1RM: $x" }
+
+        setLast("—"); setBestAt("—"); setSuggested("—"); setE1rm("—")
+
+        lifecycleScope.launch {
+            val eq = equipmentFromIntent ?: Equipment.BARBELL
+            val reps = targetReps ?: return@launch  // reps should be selected by design
+
+            // Last = last successful FOR THIS REP RANGE (no fallback to any-rep)
+            val last = withContext(Dispatchers.IO) { repo.getLastSuccessfulWeight(exerciseId, eq, reps) }
+            setLast(last?.let { formatKg(it) } ?: "—")
+
+            // e1RM = stored or derived from successful history
+            val e1rm = withContext(Dispatchers.IO) { repo.ensureBestE1RMFromHistory(exerciseId, eq) }
+            setE1rm(e1rm?.let { formatKg(it) } ?: "—")
+
+            // Best @r = history only
+            val bestAt = withContext(Dispatchers.IO) {
+                targetReps?.let { repo.bestRMAtRepsFromLogs(exerciseId, eq, it) }
+            }
+            setBestAt(bestAt?.let { formatKg(it) } ?: "—")
+
+            // Suggested = e1RM × % for reps (rounded to equipment increment). No haircuts, no history mixing.
+            val suggested = withContext(Dispatchers.IO) { repo.suggestFromE1RM(exerciseId, eq, reps) }
+            setSuggested(suggested?.let { formatKg(it) } ?: "—")
+        }
+    }
+
+
+    private fun showPrDialog(e: com.example.safitness.core.PrCelebrationEvent) {
+        val view = layoutInflater.inflate(R.layout.dialog_pr, null)
+        val titleTv = view.findViewById<TextView>(R.id.tvPrTitle)
+        val bodyTv  = view.findViewById<TextView>(R.id.tvPrBody)
+        val btnNice = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnNice)
+
+        val title = if (e.isHardPr) "${e.reps ?: 1}RM 🎉" else "New e1RM 🎉"
+        val body = if (e.isHardPr) {
+            val newW = e.newWeightKg?.let { formatKg(it) } ?: "—"
+            val prevW = e.prevWeightKg?.let { formatKg(it) } ?: "—"
+            val e1rmNow = formatKg(e.newE1rmKg)
+            "$newW (prev $prevW)\nNew e1RM: $e1rmNow"
+        } else {
+            val e1rmNow = formatKg(e.newE1rmKg)
+            val delta   = e.prevE1rmKg?.let { e.newE1rmKg - it }
+            val deltaText = delta?.let { formatKg(it) } ?: "—"
+            "New e1RM: $e1rmNow\nChange: $deltaText"
+        }
+
+        titleTv.text = title
+        bodyTv.text  = body
+
+        val dialog = androidx.appcompat.app.AlertDialog.Builder(this)
+            .setView(view)
+            .setCancelable(false)
+            .create()
+
+        dialog.setOnShowListener {
+            btnNice.isAllCaps = false
+            btnNice.setOnClickListener { dialog.dismiss(); finish() }
+        }
+        dialog.show()
     }
 
     private fun getBaseRestMs(context: Context = this): Long {
@@ -208,7 +314,7 @@ class ExerciseDetailActivity : AppCompatActivity() {
     /** Preview → Log → PR feedback (per set), then close. */
     private fun onCompleteExercise() {
         lifecycleScope.launch {
-            // avoid double logging
+            // Avoid double logging
             val already = withContext(Dispatchers.IO) {
                 com.example.safitness.data.db.AppDatabase
                     .get(this@ExerciseDetailActivity)
@@ -236,13 +342,13 @@ class ExerciseDetailActivity : AppCompatActivity() {
                     else -> false
                 }
 
-                // preview PR before logging (best effort)
+                // Preview PR before logging (best effort)
                 val preview = withContext(Dispatchers.IO) {
                     repo.previewPrEvent(exerciseId, equipment, reps, weight)
                 }
                 if (firstPr == null && preview != null) firstPr = preview
 
-                // perform log
+                // Perform log
                 withContext(Dispatchers.IO) {
                     repo.logStrengthSet(
                         sessionId = sessionId,
@@ -257,7 +363,7 @@ class ExerciseDetailActivity : AppCompatActivity() {
                     )
                 }
 
-                // start rest between sets
+                // Start rest between sets (except after the last)
                 if (idx < setRows.lastIndex) {
                     val base = getBaseRestMs()
                     repo.startRestTimer(sessionId, exerciseId, base)
@@ -267,11 +373,11 @@ class ExerciseDetailActivity : AppCompatActivity() {
             }
 
             if (firstPr != null) {
-                showCenteredToast("🎉 PR hit! New e1RM ${String.format(Locale.UK, "%.1f kg", firstPr!!.newE1rmKg)}")
+                showPrDialog(firstPr!!)
             } else {
                 showCenteredToast("✅ Exercise logged.")
+                finish()
             }
-            finish()
         }
     }
 
@@ -281,7 +387,7 @@ class ExerciseDetailActivity : AppCompatActivity() {
         t.show()
     }
 
-    // ---- Rest timer banner & beep logic (unchanged) ----
+    // ---------------- Rest timer banner & beep logic ----------------
 
     private fun ensureBannerInflated() {
         if (findViewById<View>(R.id.restTimerContainer) != null) return
@@ -377,6 +483,7 @@ class ExerciseDetailActivity : AppCompatActivity() {
         val s = totalSec % 60
         return String.format("%02d:%02d", m, s)
     }
+
     private fun forceShowBanner(remainingMs: Long, durationMs: Long, isRunning: Boolean) {
         val container = findViewById<View>(R.id.restTimerContainer) ?: return
         val value = container.findViewById<TextView>(R.id.restTimerValue)
@@ -396,4 +503,6 @@ class ExerciseDetailActivity : AppCompatActivity() {
         container.bringToFront()
     }
 
+    private fun formatKg(value: Double): String =
+        String.format(Locale.UK, "%.1f kg", value)
 }

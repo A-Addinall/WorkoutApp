@@ -17,10 +17,10 @@ data class MetconSummary(
 
 @Dao
 interface SessionDao {
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertSession(session: WorkoutSessionEntity): Long
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertSet(set: SetLog): Long
 
     @Query(
@@ -91,5 +91,17 @@ interface SessionDao {
 
     @Query("SELECT id FROM workout_session WHERE dateEpochDay = :epochDay ORDER BY id DESC LIMIT 1")
     suspend fun latestSessionIdForDate(epochDay: Long): Long?
+
+
+    @Query("""
+SELECT MAX(weight) FROM SetLog
+WHERE exerciseId = :exerciseId AND equipment = :equipment
+  AND success = 1 AND reps = :reps AND weight IS NOT NULL
+""")
+    suspend fun maxSuccessfulWeightAtReps(
+        exerciseId: Long,
+        equipment: Equipment,
+        reps: Int
+    ): Double?
 
 }

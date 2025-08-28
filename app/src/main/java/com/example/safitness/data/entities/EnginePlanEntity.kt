@@ -1,9 +1,11 @@
 package com.example.safitness.data.entities
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
-@Entity(tableName = "engine_plans")
+@Entity(tableName = "engine_plans",
+    indices = [Index(value = ["title"], unique = true)])
 data class EnginePlanEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val title: String,                       // e.g., "Row — 2k For Time"

@@ -44,6 +44,7 @@ object MetconSeed {
                 PlanDef("AMRAP20_CINDY", "Cindy (AMRAP 20)", MetconType.AMRAP, 20),
                 PlanDef("CHIPPER_RUN_WB_STEP_PU_PU", "Chipper — Run, Wall Balls, Step-ups, Push-ups, Pull-ups", MetconType.FOR_TIME, 22),
                 PlanDef("AMRAP16_DB_COUPLET", "AMRAP 16: Alt DB Snatch + Step-ups", MetconType.AMRAP, 16),
+                PlanDef("AMRAP36_ENGINE_BUILDER_YGIG", "Engine Builder (Pairs YGIG) (Row+Movement per Rnd)— AMRAP 36", MetconType.AMRAP, duration = 36),
 
                 // EMOM / Intervals
                 PlanDef("EMOM24_ROW_BURPEE_KBS_REST", "EMOM 24: Row / Burpees / KB Swings / Rest", MetconType.EMOM, 24, emom = 60),
@@ -140,13 +141,19 @@ object MetconSeed {
 
                 // --- AMRAP 16: Alt DB Snatch + Step-ups ---
                 MetconComponent(planId = idByKey.getValue("AMRAP16_DB_COUPLET"), orderInPlan = 1, text = "10 Alt DB Snatch", blockType = BlockType.AMRAP, movement = MovementPattern.HINGE, reps = 10),
-                MetconComponent(planId = idByKey.getValue("AMRAP16_DB_COUPLET"), orderInPlan = 2, text = "12 Step-ups", blockType = BlockType.AMRAP, movement = MovementPattern.SQUAT, reps = 12)
+                MetconComponent(planId = idByKey.getValue("AMRAP16_DB_COUPLET"), orderInPlan = 2, text = "12 Step-ups", blockType = BlockType.AMRAP, movement = MovementPattern.SQUAT, reps = 12),
 
-
+                //--- AMRAP36_ENGINE_BUILDER_YGIG ---
+                MetconComponent(planId = idByKey.getValue("AMRAP36_ENGINE_BUILDER_YGIG"), orderInPlan = 1, text = "15/12 cal Bike", blockType = BlockType.AMRAP, movement = MovementPattern.GAIT,reps = null),
+                MetconComponent(planId = idByKey.getValue("AMRAP36_ENGINE_BUILDER_YGIG"), orderInPlan = 2, text = "10 Burpees over Rower", blockType = BlockType.AMRAP, movement = MovementPattern.HORIZONTAL_PUSH, reps = 10),
+                MetconComponent(planId = idByKey.getValue("AMRAP36_ENGINE_BUILDER_YGIG"), orderInPlan = 3, text = "15/12 cal Bike", blockType = BlockType.AMRAP, movement = MovementPattern.GAIT,reps = null),
+                MetconComponent(planId = idByKey.getValue("AMRAP36_ENGINE_BUILDER_YGIG"), orderInPlan = 4, text = "16 Kettlebell Swings (24/16 kg)", blockType = BlockType.AMRAP, movement = MovementPattern.HINGE, reps = 16),
+                MetconComponent(planId = idByKey.getValue("AMRAP36_ENGINE_BUILDER_YGIG"), orderInPlan = 5, text = "15/12 cal Bike", blockType = BlockType.AMRAP, movement = MovementPattern.GAIT,reps = null),
+                MetconComponent(planId = idByKey.getValue("AMRAP36_ENGINE_BUILDER_YGIG"), orderInPlan = 6, text = "16 DB Hang Lunges (2 × 15/10 kg)", blockType = BlockType.AMRAP, movement = MovementPattern.SQUAT, reps = 16)
             )
 
             dao.insertComponentsIgnore(comps)
             comps.forEach { c -> dao.updateComponentText(c.planId, c.orderInPlan, c.text) }
         }
-    }
+        }
 }

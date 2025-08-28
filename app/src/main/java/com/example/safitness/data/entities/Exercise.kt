@@ -6,7 +6,9 @@ import com.example.safitness.core.MovementPattern
 import com.example.safitness.core.Modality
 import com.example.safitness.core.WorkoutType
 
-@Entity(tableName = "exercise")
+@Entity(tableName = "exercise",
+        indices = [Index(value = ["name"], unique = true)]
+)
 data class Exercise(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val name: String,

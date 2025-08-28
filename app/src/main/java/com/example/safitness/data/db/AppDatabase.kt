@@ -12,6 +12,7 @@ import com.example.safitness.data.seed.ExerciseSeed
 import com.example.safitness.data.seed.MetconSeed
 import com.example.safitness.data.seed.SkillLibrarySeeder
 import com.example.safitness.data.seed.EngineLibrarySeeder
+import com.example.safitness.data.seed.DatabaseSeeder
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -101,26 +102,10 @@ abstract class AppDatabase : RoomDatabase() {
                             super.onCreate(dbObj)
                             CoroutineScope(Dispatchers.IO).launch {
                                 val db = INSTANCE ?: return@launch
-                                if (db.libraryDao().countExercises() == 0) {
-                                    db.libraryDao().insertAll(ExerciseSeed.DEFAULT_EXERCISES)
-                                }
-                                if (db.metconDao().countPlans() == 0) {
-                                    MetconSeed.seedOrUpdate(db)
-                                    SkillLibrarySeeder.seedIfNeeded(db)
-                                    EngineLibrarySeeder.seedIfNeeded(db)
-                                }
+                                DatabaseSeeder.seedAll(db)
                             }
                         }
 
-                        override fun onOpen(dbObj: SupportSQLiteDatabase) {
-                            super.onOpen(dbObj)
-                            CoroutineScope(Dispatchers.IO).launch {
-                                val db = INSTANCE ?: return@launch
-                                MetconSeed.seedOrUpdate(db)
-                                SkillLibrarySeeder.seedIfNeeded(db)
-                                EngineLibrarySeeder.seedIfNeeded(db)
-                            }
-                        }
                     })
                     .build()
                 INSTANCE = inst

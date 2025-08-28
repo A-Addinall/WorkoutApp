@@ -14,6 +14,8 @@ import androidx.lifecycle.lifecycleScope
 import com.example.safitness.R
 import com.example.safitness.core.MetconResult
 import com.example.safitness.data.repo.Repos
+import com.example.safitness.audio.CuePlayer
+import com.example.safitness.audio.WorkoutCueScheduler
 import com.google.android.material.appbar.MaterialToolbar
 import kotlinx.coroutines.launch
 import kotlin.math.floor
@@ -40,7 +42,11 @@ class MetconEmomActivity : AppCompatActivity() {
     private var remainingMs = 0L
 
     private var preTimer: CountDownTimer? = null
-    private val beeper = TimerBeeper()
+    private val beeper by lazy { TimerBeeper(this) }
+    // ADD
+    private lateinit var cues: com.example.safitness.audio.CuePlayer
+    private lateinit var cueScheduler: com.example.safitness.audio.WorkoutCueScheduler
+
     private var lastWarnSecond = -1
     private var lastMinuteMark = -1
 
@@ -51,6 +57,10 @@ class MetconEmomActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_metcon_emom)
+
+        cues = CuePlayer(this, preferVoice = true, voiceOnAlarmStream = true, enginePackage = CuePlayer.GOOGLE_ENGINE)
+
+        cueScheduler = WorkoutCueScheduler(lifecycleScope, cues)
 
         dayIndex = intent.getIntExtra("DAY_INDEX", 1).coerceIn(1, 5)
         planId = intent.getLongExtra("PLAN_ID", -1L)
@@ -136,8 +146,7 @@ class MetconEmomActivity : AppCompatActivity() {
             }
             override fun onFinish() {
                 preTimer = null
-                if (phase != TimerPhase.PRECOUNT) return
-                beeper.finalBuzz()
+                cues.say("Start")
                 startMainCountdown()
             }
         }.also { it.start() }
@@ -158,6 +167,10 @@ class MetconEmomActivity : AppCompatActivity() {
         phase = TimerPhase.RUNNING
         btnStartStop.text = "PAUSE"
 
+        // ADD: schedule a "Halfway" at 30s of each minute
+        val rounds = durationSeconds / 60
+        cueScheduler.scheduleEveryRound(roundMs = 60_000L, totalRounds = rounds, voice = true)
+
         timer?.cancel()
         timer = object : CountDownTimer(remainingMs, 1_000) {
             override fun onTick(ms: Long) {
@@ -172,6 +185,7 @@ class MetconEmomActivity : AppCompatActivity() {
                 remainingMs = 0L
                 btnStartStop.text = "START"
                 updateTimer()
+                cueScheduler.cancel() // ADD
                 beeper.finalBuzz()
                 Toast.makeText(this@MetconEmomActivity, "Time!", Toast.LENGTH_SHORT).show()
             }
@@ -182,6 +196,7 @@ class MetconEmomActivity : AppCompatActivity() {
         timer?.cancel(); timer = null
         phase = TimerPhase.IDLE
         btnStartStop.text = "START"
+        if (this::cueScheduler.isInitialized) cueScheduler.cancel()
     }
 
     private fun resetAll() {
@@ -193,6 +208,7 @@ class MetconEmomActivity : AppCompatActivity() {
         lastMinuteMark = -1
         remainingMs = durationSeconds * 1000L
         updateTimer()
+        if (this::cueScheduler.isInitialized) cueScheduler.cancel()
     }
 
     private fun updateTimer() {
@@ -264,5 +280,6 @@ class MetconEmomActivity : AppCompatActivity() {
         preTimer?.cancel(); preTimer = null
         timer?.cancel(); timer = null
         beeper.release()
+        if (this::cueScheduler.isInitialized) cueScheduler.cancel()
     }
 }

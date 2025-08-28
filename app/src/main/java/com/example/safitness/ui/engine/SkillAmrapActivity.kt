@@ -7,6 +7,9 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.example.safitness.R
 import com.example.safitness.data.db.AppDatabase
+import com.example.safitness.ui.TimerBeeper
+import com.example.safitness.audio.WorkoutCueScheduler
+import com.example.safitness.audio.CuePlayer
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import kotlinx.coroutines.Dispatchers
@@ -38,10 +41,13 @@ class SkillAmrapActivity : AppCompatActivity() {
     private var planId: Long = -1
     private var dayIndex: Int = 1
     private var durationSeconds: Int = 20 * 60
-
+    private var lastWarnSecond = -1 // main countdown 3..1
     private var preTimer: CountDownTimer? = null
     private var timer: CountDownTimer? = null
-    private val beeper = com.example.safitness.ui.TimerBeeper()
+    private val beeper by lazy { TimerBeeper(this) }
+    private lateinit var cues: CuePlayer
+    private lateinit var cueScheduler: WorkoutCueScheduler
+
     private var phase: Phase = Phase.IDLE
     private var remainingMs = 0L
     private var allowReseed = true
@@ -51,6 +57,8 @@ class SkillAmrapActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_skill_amrap)
+        cues = CuePlayer(this, preferVoice = true)
+        cueScheduler = WorkoutCueScheduler(lifecycleScope, cues)
 
         planId = intent.getLongExtra("PLAN_ID", -1L)
         dayIndex = intent.getIntExtra("DAY_INDEX", 1).coerceIn(1, 5)
@@ -150,6 +158,7 @@ class SkillAmrapActivity : AppCompatActivity() {
             }
             override fun onFinish() {
                 beeper.finalBuzz()
+                cues.say("Start")
                 phase = Phase.RUN
                 startMainCountdown()
             }
@@ -165,13 +174,17 @@ class SkillAmrapActivity : AppCompatActivity() {
 
     private fun startMainCountdown() {
         btnStartStop.text = "PAUSE"
+        cueScheduler.scheduleOneShot(totalMs = remainingMs, voice = true)
         timer?.cancel()
         timer = object : CountDownTimer(remainingMs, 1_000) {
             override fun onTick(ms: Long) {
                 remainingMs = ms
                 updateTimer()
                 val secLeft = (remainingMs / 1000).toInt()
-                if (secLeft in 1..3) beeper.countdownPip()
+                if (secLeft in 1..3 && secLeft != lastWarnSecond) {
+                    lastWarnSecond = secLeft
+                    beeper.countdownPip()
+                }
             }
             override fun onFinish() {
                 timer = null
@@ -189,6 +202,7 @@ class SkillAmrapActivity : AppCompatActivity() {
         timer?.cancel(); timer = null
         phase = Phase.IDLE
         btnStartStop.text = "START"
+        cueScheduler.cancel()
     }
 
     private fun resetAll() {
@@ -226,5 +240,6 @@ class SkillAmrapActivity : AppCompatActivity() {
         preTimer?.cancel(); preTimer = null
         timer?.cancel(); timer = null
         beeper.release()
+        cueScheduler.cancel()
     }
 }

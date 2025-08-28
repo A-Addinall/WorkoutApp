@@ -6,10 +6,10 @@ import com.example.safitness.data.entities.EnginePlanEntity
 
 @Dao
 interface EnginePlanDao {
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertPlan(plan: EnginePlanEntity): Long
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertComponents(components: List<EngineComponentEntity>)
 
     @Query("SELECT COUNT(*) FROM engine_plans")

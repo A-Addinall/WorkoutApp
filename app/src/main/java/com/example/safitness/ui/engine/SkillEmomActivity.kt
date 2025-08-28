@@ -8,6 +8,9 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.example.safitness.R
 import com.example.safitness.data.db.AppDatabase
+import com.example.safitness.ui.TimerBeeper
+import com.example.safitness.audio.CuePlayer
+import com.example.safitness.audio.WorkoutCueScheduler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -34,7 +37,11 @@ class SkillEmomActivity : AppCompatActivity() {
 
     private var preTimer: CountDownTimer? = null
     private var timer: CountDownTimer? = null
-    private val beeper = com.example.safitness.ui.TimerBeeper()
+    private val beeper by lazy { TimerBeeper(this) }
+    // ADD
+    private lateinit var cues: com.example.safitness.audio.CuePlayer
+    private lateinit var cueScheduler: com.example.safitness.audio.WorkoutCueScheduler
+
     private var lastWarnSecond = -1
     private var lastMinuteMark = -1
     private var phase: Phase = Phase.IDLE
@@ -49,6 +56,10 @@ class SkillEmomActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_skill_emom)
+
+        cues = CuePlayer(this, preferVoice = true, voiceOnAlarmStream = true, enginePackage = CuePlayer.GOOGLE_ENGINE)
+
+        cueScheduler = WorkoutCueScheduler(lifecycleScope, cues)
 
         planId = intent.getLongExtra("PLAN_ID", -1L)
         dayIndex = intent.getIntExtra("DAY_INDEX", 1).coerceIn(1, 5)
@@ -151,8 +162,10 @@ class SkillEmomActivity : AppCompatActivity() {
             }
             override fun onFinish() {
                 beeper.finalBuzz()
+                cues.say("Start")
                 phase = Phase.RUN
                 startMainCountdown()
+
             }
         }.also { it.start() }
     }
@@ -167,6 +180,10 @@ class SkillEmomActivity : AppCompatActivity() {
     private fun startMainCountdown() {
         btnStartStop.text = "PAUSE"
         timer?.cancel()
+        // ADD: schedule a "Halfway" at 30s of each minute
+        val rounds = durationSeconds / 60
+        cueScheduler.scheduleEveryRound(roundMs = 60_000L, totalRounds = rounds, voice = true)
+
         timer = object : CountDownTimer(remainingMs, 1_000) {
             override fun onTick(ms: Long) {
                 remainingMs = ms
@@ -181,6 +198,7 @@ class SkillEmomActivity : AppCompatActivity() {
                 btnStartStop.text = "START"
                 updateTimer()
                 beeper.finalBuzz()
+                cueScheduler.cancel()
                 saveLast()
                 Toast.makeText(this@SkillEmomActivity, "Time!", Toast.LENGTH_SHORT).show()
             }

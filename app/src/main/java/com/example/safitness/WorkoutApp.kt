@@ -18,14 +18,6 @@ class WorkoutApp : Application() {
     override fun onCreate() {
         super.onCreate()
         db = AppDatabase.get(this)
-
-        appScope.launch {
-            // Idempotent content seeds
-            ExerciseSeed.seedOrUpdate(db)
-            MetconSeed.seedOrUpdate(db)
-            EngineLibrarySeeder.seedIfNeeded(db)
-            SkillLibrarySeeder.seedIfNeeded(db)
-            }
         }
     }
 

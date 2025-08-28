@@ -11,6 +11,9 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.example.safitness.R
 import com.example.safitness.data.db.AppDatabase
+import com.example.safitness.ui.TimerBeeper
+import com.example.safitness.audio.CuePlayer
+import com.example.safitness.audio.WorkoutCueScheduler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -39,11 +42,17 @@ class SkillForTimeActivity : AppCompatActivity() {
     private var startTime = 0L
     private var timer: CountDownTimer? = null
     private var preTimer: CountDownTimer? = null
-    private val beeper = com.example.safitness.ui.TimerBeeper()
+    private val beeper by lazy { TimerBeeper(this) }
+    private lateinit var cues: com.example.safitness.audio.CuePlayer
+    private lateinit var cueScheduler: com.example.safitness.audio.WorkoutCueScheduler
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_skill_for_time)
+        cues = CuePlayer(this, preferVoice = true, voiceOnAlarmStream = true, enginePackage = CuePlayer.GOOGLE_ENGINE)
+
+        cueScheduler = WorkoutCueScheduler(lifecycleScope, cues)
 
         planId = intent.getLongExtra("PLAN_ID", -1L)
         dayIndex = intent.getIntExtra("DAY_INDEX", 1).coerceIn(1, 5)
@@ -120,6 +129,7 @@ class SkillForTimeActivity : AppCompatActivity() {
             }
             override fun onFinish() {
                 beeper.finalBuzz()
+                cues.say("Start")
                 isCountdown = false
                 startTimer()
             }
@@ -151,6 +161,8 @@ class SkillForTimeActivity : AppCompatActivity() {
         if (!isRunning) return
         timer?.cancel()
         isRunning = false
+        if (this::cueScheduler.isInitialized) cueScheduler.cancel()
+        if (this::cues.isInitialized) cues.release()
         btnStartStop.text = "START"
     }
 
@@ -158,6 +170,8 @@ class SkillForTimeActivity : AppCompatActivity() {
         preTimer?.cancel(); isCountdown = false
         timer?.cancel(); isRunning = false
         timeElapsedMs = 0L; startTime = 0L
+        if (this::cueScheduler.isInitialized) cueScheduler.cancel()
+        if (this::cues.isInitialized) cues.release()
         btnStartStop.text = "START"
         tvTimer.text = "00:00"
     }
@@ -172,5 +186,7 @@ class SkillForTimeActivity : AppCompatActivity() {
         preTimer?.cancel(); preTimer = null
         timer?.cancel(); timer = null
         beeper.release()
+        if (this::cueScheduler.isInitialized) cueScheduler.cancel()
+        if (this::cues.isInitialized) cues.release()
     }
 }

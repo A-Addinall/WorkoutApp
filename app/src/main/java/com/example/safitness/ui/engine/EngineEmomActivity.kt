@@ -7,6 +7,9 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.example.safitness.R
 import com.example.safitness.data.db.AppDatabase
+import com.example.safitness.ui.TimerBeeper
+import com.example.safitness.audio.CuePlayer
+import com.example.safitness.audio.WorkoutCueScheduler
 import com.google.android.material.textfield.TextInputEditText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -34,7 +37,11 @@ class EngineEmomActivity : AppCompatActivity() {
     // timers
     private var preTimer: CountDownTimer? = null
     private var timer: CountDownTimer? = null
-    private val beeper = com.example.safitness.ui.TimerBeeper()
+    private val beeper by lazy { TimerBeeper(this) }
+    // ADD
+    private lateinit var cues: com.example.safitness.audio.CuePlayer
+    private lateinit var cueScheduler: com.example.safitness.audio.WorkoutCueScheduler
+
     private var lastWarnSecond = -1
     private var lastMinuteMark = -1
 
@@ -46,6 +53,10 @@ class EngineEmomActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_engine_emom)
+
+
+        cues = CuePlayer(this, preferVoice = true)
+        cueScheduler = WorkoutCueScheduler(lifecycleScope, cues)
 
         dayIndex = intent.getIntExtra("DAY_INDEX", 1).coerceIn(1, 5)
         planId = intent.getLongExtra("PLAN_ID", -1L)
@@ -126,6 +137,7 @@ class EngineEmomActivity : AppCompatActivity() {
             }
             override fun onFinish() {
                 beeper.finalBuzz()
+                cues.say("Start")
                 phase = Phase.RUN
                 startMainCountdown()
             }
@@ -141,6 +153,10 @@ class EngineEmomActivity : AppCompatActivity() {
 
     private fun startMainCountdown() {
         btnStartStop.text = "PAUSE"
+        // ADD: schedule a "Halfway" at 30s of each minute
+        val rounds = durationSeconds / 60
+        cueScheduler.scheduleEveryRound(roundMs = 60_000L, totalRounds = rounds, voice = true)
+
         timer?.cancel()
         timer = object : CountDownTimer(remainingMs, 1_000) {
             override fun onTick(ms: Long) {
@@ -155,6 +171,7 @@ class EngineEmomActivity : AppCompatActivity() {
                 remainingMs = 0L
                 btnStartStop.text = "START"
                 updateTimer()
+                cueScheduler.cancel() // ADD
                 beeper.finalBuzz()
                 Toast.makeText(this@EngineEmomActivity, "Time!", Toast.LENGTH_SHORT).show()
             }
@@ -165,6 +182,7 @@ class EngineEmomActivity : AppCompatActivity() {
         timer?.cancel(); timer = null
         phase = Phase.IDLE
         btnStartStop.text = "START"
+        if (this::cueScheduler.isInitialized) cueScheduler.cancel()
     }
 
     private fun resetAll() {
@@ -176,6 +194,7 @@ class EngineEmomActivity : AppCompatActivity() {
         lastMinuteMark = -1
         remainingMs = durationSeconds * 1000L
         updateTimer()
+        if (this::cueScheduler.isInitialized) cueScheduler.cancel()
     }
 
     private fun updateTimer() {
@@ -227,5 +246,6 @@ class EngineEmomActivity : AppCompatActivity() {
         preTimer?.cancel(); preTimer = null
         timer?.cancel(); timer = null
         beeper.release()
+        if (this::cueScheduler.isInitialized) cueScheduler.cancel()
     }
 }
