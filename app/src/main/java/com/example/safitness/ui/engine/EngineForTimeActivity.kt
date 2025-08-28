@@ -12,6 +12,9 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.example.safitness.R
 import com.example.safitness.data.db.AppDatabase
+import com.example.safitness.ui.TimerBeeper
+import com.example.safitness.audio.CuePlayer
+import com.example.safitness.audio.WorkoutCueScheduler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -39,11 +42,16 @@ class EngineForTimeActivity : AppCompatActivity() {
     private var startTime = 0L
     private var timer: CountDownTimer? = null
     private var preTimer: CountDownTimer? = null
-    private val beeper = com.example.safitness.ui.TimerBeeper()
+    private val beeper by lazy { TimerBeeper(this) }
+    // ADD
+    private lateinit var cues: CuePlayer
+    private lateinit var cueScheduler: WorkoutCueScheduler
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_engine_for_time)
+        cues = CuePlayer(this, preferVoice = true)
+        cueScheduler = WorkoutCueScheduler(lifecycleScope, cues)
 
         dayIndex   = intent.getIntExtra("DAY_INDEX", 1).coerceIn(1, 5)
         planId     = intent.getLongExtra("PLAN_ID", -1L)
@@ -96,6 +104,7 @@ class EngineForTimeActivity : AppCompatActivity() {
             override fun onFinish() {
                 beeper.finalBuzz()
                 isCountdown = false
+                cues.say("Start")
                 startTimer()
             }
         }.also { it.start() }
@@ -135,6 +144,8 @@ class EngineForTimeActivity : AppCompatActivity() {
         timeElapsedMs = 0L; startTime = 0L
         btnStartStop.text = "START"
         tvTimer.text = "00:00"
+        if (this::cueScheduler.isInitialized) cueScheduler.cancel()
+        if (this::cues.isInitialized) cues.release()
     }
 
     private fun updateTimerDisplay() {
@@ -227,5 +238,7 @@ class EngineForTimeActivity : AppCompatActivity() {
         preTimer?.cancel(); preTimer = null
         timer?.cancel(); timer = null
         beeper.release()
+        if (this::cueScheduler.isInitialized) cueScheduler.cancel()
+        if (this::cues.isInitialized) cues.release()
     }
 }

@@ -11,6 +11,8 @@ import com.example.safitness.R
 import com.example.safitness.core.MetconResult
 import com.example.safitness.core.Modality
 import com.example.safitness.data.repo.Repos
+import com.example.safitness.audio.CuePlayer
+import com.example.safitness.audio.WorkoutCueScheduler
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 
@@ -55,12 +57,19 @@ class MetconActivity : AppCompatActivity() {
     // NEW: pre-start 5s countdown
     private var preTimer: CountDownTimer? = null
     private var isCountdown = false
-    private val beeper = TimerBeeper()
+    private val beeper by lazy { TimerBeeper(this) }
+    private lateinit var cues: CuePlayer
+    private lateinit var cueScheduler: WorkoutCueScheduler
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
 
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_metcon)
+
+        cues = CuePlayer(this, preferVoice = true, voiceOnAlarmStream = true, enginePackage = CuePlayer.GOOGLE_ENGINE)
+
+        cueScheduler = WorkoutCueScheduler(lifecycleScope, cues)
 
         dayIndex    = intent.getIntExtra("DAY_INDEX", 1).coerceIn(1, 5)
         workoutName = intent.getStringExtra("WORKOUT_NAME") ?: "Day $dayIndex"
@@ -212,6 +221,7 @@ class MetconActivity : AppCompatActivity() {
             }
             override fun onFinish() {
                 beeper.finalBuzz()
+                cues.say("Start")
                 isCountdown = false
                 startTimer()
             }
@@ -226,7 +236,6 @@ class MetconActivity : AppCompatActivity() {
     }
 
     /* ---------------------------- Main timer (count-up) ---------------------------- */
-
     private fun startTimer() {
         if (isRunning) return
         startTime = System.currentTimeMillis() - timeElapsedMs
@@ -244,6 +253,8 @@ class MetconActivity : AppCompatActivity() {
     private fun stopTimer() {
         if (!isRunning) return
         timer?.cancel()
+        if (this::cueScheduler.isInitialized) cueScheduler.cancel()
+        if (this::cues.isInitialized) cues.release()
         isRunning = false
         btnStartStop.text = "START"
     }
@@ -257,6 +268,7 @@ class MetconActivity : AppCompatActivity() {
         startTime = 0L
         btnStartStop.text = "START"
         tvTimer.text = "00:00"
+        if (this::cueScheduler.isInitialized) cueScheduler.cancel()
     }
 
     private fun updateTimerDisplay() {
@@ -310,6 +322,8 @@ class MetconActivity : AppCompatActivity() {
         super.onDestroy()
         preTimer?.cancel()
         timer?.cancel()
+        if (this::cueScheduler.isInitialized) cueScheduler.cancel()
+        if (this::cues.isInitialized) cues.release()
         beeper.release()
     }
 }

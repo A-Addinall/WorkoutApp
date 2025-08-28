@@ -17,12 +17,15 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.lifecycleScope
 import com.example.safitness.R
+import com.example.safitness.audio.CuePlayer
+import com.example.safitness.audio.WorkoutCueScheduler
 import com.example.safitness.core.MetconResult
 import com.example.safitness.data.repo.Repos
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 import kotlin.math.max
 
 class MetconAmrapActivity : AppCompatActivity() {
@@ -56,7 +59,11 @@ class MetconAmrapActivity : AppCompatActivity() {
     private var extraReps = 0
 
     private var preTimer: CountDownTimer? = null
-    private val beeper = TimerBeeper()
+    private val beeper by lazy { TimerBeeper(this) }
+    // ADD
+    private lateinit var cues: CuePlayer
+    private lateinit var cueScheduler: WorkoutCueScheduler
+
     private var lastWarnSecond = -1 // main countdown 3..1
 
     private enum class TimerPhase { IDLE, PRECOUNT, RUNNING }
@@ -66,6 +73,10 @@ class MetconAmrapActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_metcon_amrap)
+
+        cues = CuePlayer(this, preferVoice = true, voiceOnAlarmStream = true, enginePackage = CuePlayer.GOOGLE_ENGINE)
+
+        cueScheduler = WorkoutCueScheduler(lifecycleScope, cues)
 
         dayIndex = intent.getIntExtra("DAY_INDEX", 1).coerceIn(1, 5)
         planId = intent.getLongExtra("PLAN_ID", -1L)
@@ -214,6 +225,9 @@ class MetconAmrapActivity : AppCompatActivity() {
         phase = TimerPhase.RUNNING
         btnStartStop.text = "PAUSE"
 
+        // ADD: schedule voice cues for the whole duration
+        cueScheduler.scheduleOneShot(totalMs = remainingMs, voice = true)
+
         timer?.cancel()
         timer = object : CountDownTimer(remainingMs, 1_000) {
             override fun onTick(ms: Long) {
@@ -227,16 +241,19 @@ class MetconAmrapActivity : AppCompatActivity() {
                 remainingMs = 0L
                 btnStartStop.text = "START"
                 updateTimer()
+                cueScheduler.cancel()   // ADD
                 beeper.finalBuzz()
                 Toast.makeText(this@MetconAmrapActivity, "Time!", Toast.LENGTH_SHORT).show()
             }
         }.also { it.start() }
     }
 
+
     private fun pause() {
         timer?.cancel(); timer = null
         phase = TimerPhase.IDLE
         btnStartStop.text = "START"
+        cueScheduler.cancel()
     }
 
     private fun resetAll() {
@@ -251,6 +268,8 @@ class MetconAmrapActivity : AppCompatActivity() {
         rounds = 0; extraReps = 0
         etRounds.setText("0"); etReps.setText("0")
         tilRounds.error = null; tilReps.error = null
+        if (this::cueScheduler.isInitialized) cueScheduler.cancel()
+        if (this::cues.isInitialized) cues.release()
     }
 
     private fun updateTimer() {
@@ -293,7 +312,7 @@ class MetconAmrapActivity : AppCompatActivity() {
         // NEW: read epochDay at the point of logging (no field/import churn)
         val epochDay = intent.getLongExtra(
             MainActivity.EXTRA_DATE_EPOCH_DAY,
-            java.time.LocalDate.now().toEpochDay()
+            LocalDate.now().toEpochDay()
         )
 
         lifecycleScope.launch {
@@ -318,7 +337,7 @@ class MetconAmrapActivity : AppCompatActivity() {
 
 
     private fun hideKeyboard(view: View) {
-        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
         imm.hideSoftInputFromWindow(view.windowToken, 0)
     }
 
@@ -327,5 +346,7 @@ class MetconAmrapActivity : AppCompatActivity() {
         preTimer?.cancel(); preTimer = null
         timer?.cancel(); timer = null
         beeper.release()
+        if (this::cueScheduler.isInitialized) cueScheduler.cancel()
+        if (this::cues.isInitialized) cues.release()
     }
 }

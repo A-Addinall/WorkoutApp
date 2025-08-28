@@ -32,7 +32,7 @@ class ExerciseDetailActivity : AppCompatActivity() {
     private val repo by lazy { Repos.workoutRepository(this) }
 
     // Beeper for last 5s countdown
-    private val beeper by lazy { TimerBeeper() }
+    private val beeper by lazy { TimerBeeper(this) }
     private var lastPippedSecond: Long = -1L
     private var lastRemainingMs: Long? = null
 

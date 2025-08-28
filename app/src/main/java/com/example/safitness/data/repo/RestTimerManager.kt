@@ -59,7 +59,7 @@ class RestTimerService : Service() {
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    private val beeper by lazy { TimerBeeper() }
+    private val beeper by lazy { TimerBeeper(this) }
     private val repo by lazy { Repos.workoutRepository(this) }
 
     // sound bookkeeping
