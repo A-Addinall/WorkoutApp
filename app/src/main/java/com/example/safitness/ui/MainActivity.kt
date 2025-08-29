@@ -36,7 +36,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import java.time.DayOfWeek
 import com.example.safitness.data.db.AppDatabase
 import com.example.safitness.data.entities.UserProfile
-import android.util.Log
+import com.example.safitness.settings.Settings
 
 
 
@@ -51,17 +51,21 @@ class MainActivity : AppCompatActivity() {
         // new keys (date-first)
         const val EXTRA_DATE_EPOCH_DAY = "DATE_EPOCH_DAY"
         const val EXTRA_WORKOUT_NAME = "WORKOUT_NAME"
+
     }
 
     private enum class Slot { PULL, PUSH, LEGS, FULL, ENGINE }
     private var generating = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
+
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
         requestNotificationPermission()
 
+        val workSec = Settings.emomWorkSeconds(this@MainActivity)
+        val sayRest = Settings.emomSayRest(this@MainActivity)
         // Workout of the Day (today)
         findViewById<CardView>(R.id.cardWod).setOnClickListener {
             openForDate(LocalDate.now())
@@ -574,5 +578,7 @@ class MainActivity : AppCompatActivity() {
         6 -> java.time.DayOfWeek.values().toSet() - java.time.DayOfWeek.SUNDAY
         else -> java.time.DayOfWeek.values().toSet()
     }
+    private val emomWorkSec by lazy { Settings.emomWorkSeconds(this@MainActivity) }
+    private val emomSayRest by lazy { Settings.emomSayRest(this@MainActivity) }
 
 }

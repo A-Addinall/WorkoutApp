@@ -33,6 +33,49 @@
                 android:textStyle="bold" />
 
         </LinearLayout>
+        <!-- EMOM Work Time -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Default EMOM Work (seconds)"
+                android:textSize="16sp"
+                android:layout_marginBottom="8dp" />
+
+            <EditText
+                android:id="@+id/etEmomWork"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:hint="40"
+                android:inputType="number"
+                android:textSize="14sp" />
+        </LinearLayout>
+
+        <!-- EMOM Say 'Rest' -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:padding="16dp"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Say “Rest” at start of rest"
+                android:textSize="16sp" />
+
+            <Switch
+                android:id="@+id/switchEmomSayRest"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content" />
+        </LinearLayout>
 
         <!-- Dark Theme -->
         <LinearLayout
@@ -66,7 +109,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Default Weight Increment"
+                android:text="Default Weight Increment (Strength)"
                 android:textSize="16sp"
                 android:layout_marginBottom="8dp" />
 

@@ -36,11 +36,34 @@ class WorkoutCueScheduler(
     }
 
     /** For EMOM/intervals: fire at the half of each round. */
-    fun scheduleEveryRound(roundMs: Long, totalRounds: Int, voice: Boolean = true) {
+// in WorkoutCueScheduler.kt
+
+    /** For EMOM/intervals: cue at end of work segment each round, optionally say "Rest". */
+    fun scheduleEveryRound(
+        roundMs: Long,
+        totalRounds: Int,
+        workMs: Long,                 // e.g., 40_000L for 40 s
+        voice: Boolean = true,
+        sayRest: Boolean = true,      // say "Rest" instead of generic beep
+        finalCountdownSec: Int = 3    // short end-of-work beeps before rest
+    ) {
         cancel()
+
+        // guardrails
+        val clampedWork = workMs.coerceIn(1_000L, (roundMs - 1_000L).coerceAtLeast(1_000L))
+
         repeat(totalRounds) { round ->
             val start = round * roundMs
-            jobs += scope.launch { delay(start + roundMs / 2); if (voice) cue.say("Halfway") else cue.pip() }
+            jobs += scope.launch {
+                delay(start + clampedWork)
+
+                // optional brief countdown ending the work segment
+                if (finalCountdownSec > 0) {
+                    repeat(finalCountdownSec) { delay(250L); cue.pip() } // quick staccato
+                }
+
+                if (voice && sayRest) cue.say("Rest") else cue.pip()
+            }
         }
     }
 

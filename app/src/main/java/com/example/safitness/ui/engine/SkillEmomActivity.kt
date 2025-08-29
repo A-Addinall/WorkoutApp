@@ -182,7 +182,19 @@ class SkillEmomActivity : AppCompatActivity() {
         timer?.cancel()
         // ADD: schedule a "Halfway" at 30s of each minute
         val rounds = durationSeconds / 60
-        cueScheduler.scheduleEveryRound(roundMs = 60_000L, totalRounds = rounds, voice = true)
+        val emomWorkSec = com.example.safitness.settings.Settings.emomWorkSeconds(this)
+        val sayRest = com.example.safitness.settings.Settings.emomSayRest(this)
+
+
+        val roundMs = 60_000L
+        cueScheduler.scheduleEveryRound(
+            roundMs = roundMs,
+            totalRounds = rounds,
+            workMs = emomWorkSec * 1000L,
+            voice = true,
+            sayRest = sayRest,
+            finalCountdownSec = 3
+        )
 
         timer = object : CountDownTimer(remainingMs, 1_000) {
             override fun onTick(ms: Long) {

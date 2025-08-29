@@ -10,6 +10,7 @@ import com.example.safitness.data.db.AppDatabase
 import com.example.safitness.ui.TimerBeeper
 import com.example.safitness.audio.CuePlayer
 import com.example.safitness.audio.WorkoutCueScheduler
+import android.content.Context
 import com.google.android.material.textfield.TextInputEditText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -152,10 +153,20 @@ class EngineEmomActivity : AppCompatActivity() {
     }
 
     private fun startMainCountdown() {
-        btnStartStop.text = "PAUSE"
-        // ADD: schedule a "Halfway" at 30s of each minute
         val rounds = durationSeconds / 60
-        cueScheduler.scheduleEveryRound(roundMs = 60_000L, totalRounds = rounds, voice = true)
+        val emomWorkSec = com.example.safitness.settings.Settings.emomWorkSeconds(this)
+        val sayRest = com.example.safitness.settings.Settings.emomSayRest(this)
+
+
+        val roundMs = 60_000L
+        cueScheduler.scheduleEveryRound(
+            roundMs = roundMs,
+            totalRounds = rounds,
+            workMs = emomWorkSec * 1000L,
+            voice = true,
+            sayRest = sayRest,
+            finalCountdownSec = 3
+        )
 
         timer?.cancel()
         timer = object : CountDownTimer(remainingMs, 1_000) {
