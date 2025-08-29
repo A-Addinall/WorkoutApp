@@ -16,7 +16,7 @@ import com.example.safitness.core.MetconResult
 import com.example.safitness.data.repo.Repos
 import com.example.safitness.audio.CuePlayer
 import com.example.safitness.audio.WorkoutCueScheduler
-import com.google.android.material.appbar.MaterialToolbar
+
 import kotlinx.coroutines.launch
 import kotlin.math.floor
 
@@ -26,7 +26,6 @@ class MetconEmomActivity : AppCompatActivity() {
         WorkoutViewModelFactory(Repos.workoutRepository(this))
     }
 
-    private lateinit var toolbar: MaterialToolbar
     private lateinit var tvTimer: TextView
     private lateinit var btnStartStop: Button
     private lateinit var btnReset: Button
@@ -68,10 +67,7 @@ class MetconEmomActivity : AppCompatActivity() {
         findViewById<ImageView>(R.id.ivBack).setOnClickListener { finish() }
 
         bindViews()
-        setSupportActionBar(toolbar)
-        supportActionBar?.setDisplayHomeAsUpEnabled(true)
-        toolbar.setNavigationOnClickListener { finish() }
-        toolbar.title = "EMOM"
+
 
         vm.planWithComponents(planId).observe(this) { pwc ->
             val mins = (pwc?.plan?.durationMinutes ?: 20).coerceAtLeast(1)
@@ -118,7 +114,6 @@ class MetconEmomActivity : AppCompatActivity() {
     }
 
     private fun bindViews() {
-        toolbar = findViewById(R.id.toolbar)
         tvTimer = findViewById(R.id.tvTimer)
         btnStartStop = findViewById(R.id.btnStartStop)
         btnReset = findViewById(R.id.btnReset)
@@ -146,7 +141,7 @@ class MetconEmomActivity : AppCompatActivity() {
             }
             override fun onFinish() {
                 preTimer = null
-                cues.say("Start")
+                cues.say("Lets Go")
                 startMainCountdown()
             }
         }.also { it.start() }

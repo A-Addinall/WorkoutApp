@@ -104,7 +104,7 @@ class EngineForTimeActivity : AppCompatActivity() {
             override fun onFinish() {
                 beeper.finalBuzz()
                 isCountdown = false
-                cues.say("Start")
+                cues.say("Lets Go")
                 startTimer()
             }
         }.also { it.start() }
