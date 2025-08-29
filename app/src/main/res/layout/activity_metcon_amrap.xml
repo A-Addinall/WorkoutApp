@@ -5,14 +5,6 @@
     android:layout_height="match_parent"
     android:padding="16dp">
 
-    <!-- Hidden toolbar to satisfy existing code references -->
-    <com.google.android.material.appbar.MaterialToolbar
-        android:id="@+id/toolbar"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:visibility="gone"
-        app:layout_constraintTop_toTopOf="parent" />
-
     <!-- Header -->
     <LinearLayout
         android:id="@+id/layoutHeader"
@@ -45,11 +37,14 @@
     </LinearLayout>
 
     <!-- Big clock -->
+
+    <!-- Last result (hidden for AMRAP; keep id for parity) -->
+
     <TextView
         android:id="@+id/tvTimer"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="32dp"
+        android:layout_marginTop="8dp"
         android:gravity="center"
         android:text="00:00"
         android:textSize="48sp"
@@ -58,7 +53,6 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/layoutHeader" />
 
-    <!-- Last result (AMRAP doesn’t show one by spec, so hide but keep id for parity) -->
     <TextView
         android:id="@+id/tvLastTime"
         android:layout_width="wrap_content"
@@ -105,7 +99,7 @@
             android:textSize="18sp" />
     </LinearLayout>
 
-    <!-- RX / Scaled centre -->
+    <!-- RX / Scaled -->
     <RadioGroup
         android:id="@+id/rgResult"
         android:layout_width="0dp"
@@ -132,89 +126,90 @@
             android:text="Scaled" />
     </RadioGroup>
 
-    <!-- AMRAP scoring (rounds + extra reps) -->
+    <!-- AMRAP scoring (single row: Rounds (+/-) | Reps) -->
     <LinearLayout
         android:id="@+id/rowRoundsReps"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:paddingTop="8dp"
+        android:layout_marginTop="12dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/rgResult">
 
-        <!-- Rounds (direct input) -->
+        <!-- Rounds group (2/3 width) -->
         <LinearLayout
-            android:layout_width="match_parent"
+            android:id="@+id/groupRounds"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_weight="2"
             android:gravity="center_vertical"
-            android:paddingStart="16dp"
-            android:paddingEnd="16dp">
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp">
 
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Rounds"
-                android:textSize="16sp" />
+            <ImageButton
+                android:id="@+id/btnRoundsMinus"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Decrease rounds"
+                android:src="@drawable/ic_remove"
+                app:tint="?attr/colorOnSurface" />
 
             <com.google.android.material.textfield.TextInputLayout
                 android:id="@+id/tilRounds"
                 style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:hint="@string/rounds"
-                app:counterEnabled="true"
-                app:counterMaxLength="4">
-
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/etRounds"
-                    android:layout_width="100dp"
-                    android:layout_height="wrap_content"
-                    android:inputType="number"
-                    android:imeOptions="actionNext"
-                    android:maxLength="4"
-                    android:text="0"
-                    android:importantForAutofill="no"
-                    android:textColor="?attr/colorOnSurface" />
-            </com.google.android.material.textfield.TextInputLayout>
-        </LinearLayout>
-
-        <!-- Extra reps (direct input) -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:gravity="center_vertical"
-            android:paddingStart="16dp"
-            android:paddingEnd="16dp">
-
-            <TextView
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="Extra reps (last round)"
-                android:textSize="16sp" />
+                android:hint="@string/rounds"
+                android:layout_marginStart="8dp"
+                android:layout_marginEnd="8dp">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/etRounds"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center"
+                    android:inputType="number"
+                    android:text="0" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <ImageButton
+                android:id="@+id/btnRoundsPlus"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Increase rounds"
+                android:src="@drawable/ic_add"
+                app:tint="?attr/colorOnSurface" />
+        </LinearLayout>
+
+        <!-- Reps group (1/3 width) -->
+        <LinearLayout
+            android:id="@+id/groupReps"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center_vertical"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp">
 
             <com.google.android.material.textfield.TextInputLayout
                 android:id="@+id/tilReps"
                 style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:hint="@string/reps"
-                app:counterEnabled="true"
-                app:counterMaxLength="4">
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
 
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/etReps"
-                    android:layout_width="100dp"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:gravity="center"
+                    android:hint="@string/reps"
                     android:inputType="number"
-                    android:imeOptions="actionDone"
-                    android:maxLength="4"
-                    android:text="0"
-                    android:importantForAutofill="no"
-                    android:textColor="?attr/colorOnSurface" />
+                    android:text="0" />
             </com.google.android.material.textfield.TextInputLayout>
         </LinearLayout>
     </LinearLayout>

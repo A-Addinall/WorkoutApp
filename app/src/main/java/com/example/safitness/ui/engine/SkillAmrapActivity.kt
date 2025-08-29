@@ -158,7 +158,7 @@ class SkillAmrapActivity : AppCompatActivity() {
             }
             override fun onFinish() {
                 beeper.finalBuzz()
-                cues.say("Start")
+                cues.say("Lets Go")
                 phase = Phase.RUN
                 startMainCountdown()
             }

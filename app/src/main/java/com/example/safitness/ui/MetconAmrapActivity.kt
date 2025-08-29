@@ -7,6 +7,7 @@ import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.Button
+import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.RadioButton
@@ -21,7 +22,7 @@ import com.example.safitness.audio.CuePlayer
 import com.example.safitness.audio.WorkoutCueScheduler
 import com.example.safitness.core.MetconResult
 import com.example.safitness.data.repo.Repos
-import com.google.android.material.appbar.MaterialToolbar
+
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import kotlinx.coroutines.launch
@@ -34,7 +35,6 @@ class MetconAmrapActivity : AppCompatActivity() {
         WorkoutViewModelFactory(Repos.workoutRepository(this))
     }
 
-    private lateinit var toolbar: MaterialToolbar
     private lateinit var tvTimer: TextView
     private lateinit var btnStartStop: Button
     private lateinit var btnReset: Button
@@ -45,6 +45,8 @@ class MetconAmrapActivity : AppCompatActivity() {
     // Direct input fields (replacing +/- buttons)
     private lateinit var tilRounds: TextInputLayout
     private lateinit var etRounds: TextInputEditText
+    private lateinit var btnRoundsMinus: ImageButton
+    private lateinit var btnRoundsPlus: ImageButton
     private lateinit var tilReps: TextInputLayout
     private lateinit var etReps: TextInputEditText
 
@@ -82,10 +84,6 @@ class MetconAmrapActivity : AppCompatActivity() {
         planId = intent.getLongExtra("PLAN_ID", -1L)
 
         bindViews()
-        setSupportActionBar(toolbar)
-        supportActionBar?.setDisplayHomeAsUpEnabled(true)
-        toolbar.setNavigationOnClickListener { finish() }
-        toolbar.title = "AMRAP"
 
         findViewById<ImageView>(R.id.ivBack).setOnClickListener { finish() }
 
@@ -123,10 +121,12 @@ class MetconAmrapActivity : AppCompatActivity() {
         }
         btnReset.setOnClickListener { resetAll() }
         btnComplete.setOnClickListener { complete() }
+        // Rounds +/- on screen ONLY (notification keeps + ROUND only)
+        btnRoundsPlus.setOnClickListener { adjustRounds(+1) }
+        btnRoundsMinus.setOnClickListener { adjustRounds(-1) }
     }
 
     private fun bindViews() {
-        toolbar = findViewById(R.id.toolbar)
         tvTimer = findViewById(R.id.tvTimer)
         btnStartStop = findViewById(R.id.btnStartStop)
         btnReset = findViewById(R.id.btnReset)
@@ -138,7 +138,8 @@ class MetconAmrapActivity : AppCompatActivity() {
         etRounds = findViewById(R.id.etRounds)
         tilReps = findViewById(R.id.tilReps)
         etReps = findViewById(R.id.etReps)
-
+        btnRoundsMinus = findViewById(R.id.btnRoundsMinus)
+        btnRoundsPlus = findViewById(R.id.btnRoundsPlus)
         // Initialise to 0 to match defaults in layout
         etRounds.setText(rounds.toString())
         etReps.setText(extraReps.toString())
@@ -185,7 +186,15 @@ class MetconAmrapActivity : AppCompatActivity() {
     }
 
     /* ---------------------------- Pre-start countdown (5s) ---------------------------- */
-
+    private fun adjustRounds(delta: Int) {
+        val newVal = max(0, rounds + delta)
+        if (newVal == rounds) return
+        rounds = newVal
+        etRounds.setText(rounds.toString())
+        etRounds.setSelection(etRounds.text?.length ?: 0)
+        tilRounds.error = null
+        if (delta > 0) beeper.countdownPip() // small positive feedback
+    }
     private fun startPreCountdown() {
         if (phase != TimerPhase.IDLE) return
         phase = TimerPhase.PRECOUNT
@@ -205,6 +214,7 @@ class MetconAmrapActivity : AppCompatActivity() {
                 preTimer = null
                 if (phase != TimerPhase.PRECOUNT) return
                 beeper.finalBuzz()
+                cues.say("Lets Go")
                 startMainCountdown()
             }
         }.also { it.start() }

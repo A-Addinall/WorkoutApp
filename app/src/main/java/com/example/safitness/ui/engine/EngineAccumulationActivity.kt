@@ -106,7 +106,7 @@ class EngineAccumulationActivity : AppCompatActivity() {
             }
             override fun onFinish() {
                 beeper.finalBuzz()
-                cues.say("Start")
+                cues.say("Lets Go")
                 isCountdown = false
                 startTimer()
             }
